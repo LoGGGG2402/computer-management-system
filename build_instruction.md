@@ -116,15 +116,8 @@ Kế hoạch này mô tả chi tiết các bước để xây dựng hệ thốn
 * Cấu trúc JSON của trường `layout` cần tuân theo định dạng:
   ```json
   {
-    "width": "integer - Chiều rộng của phòng trong pixels",
-    "height": "integer - Chiều cao của phòng trong pixels",
-    "background": "string - Mã màu nền (ví dụ: '#f5f5f5')",
-    "grid": {
       "columns": "integer - Số máy tính theo chiều ngang (trục X)",
-      "rows": "integer - Số máy tính theo chiều dọc (trục Y)",
-      "spacing_x": "integer - Khoảng cách ngang giữa các máy tính (pixels)",
-      "spacing_y": "integer - Khoảng cách dọc giữa các máy tính (pixels)"
-    }
+      "rows": "integer - Số máy tính theo chiều dọc (trục Y)"
   }
   ```
   Cấu trúc này định nghĩa lưới máy tính trong phòng với số lượng tối đa là `columns` × `rows` máy tính. Mỗi máy tính sẽ có tọa độ `pos_x` và `pos_y` tương ứng với vị trí của nó trong lưới.

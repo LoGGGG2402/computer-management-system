@@ -1,28 +1,109 @@
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const db = require('../database/models');
-const { Op } = db.Sequelize;
+const { Op } = require('sequelize');
 
 const Computer = db.Computer;
 const Room = db.Room;
-const UserRoomAssignment = db.UserRoomAssignment;
 
 /**
- * Service class for computer management operations
+ * Service for computer management operations
  */
 class ComputerService {
   /**
-   * Get all computers with pagination and filters
-   * @param {number} page - Page number
-   * @param {number} limit - Number of items per page
-   * @param {Object} filters - Filter parameters
-   * @param {Object} user - Current user object
-   * @returns {Object} - Paginated computers list
+   * Find a computer by its unique agent ID
+   * @param {string} agentId - The unique agent ID
+   * @returns {Promise<Object>} The computer object if found, null otherwise
+   */
+  async findComputerByAgentId(agentId) {
+    return Computer.findOne({
+      where: { unique_agent_id: agentId }
+    });
+  }
+
+  /**
+   * Generate a new token and assign it to an agent
+   * @param {string} agentId - The unique agent ID
+   * @returns {Promise<string>} The plain text token for the agent to store
+   */
+  async generateAndAssignAgentToken(agentId) {
+    // Generate a random token
+    const plainToken = crypto.randomBytes(32).toString('hex');
+    
+    // Hash the token for storage
+    const saltRounds = 10;
+    const tokenHash = await bcrypt.hash(plainToken, saltRounds);
+    
+    // Find or create the computer record
+    let computer = await this.findComputerByAgentId(agentId);
+    
+    if (computer) {
+      // Update the existing computer
+      await computer.update({
+        agent_token_hash: tokenHash,
+        last_seen: new Date()
+      });
+    } else {
+      // Create a new computer record
+      computer = await Computer.create({
+        unique_agent_id: agentId,
+        agent_token_hash: tokenHash,
+        name: `Computer-${agentId.substring(0, 8)}`,
+        status: 'offline',
+        has_active_errors: false,
+        last_seen: new Date()
+      });
+    }
+    
+    return plainToken;
+  }
+
+  /**
+   * Verify an agent token
+   * @param {string} agentId - The unique agent ID
+   * @param {string} token - The token to verify
+   * @returns {Promise<number|null>} The computer ID if token is valid, null otherwise
+   */
+  async verifyAgentToken(agentId, token) {
+    try {
+      // Find the computer by agent ID
+      const computer = await this.findComputerByAgentId(agentId);
+      
+      // If computer not found or no token hash stored, authentication fails
+      if (!computer || !computer.agent_token_hash) {
+        return null;
+      }
+      
+      // Compare the provided token with the stored hash
+      const isValid = await bcrypt.compare(token, computer.agent_token_hash);
+      
+      if (isValid) {
+        // If token is valid, update the last_seen timestamp
+        await computer.update({ last_seen: new Date() });
+        return computer.id;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error verifying agent token:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all computers with pagination and filtering
+   * @param {number} page - The page number
+   * @param {number} limit - The number of items per page
+   * @param {Object} filters - Filtering options
+   * @param {Object} user - The user making the request
+   * @returns {Promise<Object>} Paginated list of computers
    */
   async getAllComputers(page = 1, limit = 10, filters = {}, user) {
     try {
       const offset = (page - 1) * limit;
       
-      // Build where clause from filters
-      let whereClause = {};
+      // Build the where clause based on filters
+      const whereClause = {};
       
       if (filters.name) {
         whereClause.name = { [Op.iLike]: `%${filters.name}%` };
@@ -32,16 +113,15 @@ class ComputerService {
         whereClause.room_id = filters.roomId;
       }
       
-      // Add status filter if provided
       if (filters.status && ['online', 'offline'].includes(filters.status)) {
         whereClause.status = filters.status;
       }
       
-      // Add has_errors filter if provided
-      if (filters.has_errors === 'true' || filters.has_errors === true) {
-        whereClause.has_errors = true;
+      if (filters.has_errors === 'true') {
+        whereClause.has_active_errors = true;
       }
       
+      // Get computers with count
       const { count, rows } = await Computer.findAndCountAll({
         where: whereClause,
         include: [
@@ -56,29 +136,11 @@ class ComputerService {
         order: [['id', 'ASC']]
       });
       
-      // Add has_active_errors field by checking if there are any active errors
-      const computersWithErrorStatus = rows.map(computer => {
-        const computerData = computer.get({ plain: true });
-        // Check if errors array contains any active errors
-        let hasActiveErrors = false;
-        try {
-          const errors = JSON.parse(computer.errors);
-          hasActiveErrors = errors.some(error => error.status === 'active');
-        } catch (e) {
-          // In case of parsing error, default to false
-          hasActiveErrors = false;
-        }
-        return {
-          ...computerData,
-          has_active_errors: hasActiveErrors
-        };
-      });
-      
       return {
         total: count,
         currentPage: page,
         totalPages: Math.ceil(count / limit),
-        computers: computersWithErrorStatus
+        computers: rows
       };
     } catch (error) {
       throw error;
@@ -87,137 +149,60 @@ class ComputerService {
 
   /**
    * Get computer by ID
-   * @param {number} id - Computer ID
-   * @returns {Object} - Computer data
+   * @param {number} id - The computer ID
+   * @returns {Promise<Object>} The computer object
    */
   async getComputerById(id) {
-    try {
-      const computer = await Computer.findByPk(id, {
-        include: [
-          {
-            model: Room,
-            as: 'room',
-            attributes: ['id', 'name', 'description']
-          }
-        ]
-      });
-      
-      if (!computer) {
-        throw new Error('Computer not found');
-      }
-      
-      return computer;
-    } catch (error) {
-      throw error;
+    const computer = await Computer.findByPk(id, {
+      include: [
+        {
+          model: Room,
+          as: 'room',
+          attributes: ['id', 'name']
+        }
+      ]
+    });
+    
+    if (!computer) {
+      throw new Error('Computer not found');
     }
+    
+    return computer;
   }
 
   /**
    * Update a computer
-   * @param {number} id - Computer ID
-   * @param {Object} computerData - Computer data to update
-   * @returns {Object} - Updated computer
+   * @param {number} id - The computer ID
+   * @param {Object} data - The data to update
+   * @returns {Promise<Object>} The updated computer object
    */
-  async updateComputer(id, computerData) {
-    try {
-      const computer = await Computer.findByPk(id);
-      
-      if (!computer) {
-        throw new Error('Computer not found');
-      }
-      
-      // If updating room, validate that the room exists
-      if (computerData.room_id) {
-        const room = await Room.findByPk(computerData.room_id);
-        if (!room) {
-          throw new Error('Room not found');
-        }
-      }
-      
-      // Prepare update data
-      const updateData = {};
-      
-      if (computerData.name !== undefined) updateData.name = computerData.name;
-      if (computerData.room_id !== undefined) updateData.room_id = computerData.room_id;
-      if (computerData.pos_x !== undefined) updateData.pos_x = computerData.pos_x;
-      if (computerData.pos_y !== undefined) updateData.pos_y = computerData.pos_y;
-      if (computerData.ip_address !== undefined) updateData.ip_address = computerData.ip_address;
-      
-      // Update computer
-      await computer.update(updateData);
-      
-      // Fetch updated computer with room
-      const updatedComputer = await Computer.findByPk(id, {
-        include: [
-          {
-            model: Room,
-            as: 'room',
-            attributes: ['id', 'name']
-          }
-        ]
-      });
-      
-      return updatedComputer;
-    } catch (error) {
-      throw error;
+  async updateComputer(id, data) {
+    const computer = await Computer.findByPk(id);
+    
+    if (!computer) {
+      throw new Error('Computer not found');
     }
+    
+    await computer.update(data);
+    
+    return computer;
   }
 
   /**
    * Delete a computer
-   * @param {number} id - Computer ID
-   * @returns {boolean} - Success status
+   * @param {number} id - The computer ID
+   * @returns {Promise<boolean>} True if deleted, throws error otherwise
    */
   async deleteComputer(id) {
-    try {
-      const computer = await Computer.findByPk(id);
-      
-      if (!computer) {
-        throw new Error('Computer not found');
-      }
-      
-      // Delete computer
-      await computer.destroy();
-      
-      return true;
-    } catch (error) {
-      throw error;
+    const computer = await Computer.findByPk(id);
+    
+    if (!computer) {
+      throw new Error('Computer not found');
     }
-  }
-
-  /**
-   * Check if user has access to computer's room
-   * @param {number} computerId - Computer ID
-   * @param {number} userId - User ID
-   * @param {string} userRole - User role
-   * @returns {boolean} - Whether user has access
-   */
-  async userHasAccessToComputer(computerId, userId, userRole) {
-    try {
-      // Admins have access to all computers
-      if (userRole === 'admin') {
-        return true;
-      }
-      
-      // Get computer with room
-      const computer = await Computer.findByPk(computerId);
-      
-      if (!computer) {
-        throw new Error('Computer not found');
-      }
-      
-      // Check if user has assignment to the room
-      const assignment = await UserRoomAssignment.findOne({
-        where: {
-          user_id: userId,
-          room_id: computer.room_id
-        }
-      });
-      
-      return !!assignment;
-    } catch (error) {
-      throw error;
-    }
+    
+    await computer.destroy();
+    
+    return true;
   }
 }
 
