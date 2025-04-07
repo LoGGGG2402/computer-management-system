@@ -5,11 +5,14 @@ import MainLayout from '../layouts/MainLayout';
 // Import pages
 import LoginPage from '../pages/LoginPage';
 import Dashboard from '../pages/dashboard/Dashboard';
+import RoomPage from '../pages/room/RoomPage'; 
+import RoomDetailPage from '../pages/room/RoomDetailPage';
+
+// Import admin pages
+import AdminDashboard from '../pages/dashboard/AdminDashboard';
 
 // Placeholder components (these will need to be created later)
 const NotFound = () => <div>404 - Page Not Found</div>;
-const AdminDashboard = () => <div>Admin Dashboard</div>;
-const UserManagement = () => <div>User Management</div>;
 
 const router = createBrowserRouter([
   // Public routes (accessible without authentication)
@@ -38,6 +41,15 @@ const router = createBrowserRouter([
             path: '/dashboard',
             element: <Dashboard />,
           },
+          // Room routes
+          {
+            path: '/rooms',
+            element: <RoomPage />,
+          },
+          {
+            path: '/rooms/:id',
+            element: <RoomDetailPage />,
+          },
         ]
       }
     ]
@@ -54,10 +66,12 @@ const router = createBrowserRouter([
             path: '/admin',
             element: <AdminDashboard />,
           },
+          // Use the same RoomPage component, but in admin context
           {
-            path: '/admin/users',
-            element: <UserManagement />,
+            path: '/admin/rooms',
+            element: <RoomPage />,
           },
+          // Computer and User management are now handled within AdminDashboard
         ]
       }
     ]

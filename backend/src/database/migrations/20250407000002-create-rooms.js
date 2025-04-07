@@ -1,6 +1,5 @@
 'use strict';
 
-/** @type {import('sequelize-cli').Migration} */
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     await queryInterface.createTable('rooms', {
@@ -18,17 +17,18 @@ module.exports = {
       },
       layout: {
         type: Sequelize.JSONB,
-        defaultValue: {}
+        defaultValue: {
+          columns: 4,
+          rows: 4
+        }
       },
       created_at: {
-        allowNull: false,
         type: Sequelize.DATE,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
+        allowNull: false
       },
       updated_at: {
-        allowNull: false,
         type: Sequelize.DATE,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
+        allowNull: false
       }
     });
   },

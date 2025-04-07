@@ -1,86 +1,155 @@
-# Cấu Trúc Thư Mục Đề Xuất (Cập nhật)
+# Cấu Trúc Thư Mục Của Dự Án Computer Management System
 
-Dưới đây là cấu trúc thư mục gợi ý cho các thành phần chính của dự án: Backend, Frontend và Agent, đã bao gồm thư mục `docs` và file `README.md` cấp gốc. Cấu trúc này giúp tổ chức code một cách logic và dễ quản lý.
+Dưới đây là cấu trúc thư mục hiện tại của dự án, bao gồm ba thành phần chính: Backend (Node.js/Express), Frontend (React/Vite), và Agent (Python).
 
 ## Cấu Trúc Thư Mục
 
 ```
 computer-management-system/
-├── backend/                  # Thư mục gốc cho Backend (Node.js)
-│   ├── src/                  # Mã nguồn chính
-│   │   ├── config/           # Cấu hình (database, env, jwt, ...)
-│   │   ├── controllers/      # Xử lý request HTTP và gọi services
-│   │   ├── database/         # Tương tác với cơ sở dữ liệu (models, migrations, seeders)
-│   │   ├── middleware/       # Các middleware (xác thực, phân quyền, log,...)
-│   │   ├── routes/           # Định nghĩa các API routes
-│   │   ├── services/         # Logic nghiệp vụ chính
-│   │   ├── sockets/          # Xử lý sự kiện WebSocket
-│   │   ├── utils/            # Các hàm tiện ích, hằng số
-│   │   ├── app.js            # Khởi tạo và cấu hình Express app
-│   │   └── server.js         # Khởi chạy server HTTP và Socket.IO
-│   ├── tests/                # Thư mục chứa tests
-│   ├── .env                  # Biến môi trường
-│   ├── .gitignore
-│   ├── package.json
-│   └── README.md             # README riêng cho Backend
-│
-├── frontend/                 # Thư mục gốc cho Frontend (React + Vite)
-│   ├── public/               # Chứa các file tĩnh (vd: favicon)
-│   ├── src/                  # Mã nguồn chính
-│   │   ├── assets/           # Hình ảnh, fonts,...
-│   │   ├── components/       # Các UI components tái sử dụng
-│   │   ├── contexts/         # React Contexts
-│   │   ├── hooks/            # Custom hooks
-│   │   ├── layouts/          # Main layout components
-│   │   ├── pages/            # Các trang ứng với routes
-│   │   ├── router/           # Cấu hình routing
-│   │   ├── services/         # Các hàm gọi API Backend
-│   │   ├── styles/           # CSS toàn cục, cấu hình Tailwind mở rộng
-│   │   ├── utils/            # Hàm tiện ích, hằng số
-│   │   ├── App.jsx           # Component gốc của ứng dụng
-│   │   └── main.jsx          # Điểm vào của ứng dụng
-│   ├── .env                  # Biến môi trường (VITE_...)
-│   ├── .gitignore
-│   ├── index.html
-│   ├── package.json
-│   ├── postcss.config.js
-│   ├── tailwind.config.js
-│   ├── vite.config.js
-│   └── README.md             # README riêng cho Frontend
+├── build_instruction.md      # Hướng dẫn xây dựng và triển khai
+├── package.json              # Package.json cấp root
+├── readme.md                 # Thông tin tổng quan về dự án
 │
 ├── agent/                    # Thư mục gốc cho Agent (Python)
-│   ├── src/                  # Mã nguồn chính (hoặc tên package của bạn)
-│   │   ├── config/           # Load cấu hình (server address, paths,...)
-│   │   │   └── settings.py
-│   │   ├── modules/          # Các module chức năng cốt lõi
-│   │   │   ├── system_info.py        # Thu thập thông tin hệ thống (dùng psutil)
-│   │   │   ├── http_client.py        # Giao tiếp HTTP với Backend (dùng requests)
-│   │   │   ├── ws_client.py          # Quản lý kết nối WS và nhận lệnh (dùng websocket-client/python-socketio)
-│   │   │   ├── command_executor.py   # Thực thi lệnh an toàn (dùng subprocess)
-│   │   │   ├── token_manager.py      # Quản lý Agent Token (lưu/đọc an toàn)
-│   │   │   └── mfa_handler.py        # Xử lý nhập MFA từ người dùng (dùng input())
-│   │   ├── utils/            # Hàm tiện ích
-│   │   └── agent.py          # Logic điều phối chính của Agent
-│   ├── venv/                 # Thư mục môi trường ảo Python
-│   ├── config/               # File cấu hình (vd: config.ini, config.yaml)
-│   ├── storage/              # (Tùy chọn) Nơi lưu trữ token/ID (cần bảo mật)
-│   ├── logs/                 # Thư mục chứa log files
-│   ├── .gitignore
-│   ├── requirements.txt      # Danh sách các thư viện Python cần cài đặt
-│   ├── main.py               # Điểm vào để chạy Agent
-│   ├── README.md             # README riêng cho Agent
-│   └── setup.py              # (Tùy chọn) Nếu đóng gói thành thư viện/ứng dụng phức tạp hơn
+│   ├── config/               # Cấu hình Agent
+│   │   └── agent_config.json # File cấu hình Agent
+│   ├── logs/                 # Thư mục chứa log files của Agent
+│   ├── src/                  # Mã nguồn chính của Agent
+│   │   ├── agent.py          # Logic xử lý chính của Agent
+│   │   ├── main.py           # Điểm vào của Agent
+│   │   ├── modules/          # Các module chức năng của Agent
+│   │   │   └── system_monitor.py # Module thu thập thông tin hệ thống
+│   │   └── utils/            # Tiện ích hỗ trợ
+│   │       └── utils.py      # Các hàm tiện ích
+│   ├── storage/              # Lưu trữ dữ liệu của Agent (ID, token, settings)
+│   └── requirements.txt      # Các thư viện Python cần thiết
 │
-├── docs/                     # Thư mục chứa tài liệu dự án
-│   ├── architecture.md       # Sơ đồ kiến trúc, giải thích luồng
+├── backend/                  # Thư mục gốc cho Backend (Node.js/Express)
+│   ├── config/               # Cấu hình backend
+│   ├── package.json          # Quản lý dependencies của Backend
+│   └── src/                  # Mã nguồn chính của Backend
+│       ├── app.js            # Khởi tạo Express app
+│       ├── server.js         # Khởi động server HTTP và Socket.IO
+│       ├── config/           # Cấu hình ứng dụng
+│       │   ├── auth.config.js # Cấu hình xác thực, JWT
+│       │   └── db.config.js  # Cấu hình kết nối cơ sở dữ liệu
+│       ├── controllers/      # Xử lý các request HTTP
+│       │   ├── auth.controller.js       # Xử lý xác thực
+│       │   ├── computer.controller.js   # Quản lý máy tính
+│       │   ├── room.controller.js       # Quản lý phòng
+│       │   └── user.controller.js       # Quản lý người dùng
+│       ├── database/         # Tương tác với cơ sở dữ liệu
+│       │   ├── migrations/   # Database migrations
+│       │   │   ├── 20250406130724-create-users.js
+│       │   │   ├── 20250406130735-create-rooms.js
+│       │   │   ├── 20250406130743-create-computers.js
+│       │   │   ├── 20250406130836-create-user-room-assignments.js
+│       │   │   └── 20250407012946-update-tables-for-new-design.js
+│       │   ├── models/       # Định nghĩa các model
+│       │   │   ├── computer.model.js
+│       │   │   ├── index.js  # Khởi tạo và kết nối các model
+│       │   │   ├── room.model.js
+│       │   │   ├── user.model.js
+│       │   │   └── userRoomAssignment.model.js
+│       │   └── seeders/      # Dữ liệu mẫu
+│       │       ├── 20250406133756-admin-user.js
+│       │       ├── 20250406133928-sample-rooms.js
+│       │       └── 20250406141253-sample-computers.js
+│       ├── middleware/       # Middleware
+│       │   ├── authAdmin.js           # Kiểm tra quyền Admin
+│       │   ├── authComputerAccess.js  # Kiểm tra quyền truy cập Computer
+│       │   ├── authJwt.js             # Xác thực JWT token
+│       │   └── authRoomAccess.js      # Kiểm tra quyền truy cập Room
+│       ├── routes/           # Định nghĩa các routes API
+│       │   ├── auth.routes.js
+│       │   ├── computer.routes.js
+│       │   ├── index.js      # Tổng hợp và export tất cả routes
+│       │   ├── room.routes.js
+│       │   └── user.routes.js
+│       ├── services/         # Logic nghiệp vụ
+│       │   ├── auth.service.js
+│       │   ├── computer.service.js
+│       │   ├── room.service.js
+│       │   └── user.service.js
+│       ├── sockets/          # Xử lý WebSocket connections
+│       │   └── index.js
+│       └── utils/            # Tiện ích
+│
+├── docs/                     # Tài liệu dự án
+│   ├── activity_flows.md     # Mô tả các luồng hoạt động
 │   ├── api.md                # Tài liệu API chi tiết
-│   └── setup.md              # Hướng dẫn cài đặt
+│   └── folder_structure.md   # Mô tả cấu trúc thư mục (file này)
 │
-└── README.md                 # README tổng quan cho toàn bộ dự án
+└── frontend/                 # Thư mục gốc cho Frontend (React/Vite)
+    ├── eslint.config.js      # Cấu hình ESLint
+    ├── index.html            # Trang HTML chính
+    ├── package.json          # Quản lý dependencies Frontend
+    ├── README.md             # Thông tin và hướng dẫn dành cho Frontend
+    ├── vite.config.js        # Cấu hình Vite
+    ├── public/               # Tài nguyên tĩnh
+    │   └── vite.svg          # Logo Vite
+    └── src/                  # Mã nguồn chính của Frontend
+        ├── App.jsx           # Component chính của ứng dụng
+        ├── index.css         # CSS toàn cục
+        ├── main.jsx          # Điểm khởi đầu của ứng dụng React
+        ├── assets/           # Tài nguyên như hình ảnh, fonts
+        │   └── react.svg     # Logo React
+        ├── components/       # Các component tái sử dụng
+        │   ├── admin/
+        │   │   ├── AssignmentComponent.jsx # Phân công người dùng vào phòng
+        │   │   ├── UserForm.jsx            # Form tạo/cập nhật người dùng
+        │   │   └── UserList.jsx            # Danh sách người dùng
+        │   ├── computer/
+        │   │   ├── ComputerCard.jsx        # Hiển thị thông tin máy tính
+        │   │   ├── ComputerForm.jsx        # Form cập nhật máy tính
+        │   │   └── ComputerList.jsx        # Danh sách máy tính
+        │   └── room/
+        │       ├── RoomForm.jsx            # Form tạo/cập nhật phòng
+        │       ├── RoomLayout.jsx          # Hiển thị layout phòng
+        │       └── RoomList.jsx            # Danh sách phòng
+        ├── contexts/         # React Contexts
+        │   └── AuthContext.jsx # Context quản lý trạng thái xác thực
+        ├── hooks/            # Custom hooks
+        ├── layouts/          # Layout components
+        │   ├── Header.jsx    # Component header
+        │   └── MainLayout.jsx # Layout chính của ứng dụng
+        ├── pages/            # Các trang chính
+        │   ├── LoginPage.jsx # Trang đăng nhập
+        │   ├── Admin/
+        │   │   ├── ComputerManagementPage.jsx # Quản lý máy tính (Admin)
+        │   │   └── UserManagementPage.jsx     # Quản lý người dùng (Admin)
+        │   ├── dashboard/    # Các trang dashboard
+        │   └── room/         # Các trang hiển thị phòng
+        ├── router/           # Cấu hình routing
+        │   ├── index.jsx     # Định nghĩa routes chính
+        │   └── ProtectedRoute.jsx # Bảo vệ route cho người dùng đã đăng nhập
+        ├── services/         # Các service giao tiếp với Backend
+        │   ├── api.js        # Cấu hình axios và các hàm xử lý HTTP chung
+        │   ├── auth.service.js # Service xác thực
+        │   ├── computer.service.js # Service quản lý máy tính
+        │   ├── room.service.js # Service quản lý phòng
+        │   └── user.service.js # Service quản lý người dùng
+        └── utils/            # Các hàm tiện ích
 ```
 
-## Lưu ý:
+## Đặc điểm cấu trúc:
 
-* `README.md` ở cấp gốc nên chứa thông tin tổng quan về dự án, cách cài đặt chung, cách chạy các thành phần (Backend, Frontend, Agent), và liên kết đến các tài liệu chi tiết hơn trong thư mục `docs/`.
-* Mỗi thành phần (backend, frontend, agent) cũng nên có file `README.md` riêng để mô tả chi tiết hơn về thành phần đó.
-* Thư mục `docs/` có thể chứa nhiều loại tài liệu khác nhau tùy theo nhu cầu của dự án (thiết kế, hướng dẫn sử dụng, quy trình đóng góp,...).
+### Backend (Node.js/Express)
+- Sử dụng mô hình MVC (Model-View-Controller) với Sequelize ORM để tương tác với cơ sở dữ liệu.
+- Models được định nghĩa trong `database/models/`.
+- Controllers xử lý logic request trong `controllers/`.
+- Routes định nghĩa các endpoint API trong `routes/`.
+- Services chứa logic nghiệp vụ phức tạp trong `services/`.
+- WebSocket được xử lý trong `sockets/`.
+
+### Frontend (React/Vite)
+- Sử dụng React với Vite làm build tool.
+- Cấu trúc theo tính năng với các thư mục `components/`, `pages/`, `contexts/`, `hooks/`.
+- Sử dụng React Router để quản lý routing.
+- Services trong `services/` giúp giao tiếp với Backend API.
+
+### Agent (Python)
+- Cấu trúc đơn giản với điểm vào là `main.py`.
+- Mô-đun hóa theo chức năng trong thư mục `modules/`.
+- Cấu hình được lưu trong `config/agent_config.json`.
+- Dữ liệu cục bộ được lưu trong `storage/`.

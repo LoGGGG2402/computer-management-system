@@ -10,6 +10,8 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Add state for user assigned rooms
+  const [userRooms, setUserRooms] = useState([]);
 
   // Initialize auth state on mount
   useEffect(() => {
@@ -29,6 +31,16 @@ export const AuthProvider = ({ children }) => {
               ...currentUser,
               profile
             });
+            
+            // If user is not admin, fetch assigned rooms
+            if (currentUser.role !== 'admin') {
+              try {
+                const userRoomsData = await authService.getUserRooms();
+                setUserRooms(userRoomsData.data || []);
+              } catch (err) {
+                console.error('Failed to fetch user rooms:', err);
+              }
+            }
           } catch (err) {
             // If profile fetch fails, token might be invalid
             console.error('Failed to fetch user profile:', err);
@@ -66,6 +78,16 @@ export const AuthProvider = ({ children }) => {
         profile
       });
       
+      // If user is not admin, fetch assigned rooms
+      if (userData.role !== 'admin') {
+        try {
+          const userRoomsData = await authService.getUserRooms();
+          setUserRooms(userRoomsData.data || []);
+        } catch (err) {
+          console.error('Failed to fetch user rooms:', err);
+        }
+      }
+      
       return userData;
     } catch (err) {
       setError(err.message || 'Login failed');
@@ -80,18 +102,28 @@ export const AuthProvider = ({ children }) => {
     authService.logout();
     api.removeAuthToken();
     setUser(null);
+    setUserRooms([]);
   }, []);
+
+  // Check if user has access to a specific room
+  const hasRoomAccess = useCallback((roomId) => {
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    return userRooms.some(room => room.id === parseInt(roomId));
+  }, [user, userRooms]);
 
   // Memoized auth value
   const authValue = useMemo(() => ({
     user,
     loading,
     error,
+    userRooms,
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin',
+    hasRoomAccess,
     loginAction,
     logoutAction
-  }), [user, loading, error, loginAction, logoutAction]);
+  }), [user, loading, error, userRooms, hasRoomAccess, loginAction, logoutAction]);
 
   return (
     <AuthContext.Provider value={authValue}>

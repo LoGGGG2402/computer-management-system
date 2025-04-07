@@ -11,15 +11,31 @@ class UserService {
    * @param {number} page - Page number
    * @param {number} limit - Number of items per page
    * @param {string} search - Search term for username
+   * @param {string} role - Filter by role (admin/user)
+   * @param {boolean} is_active - Filter by active status
    * @returns {Object} - Paginated users list
    */
-  async getAllUsers(page = 1, limit = 10, search = '') {
+  async getAllUsers(page = 1, limit = 10, search = '', role = null, is_active = null) {
     try {
       const offset = (page - 1) * limit;
       
-      const whereClause = search 
-        ? { username: { [db.Sequelize.Op.iLike]: `%${search}%` } }
-        : {};
+      // Build where clause
+      const whereClause = {};
+      
+      // Add username search if provided
+      if (search) {
+        whereClause.username = { [db.Sequelize.Op.iLike]: `%${search}%` };
+      }
+      
+      // Add role filter if provided
+      if (role && ['admin', 'user'].includes(role)) {
+        whereClause.role = role;
+      }
+      
+      // Add is_active filter if provided
+      if (is_active !== null) {
+        whereClause.is_active = is_active === 'true' || is_active === true;
+      }
       
       const { count, rows } = await User.findAndCountAll({
         where: whereClause,

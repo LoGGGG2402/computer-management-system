@@ -14,7 +14,10 @@ module.exports = (sequelize, DataTypes) => {
     },
     layout: {
       type: DataTypes.JSONB,
-      defaultValue: {}
+      defaultValue: {
+        columns: 4,
+        rows: 4
+      }
     }
   }, {
     tableName: 'rooms',

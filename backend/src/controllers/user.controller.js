@@ -13,9 +13,11 @@ class UserController {
     try {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
-      const search = req.query.search || '';
+      const search = req.query.username || '';
+      const role = req.query.role || null;
+      const is_active = req.query.is_active !== undefined ? req.query.is_active : null;
       
-      const result = await userService.getAllUsers(page, limit, search);
+      const result = await userService.getAllUsers(page, limit, search, role, is_active);
       
       return res.status(200).json({
         status: 'success',
@@ -107,7 +109,7 @@ class UserController {
   async updateUser(req, res) {
     try {
       const id = parseInt(req.params.id);
-      const { username, password, role, is_active } = req.body;
+      const { role, is_active } = req.body;
       
       if (!id) {
         return res.status(400).json({
@@ -116,10 +118,16 @@ class UserController {
         });
       }
       
+      // Username and password cannot be updated via this endpoint
+      if (req.body.username || req.body.password) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Username and password cannot be updated via this endpoint'
+        });
+      }
+      
       const userData = {};
       
-      if (username !== undefined) userData.username = username;
-      if (password !== undefined) userData.password = password;
       if (role !== undefined) userData.role = role;
       if (is_active !== undefined) userData.is_active = is_active;
       

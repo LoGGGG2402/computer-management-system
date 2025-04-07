@@ -18,12 +18,10 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
 * **Response Success (200 OK):**
     ```json
     {
-      "token": "string (JWT)",
-      "user": {
-        "id": "integer",
-        "username": "string",
-        "role": "string ('admin' or 'user')"
-      }
+      "id": "integer",
+      "username": "string",
+      "role": "string ('admin' or 'user')",
+      "token": "string (JWT)"
     }
     ```
 * **Response Error:**
@@ -42,7 +40,9 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
       "id": "integer",
       "username": "string",
       "role": "string ('admin' or 'user')",
-      "is_active": "boolean"
+      "is_active": "boolean",
+      "created_at": "timestamp",
+      "updated_at": "timestamp"
     }
     ```
 * **Response Error:**
@@ -65,42 +65,85 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
       "is_active": "boolean (optional, default: true)"
     }
     ```
-* **Response Success (201 Created):** (Trả về thông tin user mới tạo, không bao gồm password hash)
+* **Response Success (201 Created):**
     ```json
     {
-      "id": "integer",
-      "username": "string",
-      "role": "string",
-      "is_active": "boolean"
+      "status": "success",
+      "data": {
+        "id": "integer",
+        "username": "string",
+        "role": "string",
+        "is_active": "boolean"
+      },
+      "message": "User created successfully"
     }
     ```
 * **Response Error:**
-    * `401 Unauthorized`: `{ "message": "Unauthorized" }`
-    * `403 Forbidden`: `{ "message": "Admin role required" }`
-    * `400 Bad Request`: `{ "message": "Validation errors (e.g., username exists, missing fields)" }`
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "Admin role required" }`
+    * `400 Bad Request`: `{ "status": "error", "message": "Validation errors (e.g., username exists, missing fields)" }`
 
 ### Lấy danh sách Users
 * **Method:** `GET`
 * **Path:** `/api/users`
 * **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
 * **Query Parameters (Filtering):**
+    * `?page=integer` (Số trang, mặc định: 1)
+    * `?limit=integer` (Số lượng user trên mỗi trang, mặc định: 10)
     * `?role=admin|user` (Lọc theo vai trò)
     * `?is_active=true|false` (Lọc theo trạng thái active)
     * `?username=...` (Tìm kiếm gần đúng theo username)
 * **Request Body:** (None)
 * **Response Success (200 OK):**
     ```json
-    [
-      {
+    {
+      "status": "success",
+      "data": {
+        "total": "integer",
+        "currentPage": "integer",
+        "totalPages": "integer",
+        "users": [
+          {
+            "id": "integer",
+            "username": "string",
+            "role": "string",
+            "is_active": "boolean",
+            "created_at": "timestamp",
+            "updated_at": "timestamp"
+          },
+          ...
+        ]
+      }
+    }
+    ```
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "Admin role required" }`
+
+### Lấy thông tin User theo ID
+* **Method:** `GET`
+* **Path:** `/api/users/:id`
+* **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
+* **Path Parameters:** `id` (integer, ID của user)
+* **Request Body:** (None)
+* **Response Success (200 OK):**
+    ```json
+    {
+      "status": "success",
+      "data": {
         "id": "integer",
         "username": "string",
         "role": "string",
-        "is_active": "boolean"
-      },
-      ...
-    ]
+        "is_active": "boolean",
+        "created_at": "timestamp",
+        "updated_at": "timestamp"
+      }
+    }
     ```
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "Admin role required" }`
+    * `404 Not Found`: `{ "status": "error", "message": "User not found" }`
 
 ### Cập nhật User
 * **Method:** `PUT`
@@ -114,28 +157,44 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
     {
       "role": "string ('admin' or 'user')",
       "is_active": "boolean"
-      // Không cho phép cập nhật username/password qua endpoint này
     }
     ```
-* **Response Success (200 OK):** (Thông tin user sau khi cập nhật)
+* **Response Success (200 OK):**
     ```json
     {
-      "id": "integer",
-      "username": "string",
-      "role": "string",
-      "is_active": "boolean"
+      "status": "success",
+      "data": {
+        "id": "integer",
+        "username": "string",
+        "role": "string",
+        "is_active": "boolean"
+      },
+      "message": "User updated successfully"
     }
     ```
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `400 Bad Request`
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "Admin role required" }`
+    * `404 Not Found`: `{ "status": "error", "message": "User not found" }`
+    * `400 Bad Request`: `{ "status": "error", "message": "Failed to update user" }`
 
-### Xóa User (hoặc Inactivate)
+### Vô hiệu hóa User (không xóa)
 * **Method:** `DELETE`
 * **Path:** `/api/users/:id`
 * **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
-* **Path Parameters:** `id` (integer, ID của user cần xóa)
+* **Path Parameters:** `id` (integer, ID của user cần vô hiệu hóa)
 * **Request Body:** (None)
-* **Response Success (204 No Content):** (Không có body)
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `404 Not Found`
+* **Response Success (200 OK):** 
+    ```json
+    {
+      "status": "success",
+      "message": "User inactivated successfully"
+    }
+    ```
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "Admin role required" }`
+    * `404 Not Found`: `{ "status": "error", "message": "User not found" }`
 
 ## 3. Quản lý Rooms
 
@@ -166,13 +225,20 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
 * **Response Success (201 Created):**
     ```json
     {
-      "id": "integer",
-      "name": "string",
-      "description": "string",
-      "layout": "object"
+      "status": "success",
+      "data": {
+        "id": "integer",
+        "name": "string",
+        "description": "string",
+        "layout": "object"
+      },
+      "message": "Room created successfully"
     }
     ```
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `400 Bad Request`
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "Admin role required" }`
+    * `400 Bad Request`: `{ "status": "error", "message": "Failed to create room" }`
 
 ### Lấy danh sách Rooms (Admin lấy tất cả, User lấy phòng được gán)
 * **Method:** `GET`
@@ -180,20 +246,24 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
 * **Headers:** `Authorization: Bearer <user_or_admin_jwt_token_string>` (Required)
 * **Query Parameters (Filtering):**
     * `?name=...` (Tìm kiếm gần đúng theo tên room)
-    * `?assigned_user_id=...` (Chỉ lấy các room mà user ID này được gán - Admin có thể dùng)
+    * `?assigned_user_id=integer` (Lọc phòng theo ID của user được gán)
 * **Request Body:** (None)
 * **Response Success (200 OK):**
     ```json
-    [
-      {
-        "id": "integer",
-        "name": "string"
-        // Có thể thêm số lượng máy tính nếu cần
-      },
-      ...
-    ]
+    {
+      "status": "success",
+      "data": [
+        {
+          "id": "integer",
+          "name": "string",
+          "description": "string"
+        },
+        ...
+      ]
+    }
     ```
-* **Response Error:** `401 Unauthorized`
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
 
 ### Lấy chi tiết Room (Admin lấy được, User chỉ lấy được nếu được gán)
 * **Method:** `GET`
@@ -204,61 +274,65 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
 * **Response Success (200 OK):**
     ```json
     {
-      "id": "integer",
-      "name": "string",
-      "description": "string",
-      "layout": "object",
-      "computers": [ // Danh sách máy tính thuộc phòng này
-        {
-          "id": "integer",
-          "name": "string",
-          "pos_x": "integer",
-          "pos_y": "integer",
-          "unique_agent_id": "string",
-          "status": "string ('online'|'offline')", // Lấy từ cache
-          "has_active_errors": "boolean" // Tính toán từ trường errors
-        },
-        ...
-      ]
+      "status": "success",
+      "data": {
+        "id": "integer",
+        "name": "string",
+        "description": "string",
+        "layout": "object",
+        "computers": [
+          {
+            "id": "integer",
+            "name": "string",
+            "pos_x": "integer",
+            "pos_y": "integer",
+            "unique_agent_id": "string",
+            "status": "string ('online'|'offline')",
+            "has_active_errors": "boolean"
+          },
+          ...
+        ]
+      }
     }
     ```
-* **Response Error:** `401 Unauthorized`, `403 Forbidden` (Nếu user không có quyền truy cập room), `404 Not Found`
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "You don't have access to this room" }`
+    * `404 Not Found`: `{ "status": "error", "message": "Room not found" }`
 
-### Cập nhật Room (Admin Only)
+### Cập nhật Room (User hoặc Admin với quyền truy cập Room)
 * **Method:** `PUT`
 * **Path:** `/api/rooms/:id`
 * **Headers:**
-    * `Authorization: Bearer <admin_jwt_token_string>` (Required)
+    * `Authorization: Bearer <user_or_admin_jwt_token_string>` (Required)
     * `Content-Type: application/json`
 * **Path Parameters:** `id` (integer, ID của room)
 * **Request Body:**
     ```json
     {
-      "name": "string (required)",
+      "name": "string (optional)",
       "description": "string (optional)",
-      "layout": {
-        "width": "integer - Chiều rộng của phòng trong pixels",
-        "height": "integer - Chiều cao của phòng trong pixels",
-        "background": "string - Mã màu nền (ví dụ: '#f5f5f5')",
-        "grid": {
-          "columns": "integer - Số máy tính theo chiều ngang (trục X)",
-          "rows": "integer - Số máy tính theo chiều dọc (trục Y)",
-          "spacing_x": "integer - Khoảng cách ngang giữa các máy tính (pixels)",
-          "spacing_y": "integer - Khoảng cách dọc giữa các máy tính (pixels)"
-        }
-      }
+      "layout": "object (optional)"
     }
     ```
-* **Response Success (200 OK):** (Thông tin room sau cập nhật)
+* **Response Success (200 OK):**
     ```json
     {
-      "id": "integer",
-      "name": "string",
-      "description": "string",
-      "layout": "object"
+      "status": "success",
+      "data": {
+        "id": "integer",
+        "name": "string",
+        "description": "string",
+        "layout": "object"
+      },
+      "message": "Room updated successfully"
     }
     ```
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `400 Bad Request`
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "You don't have access to this room" }`
+    * `404 Not Found`: `{ "status": "error", "message": "Room not found" }`
+    * `400 Bad Request`: `{ "status": "error", "message": "Failed to update room" }`
 
 ### Xóa Room (Admin Only)
 * **Method:** `DELETE`
@@ -266,8 +340,17 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
 * **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
 * **Path Parameters:** `id` (integer, ID của room)
 * **Request Body:** (None)
-* **Response Success (204 No Content):**
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `404 Not Found`
+* **Response Success (200 OK):**
+    ```json
+    {
+      "status": "success",
+      "message": "Room deleted successfully"
+    }
+    ```
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "Admin role required" }`
+    * `404 Not Found`: `{ "status": "error", "message": "Room not found" }`
 
 ## 4. Quản lý Phân công Room (Yêu cầu quyền Admin)
 
@@ -281,14 +364,24 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
 * **Request Body:**
     ```json
     {
-      "userId": "integer (required)"
+      "userIds": ["integer", "integer", ...] 
     }
     ```
-* **Response Success (201 Created):** `{ "message": "User assigned successfully" }`
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `404 Not Found` (Room hoặc User không tồn tại), `409 Conflict` (User đã được gán)
+* **Response Success (200 OK):** 
+    ```json
+    {
+      "status": "success",
+      "message": "Users assigned to room successfully"
+    }
+    ```
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "Admin role required" }`
+    * `404 Not Found`: `{ "status": "error", "message": "Room not found" }`
+    * `400 Bad Request`: `{ "status": "error", "message": "Failed to assign users" }`
 
 ### Gỡ User khỏi Room
-* **Method:** `DELETE`
+* **Method:** `POST`
 * **Path:** `/api/rooms/:roomId/unassign`
 * **Headers:**
     * `Authorization: Bearer <admin_jwt_token_string>` (Required)
@@ -297,11 +390,21 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
 * **Request Body:**
     ```json
     {
-      "userId": "integer (required)"
+      "userIds": ["integer", "integer", ...]
     }
     ```
-* **Response Success (200 OK):** `{ "message": "User unassigned successfully" }`
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `404 Not Found` (Room, User hoặc Assignment không tồn tại)
+* **Response Success (200 OK):** 
+    ```json
+    {
+      "status": "success",
+      "message": "Users unassigned from room successfully"
+    }
+    ```
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "Admin role required" }`
+    * `404 Not Found`: `{ "status": "error", "message": "Room not found" }`
+    * `400 Bad Request`: `{ "status": "error", "message": "Failed to unassign users" }`
 
 ### Lấy danh sách User trong Room
 * **Method:** `GET`
@@ -311,76 +414,56 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
 * **Request Body:** (None)
 * **Response Success (200 OK):**
     ```json
-    [
-      {
-        "id": "integer",
-        "username": "string"
-      },
-      ...
-    ]
+    {
+      "status": "success",
+      "data": [
+        {
+          "id": "integer",
+          "username": "string",
+          "role": "string"
+        },
+        ...
+      ]
+    }
     ```
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `404 Not Found`
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "Admin role required" }`
+    * `404 Not Found`: `{ "status": "error", "message": "Room not found" }`
 
-## 5. Quản lý Computers (Bởi Admin/User Frontend)
+## 5. Quản lý Computers
 
-### Lấy danh sách Computers
+### Lấy danh sách Computers (Admin only)
 * **Method:** `GET`
 * **Path:** `/api/computers`
-* **Headers:** `Authorization: Bearer <jwt>` (Required)
+* **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
 * **Query Parameters (Filtering):**
     * `?room_id=integer` (Lọc theo phòng)
     * `?name=string` (Tìm kiếm gần đúng theo tên máy)
-    * `?status=online|offline` (Lọc theo trạng thái online/offline - Backend cần lấy từ cache/map WS)
+    * `?status=online|offline` (Lọc theo trạng thái online/offline)
     * `?has_errors=true` (Chỉ lấy máy đang có lỗi 'active')
-    * `?unique_agent_id=string` (Tìm theo ID agent)
-* **Response Success (200 OK):** (Mảng các đối tượng computer, đã lọc. Admin thấy hết, User thấy máy trong phòng được gán)
-    ```json
-    [
-      {
-        "id": "integer",
-        "name": "string",
-        "room_id": "integer",
-        "unique_agent_id": "string",
-        "status": "string ('online'|'offline')", // Lấy từ cache
-        "has_active_errors": "boolean" // Tính toán từ trường errors
-        // ... các trường cần thiết khác cho danh sách
-      },
-      ...
-    ]
-    ```
-* **Response Error:** `401 Unauthorized`
-
-### Cập nhật chi tiết Computer (Admin Only)
-* **Method:** `PUT`
-* **Path:** `/api/computers/:id`
-* **Headers:**
-    * `Authorization: Bearer <admin_jwt_token_string>` (Required)
-    * `Content-Type: application/json`
-* **Path Parameters:** `id` (integer, ID của computer)
-* **Request Body:** (Chỉ các trường Admin có thể sửa)
+* **Response Success (200 OK):**
     ```json
     {
-      "name": "string (optional)",
-      "room_id": "integer (optional)",
-      "pos_x": "integer (optional)",
-      "pos_y": "integer (optional)"
+      "status": "success",
+      "data": [
+        {
+          "id": "integer",
+          "name": "string",
+          "room_id": "integer",
+          "unique_agent_id": "string",
+          "status": "string ('online'|'offline')",
+          "has_active_errors": "boolean"
+        },
+        ...
+      ]
     }
     ```
-* **Response Success (200 OK):** (Thông tin computer sau cập nhật)
-    ```json
-    {
-      "id": "integer",
-      "name": "string",
-      "room_id": "integer",
-      "pos_x": "integer",
-      "pos_y": "integer",
-      "unique_agent_id": "string",
-      // ... các trường khác đọc từ DB
-    }
-    ```
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `400 Bad Request`
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "Admin role required" }`
 
-### Lấy chi tiết Computer (Admin/User được quyền truy cập Room)
+### Lấy chi tiết Computer (User/Admin được quyền truy cập Room)
 * **Method:** `GET`
 * **Path:** `/api/computers/:id`
 * **Headers:** `Authorization: Bearer <user_or_admin_jwt_token_string>` (Required)
@@ -389,48 +472,44 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
 * **Response Success (200 OK):**
     ```json
     {
-      "id": "integer",
-      "name": "string",
-      "room_id": "integer",
-      "pos_x": "integer",
-      "pos_y": "integer",
-      "ip_address": "string",
-      "unique_agent_id": "string",
-      "last_seen": "timestamp",
-      "windows_version": "string",
-      "total_ram": "integer",
-      "cpu_info": "string",
-      "errors": [ // Mảng các đối tượng lỗi
-        {
-          "id": "string (uuid)",
-          "type": "string",
-          "description": "string",
-          "reported_by": "integer",
-          "reported_at": "timestamp",
-          "status": "string ('active'|'resolved')",
-          "resolved_by": "integer (optional)",
-          "resolved_at": "timestamp (optional)",
-          "resolution_notes": "string (optional)"
-        },
-        ...
-      ]
-      // Không trả về Agent Token Hash
+      "status": "success",
+      "data": {
+        "id": "integer",
+        "name": "string",
+        "room_id": "integer",
+        "pos_x": "integer",
+        "pos_y": "integer",
+        "ip_address": "string",
+        "unique_agent_id": "string",
+        "last_seen": "timestamp",
+        "windows_version": "string",
+        "total_ram": "integer",
+        "cpu_info": "string",
+        "errors": [
+          {
+            "id": "string (uuid)",
+            "type": "string",
+            "description": "string",
+            "reported_by": "integer",
+            "reported_at": "timestamp",
+            "status": "string ('active'|'resolved')",
+            "resolved_by": "integer (optional)",
+            "resolved_at": "timestamp (optional)",
+            "resolution_notes": "string (optional)"
+          },
+          ...
+        ]
+      }
     }
     ```
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `404 Not Found`
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "You don't have access to this computer" }`
+    * `404 Not Found`: `{ "status": "error", "message": "Computer not found" }`
 
-### Xóa Computer (Admin Only)
-* **Method:** `DELETE`
+### Cập nhật chi tiết Computer (User/Admin được quyền truy cập Room)
+* **Method:** `PUT`
 * **Path:** `/api/computers/:id`
-* **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
-* **Path Parameters:** `id` (integer, ID của computer)
-* **Request Body:** (None)
-* **Response Success (204 No Content):**
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `404 Not Found`
-
-### Gửi yêu cầu thực thi Lệnh (Admin/User được quyền truy cập Room)
-* **Method:** `POST`
-* **Path:** `/api/computers/:id/command`
 * **Headers:**
     * `Authorization: Bearer <user_or_admin_jwt_token_string>` (Required)
     * `Content-Type: application/json`
@@ -438,134 +517,173 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
 * **Request Body:**
     ```json
     {
-      "command": "string (required)"
+      "name": "string (optional)",
+      "pos_x": "integer (optional)",
+      "pos_y": "integer (optional)"
     }
     ```
-* **Response Success (202 Accepted):** (Yêu cầu đã được chấp nhận, kết quả sẽ trả về qua WebSocket)
+* **Response Success (200 OK):**
     ```json
     {
-      "message": "Command sent to agent",
-      "commandId": "string (uuid)" // ID để theo dõi kết quả
+      "status": "success",
+      "data": {
+        "id": "integer",
+        "name": "string",
+        "room_id": "integer",
+        "pos_x": "integer",
+        "pos_y": "integer",
+        "unique_agent_id": "string",
+        "updated_at": "timestamp"
+      },
+      "message": "Computer updated successfully"
     }
     ```
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `404 Not Found` (Computer không tồn tại), `400 Bad Request`, `503 Service Unavailable` (Agent không online WS)
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "You don't have access to this computer" }`
+    * `404 Not Found`: `{ "status": "error", "message": "Computer not found" }`
+    * `400 Bad Request`: `{ "status": "error", "message": "Failed to update computer" }`
 
-### Báo cáo lỗi (User/Admin có quyền truy cập room)
-* **Method:** `POST`
-* **Path:** `/api/computers/:id/errors`
-* **Headers:** `Authorization: Bearer <jwt>` (Required)
+### Xóa Computer (Admin Only)
+* **Method:** `DELETE`
+* **Path:** `/api/computers/:id`
+* **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
 * **Path Parameters:** `id` (integer, ID của computer)
-* **Request Body:**
+* **Request Body:** (None)
+* **Response Success (200 OK):**
     ```json
     {
-      "type": "string (required, vd: 'Hardware', 'Software', 'Network')",
-      "description": "string (required)"
+      "status": "success",
+      "message": "Computer deleted successfully"
     }
     ```
-* **Response Success (201 Created):** (Trả về lỗi vừa tạo)
-    ```json
-    {
-      "id": "string (uuid của lỗi)",
-      "type": "string",
-      "description": "string",
-      "reported_by": "integer",
-      "reported_at": "timestamp",
-      "status": "active"
-    }
-    ```
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `400 Bad Request`
+* **Response Error:** 
+    * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized" }`
+    * `403 Forbidden`: `{ "status": "error", "message": "Admin role required" }`
+    * `404 Not Found`: `{ "status": "error", "message": "Computer not found" }`
 
-### Xử lý/Xóa lỗi (Admin Only)
-* **Method:** `PUT`
-* **Path:** `/api/computers/:computerId/errors/:errorId/resolve`
-* **Headers:** `Authorization: Bearer <admin_jwt>` (Required)
-* **Path Parameters:** `computerId` (integer), `errorId` (string, uuid của lỗi cần xử lý)
-* **Request Body:** (Optional)
-    ```json
-    {
-      "resolution_notes": "string (optional)"
-    }
-    ```
-* **Response Success (200 OK):** (Trả về lỗi đã được cập nhật)
-    ```json
-    {
-      "id": "string (uuid của lỗi)",
-      "type": "string",
-      "description": "string",
-      "reported_by": "integer",
-      "reported_at": "timestamp",
-      "status": "resolved",
-      "resolved_by": "integer",
-      "resolved_at": "timestamp",
-      "resolution_notes": "string"
-    }
-    ```
-* **Response Error:** `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `400 Bad Request`
+## 6. Socket.IO Events
 
-## 6. API Dành Riêng Cho Agent
+### Client-side Events (WebSocket từ Frontend tới Backend)
 
-### Agent định danh lần đầu
-* **Method:** `POST`
-* **Path:** `/api/agent/identify`
-* **Headers:** `Content-Type: application/json`
-* **Request Body:**
+#### Authentication
+* **Event:** `auth`
+* **Data:**
     ```json
     {
-      "unique_agent_id": "string (required)"
+      "token": "string (JWT token)"
     }
     ```
-* **Response Success (200 OK):** `{ "status": "string ('mfa_required' or 'authentication_required')" }`
-* **Response Error:** `400 Bad Request`
-
-### Agent gửi mã MFA
-* **Method:** `POST`
-* **Path:** `/api/agent/verify-mfa`
-* **Headers:** `Content-Type: application/json`
-* **Request Body:**
+* **Response Event:** `auth_response`
+* **Response Data:**
     ```json
     {
-      "unique_agent_id": "string (required)",
-      "mfaCode": "string (required)"
+      "status": "success|error",
+      "message": "string"
     }
     ```
-* **Response Success (200 OK):** (Trả về Agent Token nếu MFA hợp lệ) `{ "agentToken": "string (plain Agent Token)" }`
-* **Response Error:**
-    * `401 Unauthorized`: `{ "message": "Invalid or expired MFA code" }`
-    * `400 Bad Request`: `{ "message": "Missing fields" }`
-    * `404 Not Found`: `{ "message": "Agent ID not found or MFA not initiated" }`
 
-### Agent gửi cập nhật trạng thái định kỳ (%CPU, %RAM)
-* **Method:** `PUT`
-* **Path:** `/api/agent/status`
-* **Headers:**
-    * `X-Agent-ID: <unique_agent_id_string>` (Required)
-    * `Authorization: Bearer <agent_token_string>` (Required)
-    * `Content-Type: application/json`
-* **Request Body:**
+#### Subscribe to Room
+* **Event:** `subscribe_room`
+* **Data:**
     ```json
     {
-      "cpu": "number (required, percentage)",
-      "ram": "number (required, percentage)"
+      "roomId": "integer"
     }
     ```
-* **Response Success (204 No Content):**
-* **Response Error:** `401 Unauthorized` (Invalid Agent Token or ID), `400 Bad Request`
-
-### Agent gửi kết quả Lệnh
-* **Method:** `POST`
-* **Path:** `/api/agent/command-result`
-* **Headers:**
-    * `X-Agent-ID: <unique_agent_id_string>` (Required)
-    * `Authorization: Bearer <agent_token_string>` (Required)
-    * `Content-Type: application/json`
-* **Request Body:**
+* **Response Event:** `subscribe_room_response`
+* **Response Data:**
     ```json
     {
-      "commandId": "string (required, uuid received from backend)",
-      "stdout": "string (optional)",
-      "stderr": "string (optional)",
-      "exitCode": "integer (required)"
+      "status": "success|error",
+      "roomId": "integer",
+      "message": "string (on error)"
     }
     ```
-* **Response Success (204 No Content):**
-* **Response Error:** `401 Unauthorized`, `400 Bad Request`, `404 Not Found` (Command ID không hợp lệ)
+
+#### Unsubscribe from Room
+* **Event:** `unsubscribe_room`
+* **Data:**
+    ```json
+    {
+      "roomId": "integer"
+    }
+    ```
+
+#### Send Command to Computer
+* **Event:** `send_command`
+* **Data:**
+    ```json
+    {
+      "computerId": "integer",
+      "command": "string"
+    }
+    ```
+* **Response Event:** `command_sent`
+* **Response Data:**
+    ```json
+    {
+      "status": "success|error",
+      "computerId": "integer",
+      "commandId": "string (uuid)",
+      "message": "string (on error)"
+    }
+    ```
+
+### Server-side Events (WebSocket từ Backend tới Frontend)
+
+#### Computer Status Update
+* **Event:** `computer_status_update`
+* **Data:**
+    ```json
+    {
+      "computerId": "integer",
+      "status": "online|offline",
+      "lastSeen": "timestamp",
+      "cpuUsage": "number (percentage)",
+      "ramUsage": "number (percentage)"
+    }
+    ```
+
+#### Command Result
+* **Event:** `command_result`
+* **Data:**
+    ```json
+    {
+      "commandId": "string (uuid)",
+      "computerId": "integer",
+      "stdout": "string",
+      "stderr": "string",
+      "exitCode": "integer"
+    }
+    ```
+
+#### Error Reported
+* **Event:** `error_reported`
+* **Data:**
+    ```json
+    {
+      "computerId": "integer",
+      "error": {
+        "id": "string (uuid)",
+        "type": "string",
+        "description": "string",
+        "reported_by": "integer",
+        "reported_at": "timestamp",
+        "status": "active"
+      }
+    }
+    ```
+
+#### Error Resolved
+* **Event:** `error_resolved`
+* **Data:**
+    ```json
+    {
+      "computerId": "integer",
+      "errorId": "string (uuid)",
+      "resolvedBy": "integer",
+      "resolvedAt": "timestamp",
+      "resolutionNotes": "string"
+    }
+    ```

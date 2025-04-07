@@ -1,8 +1,7 @@
 'use strict';
 
-/** @type {import('sequelize-cli').Migration} */
 module.exports = {
-  async up (queryInterface, Sequelize) {
+  up: async (queryInterface, Sequelize) => {
     await queryInterface.createTable('computers', {
       id: {
         type: Sequelize.INTEGER,
@@ -11,17 +10,7 @@ module.exports = {
       },
       name: {
         type: Sequelize.STRING(255),
-        allowNull: true // NULL initially as per readme
-      },
-      room_id: {
-        type: Sequelize.INTEGER,
-        allowNull: true, // NULL initially as per readme
-        references: {
-          model: 'rooms',
-          key: 'id'
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL'
+        allowNull: true
       },
       pos_x: {
         type: Sequelize.INTEGER,
@@ -41,7 +30,7 @@ module.exports = {
       },
       agent_token_hash: {
         type: Sequelize.STRING(255),
-        allowNull: true // NULL until successful registration
+        allowNull: true
       },
       last_seen: {
         type: Sequelize.DATE
@@ -59,20 +48,27 @@ module.exports = {
         type: Sequelize.JSONB,
         defaultValue: '[]'
       },
+      room_id: {
+        type: Sequelize.INTEGER,
+        references: {
+          model: 'rooms',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
+      },
       created_at: {
-        allowNull: false,
         type: Sequelize.DATE,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
+        allowNull: false
       },
       updated_at: {
-        allowNull: false,
         type: Sequelize.DATE,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
+        allowNull: false
       }
     });
   },
 
-  async down (queryInterface, Sequelize) {
+  down: async (queryInterface, Sequelize) => {
     await queryInterface.dropTable('computers');
   }
 };

@@ -1,12 +1,12 @@
 'use strict';
 
-/** @type {import('sequelize-cli').Migration} */
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     await queryInterface.createTable('user_room_assignments', {
       user_id: {
         type: Sequelize.INTEGER,
         allowNull: false,
+        primaryKey: true,
         references: {
           model: 'users',
           key: 'id'
@@ -17,6 +17,7 @@ module.exports = {
       room_id: {
         type: Sequelize.INTEGER,
         allowNull: false,
+        primaryKey: true,
         references: {
           model: 'rooms',
           key: 'id'
@@ -24,13 +25,6 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       }
-    });
-
-    // Add a composite primary key
-    await queryInterface.addConstraint('user_room_assignments', {
-      fields: ['user_id', 'room_id'],
-      type: 'primary key',
-      name: 'user_room_assignment_pkey'
     });
   },
 

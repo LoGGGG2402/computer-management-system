@@ -56,6 +56,20 @@ class AuthService {
   }
 
   /**
+   * Get rooms assigned to the current user
+   * @returns {Promise} - User's assigned rooms
+   */
+  async getUserRooms() {
+    try {
+      const response = await api.get('/rooms');
+      return response.data.data.rooms;
+    } catch (error) {
+      console.error('Error fetching user rooms:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Check if user is authenticated
    * @returns {boolean} - Authentication status
    */
