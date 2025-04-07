@@ -12,9 +12,15 @@ import logging
 import socket
 import platform
 import psutil
-import socketio
-import requests
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
+
+# Import agent modules
+from modules.http_client import HttpClient
+from modules.mfa_handler import prompt_for_mfa, display_registration_success
+from modules.token_manager import load_token, save_token, delete_token
+from modules.ws_client import WSClient
+from modules.system_monitor import SystemMonitor
+from utils.utils import run_command
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +38,19 @@ class Agent:
             config_path (str): Path to the configuration file
         """
         self.config = self._load_config(config_path)
-        self.sio = socketio.Client()
         self.running = False
-        self.setup_socket_events()
         
         # Device identification
         self.device_id = self._get_device_id()
-        self.device_info = self._collect_system_info()
+        
+        # Initialize required services
+        self.http_client = HttpClient(self.config.get('server_url'))
+        self.ws_client = WSClient(self.config.get('server_url'))
+        self.system_monitor = SystemMonitor()
+        self.agent_token = None
+        
+        # Set up command handler
+        self.ws_client.register_command_handler(self.handle_command)
         
         logger.info(f"Agent initialized for device: {self.device_id}")
         
@@ -46,7 +58,7 @@ class Agent:
         """Load configuration from file."""
         default_config = {
             "server_url": "http://localhost:3000",
-            "api_endpoint": "/api/v1",
+            "api_endpoint": "/api/agent",
             "monitoring_interval": 60,  # seconds
             "reconnect_delay": 5,  # seconds
             "storage_path": "../storage"
@@ -104,153 +116,182 @@ class Agent:
     
     def _collect_system_info(self) -> Dict[str, Any]:
         """Collect basic system information."""
-        info = {
-            "hostname": socket.gethostname(),
-            "platform": platform.system(),
-            "platform_release": platform.release(),
-            "platform_version": platform.version(),
-            "architecture": platform.machine(),
-            "processor": platform.processor(),
-            "physical_cores": psutil.cpu_count(logical=False),
-            "total_cores": psutil.cpu_count(logical=True),
-            "total_memory": psutil.virtual_memory().total,
-            "python_version": platform.python_version()
-        }
+        return self.system_monitor.get_system_info()
         
-        logger.debug(f"Collected system information: {info}")
-        return info
-    
-    def setup_socket_events(self):
-        """Set up socket.io event handlers."""
-        @self.sio.event
-        def connect():
-            logger.info("Connected to server")
-            # Register device with server
-            self.sio.emit('register_device', {
-                'device_id': self.device_id,
-                'device_info': self.device_info
-            })
-            
-        @self.sio.event
-        def disconnect():
-            logger.info("Disconnected from server")
-            
-        @self.sio.on('command')
-        def on_command(data):
-            command = data.get('command')
-            args = data.get('args', {})
-            command_id = data.get('command_id')
-            
-            logger.info(f"Received command: {command} with ID: {command_id}")
-            
-            # Process the command and send back the result
-            result = self.process_command(command, args)
-            
-            self.sio.emit('command_result', {
-                'command_id': command_id,
-                'device_id': self.device_id,
-                'result': result
-            })
-    
-    def process_command(self, command: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    def authenticate(self) -> bool:
         """
-        Process a command received from the server.
+        Authenticate the agent with the backend server.
+        
+        Returns:
+            bool: True if authenticated successfully
+        """
+        logger.info("Starting agent authentication process")
+        
+        # Try to load existing token
+        storage_path = self.config.get("storage_path")
+        token = load_token(self.device_id, storage_path)
+        
+        if token:
+            logger.info("Agent token found, using existing token")
+            self.agent_token = token
+            return True
+        
+        # No token found, start identification process
+        logger.info("No agent token found, starting identification process")
+        success, identify_response = self.http_client.identify_agent(self.device_id)
+        
+        if not success:
+            logger.error("Failed to identify agent with backend server")
+            return False
+        
+        # Check the identification response
+        if identify_response.get("status") == "mfa_required":
+            logger.info("MFA required for agent registration")
+            
+            try:
+                # Prompt user for MFA code
+                mfa_code = prompt_for_mfa()
+                
+                # Verify MFA code
+                success, verify_response = self.http_client.verify_mfa(self.device_id, mfa_code)
+                
+                if not success or "agentToken" not in verify_response:
+                    logger.error("MFA verification failed")
+                    return False
+                
+                # Get and save the agent token
+                self.agent_token = verify_response["agentToken"]
+                saved = save_token(self.device_id, self.agent_token, storage_path)
+                
+                if not saved:
+                    logger.warning("Failed to save agent token")
+                
+                # Display success message
+                display_registration_success()
+                
+                logger.info("Agent registered and authenticated successfully")
+                return True
+                
+            except KeyboardInterrupt:
+                logger.info("Authentication process interrupted by user")
+                return False
+                
+            except Exception as e:
+                logger.error(f"Error during authentication: {e}")
+                return False
+        
+        elif identify_response.get("status") == "authentication_required":
+            logger.error("Agent is registered but token is missing")
+            return False
+        
+        else:
+            logger.error(f"Unexpected response from server: {identify_response}")
+            return False
+    
+    def handle_command(self, command_data: Dict[str, Any]):
+        """
+        Handle a command received from the server.
         
         Args:
-            command (str): Command to execute
-            args (Dict): Command arguments
-            
-        Returns:
-            Dict with the result of the command
+            command_data: Command data from server
         """
-        logger.debug(f"Processing command: {command} with args: {args}")
+        command_id = command_data.get("commandId")
+        command = command_data.get("command")
         
-        result = {
-            'success': False,
-            'data': None,
-            'error': None
-        }
+        if not command_id or not command:
+            logger.error("Received invalid command data")
+            return
+        
+        logger.info(f"Executing command: {command}")
         
         try:
-            if command == 'ping':
-                result['data'] = 'pong'
-                result['success'] = True
-                
-            elif command == 'get_system_stats':
-                stats = self.collect_system_stats()
-                result['data'] = stats
-                result['success'] = True
-                
-            # Add more command handlers as needed
-                
-            else:
-                result['error'] = f"Unknown command: {command}"
-                
-        except Exception as e:
-            logger.exception(f"Error processing command {command}")
-            result['error'] = str(e)
+            # Execute the command
+            command_args = command.split()
+            success, stdout, stderr = run_command(command_args)
             
-        return result
+            # Prepare the result
+            result = {
+                "stdout": stdout,
+                "stderr": stderr,
+                "exitCode": 0 if success else 1
+            }
+            
+            # Send the result via WebSocket
+            self.ws_client.send_command_result(command_id, result)
+            
+            # Also try to send via HTTP (fallback)
+            self.http_client.send_command_result(
+                self.agent_token,
+                self.device_id,
+                command_id,
+                result
+            )
+        
+        except Exception as e:
+            logger.error(f"Error executing command: {e}")
+            error_result = {
+                "stdout": "",
+                "stderr": str(e),
+                "exitCode": 1
+            }
+            self.ws_client.send_command_result(command_id, error_result)
     
     def collect_system_stats(self) -> Dict[str, Any]:
         """Collect current system statistics."""
+        cpu_info = self.system_monitor.get_cpu_info()
+        memory_info = self.system_monitor.get_memory_info()
+        
         stats = {
             'timestamp': time.time(),
             'cpu': {
-                'percent': psutil.cpu_percent(interval=1),
-                'per_cpu': psutil.cpu_percent(interval=1, percpu=True)
+                'percent': cpu_info["cpu_percent"],
+                'per_cpu': cpu_info["cpu_percent_per_core"]
             },
             'memory': {
-                'total': psutil.virtual_memory().total,
-                'available': psutil.virtual_memory().available,
-                'percent': psutil.virtual_memory().percent
-            },
-            'disk': {
-                'total': psutil.disk_usage('/').total,
-                'used': psutil.disk_usage('/').used,
-                'free': psutil.disk_usage('/').free,
-                'percent': psutil.disk_usage('/').percent
-            },
-            'network': {
-                'bytes_sent': psutil.net_io_counters().bytes_sent,
-                'bytes_recv': psutil.net_io_counters().bytes_recv
-            },
-            'boot_time': psutil.boot_time()
+                'total': memory_info["total"],
+                'available': memory_info["available"],
+                'percent': memory_info["percent"]
+            }
         }
         
         return stats
     
-    def connect_to_server(self):
-        """Connect to the backend server."""
-        server_url = self.config.get('server_url')
+    def connect_to_server(self) -> bool:
+        """
+        Connect to the backend server via WebSocket.
         
-        try:
-            logger.info(f"Connecting to server: {server_url}")
-            self.sio.connect(server_url)
-        except Exception as e:
-            logger.error(f"Failed to connect to server: {e}")
-            
+        Returns:
+            bool: True if connected successfully
+        """
+        if not self.agent_token:
+            logger.error("Cannot connect to server: No agent token available")
+            return False
+        
+        return self.ws_client.connect_and_authenticate(self.device_id, self.agent_token)
+    
     def start_monitoring(self):
         """Start the monitoring loop."""
         interval = self.config.get('monitoring_interval')
+        reconnect_delay = self.config.get('reconnect_delay')
         
         logger.info(f"Starting monitoring loop with interval: {interval}s")
         
         while self.running:
             try:
+                # Collect system stats
                 stats = self.collect_system_stats()
                 
-                # Send stats to server if connected
-                if self.sio.connected:
-                    self.sio.emit('system_stats', {
-                        'device_id': self.device_id,
-                        'stats': stats
-                    })
-                    logger.debug("Sent system stats to server")
+                # Send stats to server via WebSocket if connected
+                if self.ws_client.connected:
+                    self.ws_client.send_status_update(stats)
                 else:
-                    logger.warning("Not connected to server, couldn't send stats")
-                    # Attempt to reconnect
+                    logger.warning("Not connected to WebSocket server, attempting to reconnect")
                     self.connect_to_server()
+                    time.sleep(reconnect_delay)
+                    continue
+                
+                # Also send stats via HTTP (if needed)
+                # self.http_client.update_status(self.agent_token, self.device_id, stats)
                 
             except Exception as e:
                 logger.error(f"Error in monitoring loop: {e}")
@@ -260,18 +301,33 @@ class Agent:
     
     def start(self):
         """Start the agent."""
-        self.running = True
-        
-        # Connect to the server
-        self.connect_to_server()
-        
-        # Start the monitoring loop
-        self.start_monitoring()
+        try:
+            logger.info("Starting agent")
+            
+            # Authenticate with the server
+            if not self.authenticate():
+                logger.error("Authentication failed, cannot start agent")
+                return
+            
+            # Connect to the server via WebSocket
+            if not self.connect_to_server():
+                logger.error("WebSocket connection failed, will retry in monitoring loop")
+            
+            # Start the monitoring loop
+            self.running = True
+            self.start_monitoring()
+            
+        except KeyboardInterrupt:
+            logger.info("Agent stopped by user")
+            self.stop()
+        except Exception as e:
+            logger.error(f"Error starting agent: {e}")
+            self.stop()
     
     def stop(self):
         """Stop the agent."""
         logger.info("Stopping agent")
         self.running = False
         
-        if self.sio.connected:
-            self.sio.disconnect()
+        if self.ws_client:
+            self.ws_client.disconnect()

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button, Modal, Typography, message, Tabs, Space, Input } from 'antd';
 import { PlusOutlined, DesktopOutlined, SearchOutlined } from '@ant-design/icons';
 import ComputerList from '../../components/computer/ComputerList';
+import ComputerForm from '../../components/computer/ComputerForm';
 import computerService from '../../services/computer.service';
 import roomService from '../../services/room.service';
 
@@ -229,11 +230,11 @@ const ComputerManagementPage = () => {
           <Tabs defaultActiveKey="details" items={tabItems} />
         ) : (
           <div>
-            {/* Computer edit form will be implemented here */}
-            <p>Edit form coming soon...</p>
-            <Button type="primary" onClick={handleSuccess}>
-              Save Changes
-            </Button>
+            <ComputerForm 
+              initialValues={selectedComputer}
+              onSuccess={handleSuccess}
+              onCancel={handleCancel}
+            />
           </div>
         )}
       </Modal>
