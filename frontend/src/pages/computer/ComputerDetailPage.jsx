@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Typography, Row, Col, Descriptions, Tag, Skeleton, Button, Space, Alert, Divider } from 'antd';
-import { ArrowLeftOutlined, DesktopOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Card, Row, Col, Tabs, Spin, Button, message, Typography, Divider, Breadcrumb, Tag, Space, Alert } from 'antd';
+import { HomeOutlined, DesktopOutlined, ArrowLeftOutlined, ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, GlobalOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import computerService from '../../services/computer.service';
 import { useSocket } from '../../contexts/SocketContext';
+import { useCommandResults } from '../../contexts/CommandResultContext';
+import { useAuth } from '../../contexts/AuthContext';
+import ComputerCard from '../../components/computer/ComputerCard';
 import CommandInput from '../../components/computer/CommandInput';
 import CommandOutput from '../../components/computer/CommandOutput';
 
@@ -12,50 +15,84 @@ const { Title, Text } = Typography;
 const ComputerDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { subscribeToRooms, unsubscribeFromRooms, getComputerStatus } = useSocket();
+  const { commandResults } = useCommandResults();
+  const { isAdmin, hasRoomAccess } = useAuth();
+  
   const [computer, setComputer] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { subscribeToRooms, computerStatuses, getComputerStatus, getCommandResult } = useSocket();
+  const [activeTab, setActiveTab] = useState('overview');
+  const [refreshKey, setRefreshKey] = useState(0);
   
-  // State for command handling
+  // Command execution state
   const [currentCommand, setCurrentCommand] = useState(null);
-  const [commandText, setCommandText] = useState('');
+  const [commandId, setCommandId] = useState(null);
   const [commandLoading, setCommandLoading] = useState(false);
   
-  // Fetch computer data
+  // Get real-time status if available
+  const statusData = getComputerStatus(parseInt(id));
+  const commandResult = commandId ? commandResults[commandId] : null;
+  
+  // When command result is received, update loading state
   useEffect(() => {
-    const fetchComputer = async () => {
-      try {
-        setLoading(true);
-        const data = await computerService.getComputerById(id);
-        setComputer(data);
-        
-        // Subscribe to room WebSocket updates
-        if (data.room_id) {
-          subscribeToRooms([data.room_id]);
-        }
-      } catch (err) {
-        console.error('Error fetching computer:', err);
-        setError('Failed to load computer details. Please try again later.');
-      } finally {
-        setLoading(false);
+    if (commandLoading && commandResult) {
+      setCommandLoading(false);
+    }
+  }, [commandResult, commandLoading]);
+  
+  // Load computer details when component mounts
+  useEffect(() => {
+    fetchComputerDetails();
+    
+    return () => {
+      // Clean up by unsubscribing when component unmounts
+      if (computer?.room_id) {
+        unsubscribeFromRooms([computer.room_id]);
       }
     };
-    
-    if (id) {
-      fetchComputer();
-    }
-    
-    // Cleanup when component unmounts
-    return () => {
-      setComputer(null);
-    };
-  }, [id, subscribeToRooms]);
+  }, [id, refreshKey]);
   
-  // Get real-time status
-  const getStatus = () => {
-    if (!computer) return { status: 'unknown', cpuUsage: 0, ramUsage: 0 };
-    return getComputerStatus(computer.id);
+  // When computer data is loaded, subscribe to its room for real-time updates
+  useEffect(() => {
+    if (computer?.room_id) {
+      subscribeToRooms([computer.room_id]);
+    }
+  }, [computer?.room_id, subscribeToRooms]);
+  
+  const fetchComputerDetails = async () => {
+    setLoading(true);
+    try {
+      const response = await computerService.getComputerById(id);
+      setComputer(response.data?.data || response.data);
+    } catch (error) {
+      console.error('Error fetching computer details:', error);
+      setError('Failed to load computer details. Please try again later.');
+      message.error('Failed to load computer details');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+  };
+  
+  const handleGoBack = () => {
+    navigate(-1);
+  };
+  
+  // Handle command execution
+  const handleCommandSent = (newCommandId, command) => {
+    setCommandId(newCommandId);
+    setCurrentCommand(command);
+    setCommandLoading(true);
+    
+    // Switch to console tab
+    setActiveTab('console');
+    
+    message.info(`Command sent: ${command}`);
   };
   
   // Format last seen time
@@ -64,23 +101,6 @@ const ComputerDetailPage = () => {
     const date = new Date(timestamp);
     return date.toLocaleString();
   };
-  
-  // Handle command submission
-  const handleCommandSent = (commandId, command) => {
-    setCurrentCommand(commandId);
-    setCommandText(command);
-    setCommandLoading(true);
-  };
-  
-  // Get command result from socket context
-  const commandResult = currentCommand ? getCommandResult(currentCommand) : null;
-  
-  // Update loading state when command result is received
-  useEffect(() => {
-    if (commandResult && commandLoading) {
-      setCommandLoading(false);
-    }
-  }, [commandResult, commandLoading]);
   
   // Render status tag
   const renderStatusTag = (status) => {
@@ -94,37 +114,177 @@ const ComputerDetailPage = () => {
     }
   };
   
-  // Go back handler
-  const handleGoBack = () => {
-    navigate(-1);
-  };
+  // Check if user has access to execute commands
+  const canExecuteCommands = computer ? 
+    (isAdmin || (computer.room_id && hasRoomAccess(computer.room_id))) : false;
   
-  // Current status
-  const currentStatus = getStatus();
+  // Define tab items
+  const items = [
+    {
+      key: 'overview',
+      label: 'Overview',
+      children: (
+        <div className="computer-overview">
+          {computer && (
+            <ComputerCard 
+              computer={computer} 
+              onRefresh={handleRefresh}
+              onView={() => {}} // No-op since we're already in detail view
+            />
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'details',
+      label: 'System Information',
+      children: (
+        <div className="computer-details">
+          <Card>
+            <Row gutter={[16, 16]}>
+              <Col span={24}>
+                <Title level={4}>Hardware Information</Title>
+                <Divider />
+              </Col>
+              <Col span={12}>
+                <Text strong>CPU: </Text>
+                <Text>{computer?.cpu_info || 'Unknown'}</Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>Memory: </Text>
+                <Text>
+                  {computer?.total_ram 
+                    ? `${(parseInt(computer.total_ram) / (1024 * 1024 * 1024)).toFixed(2)} GB`
+                    : 'Unknown'}
+                </Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>OS: </Text>
+                <Text>{computer?.windows_version || 'Unknown'}</Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>IP Address: </Text>
+                <Text>{computer?.ip_address || 'Not set'}</Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>Agent ID: </Text>
+                <Text>{computer?.unique_agent_id || 'Not registered'}</Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>Position: </Text>
+                <Text>X: {computer?.pos_x || 0}, Y: {computer?.pos_y || 0}</Text>
+              </Col>
+            </Row>
+            
+            <Row gutter={[16, 16]} style={{ marginTop: '32px' }}>
+              <Col span={24}>
+                <Title level={4}>Current Status</Title>
+                <Divider />
+              </Col>
+              <Col span={12}>
+                <Text strong>Status: </Text>
+                {renderStatusTag(statusData?.status)}
+              </Col>
+              <Col span={12}>
+                <Text strong>CPU Usage: </Text>
+                <Text>{statusData?.cpuUsage || 0}%</Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>RAM Usage: </Text>
+                <Text>{statusData?.ramUsage || 0}%</Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>Last Updated: </Text>
+                <Text>
+                  {statusData?.timestamp 
+                    ? new Date(statusData.timestamp).toLocaleString()
+                    : 'Never'}
+                </Text>
+              </Col>
+            </Row>
+            
+            {/* Errors section */}
+            {computer?.errors && computer.errors.length > 0 && (
+              <Row gutter={[16, 16]} style={{ marginTop: '32px' }}>
+                <Col span={24}>
+                  <Title level={4}>Errors</Title>
+                  <Divider />
+                  <Alert
+                    message="Error Information"
+                    description={
+                      <ul style={{ margin: '5px 0 0 0', paddingLeft: '20px' }}>
+                        {computer.errors.map((error, index) => (
+                          <li key={index}>
+                            <Text type="danger">{error}</Text>
+                          </li>
+                        ))}
+                      </ul>
+                    }
+                    type="error"
+                    showIcon
+                  />
+                </Col>
+              </Row>
+            )}
+          </Card>
+        </div>
+      ),
+    },
+    {
+      key: 'console',
+      label: 'Remote Console',
+      children: (
+        <div className="console-tab">
+          <div className="console-header" style={{ marginBottom: '16px' }}>
+            <Title level={4}>Remote Command Execution</Title>
+            <Text type="secondary">Send commands to this computer remotely</Text>
+          </div>
+          
+          <Row gutter={[16, 16]}>
+            <Col span={24} lg={12}>
+              <CommandInput 
+                computerId={parseInt(id)}
+                onCommandSent={handleCommandSent}
+                disabled={!canExecuteCommands || statusData?.status !== 'online'}
+              />
+            </Col>
+            <Col span={24} lg={12}>
+              <CommandOutput 
+                result={commandResult}
+                command={currentCommand}
+                loading={commandLoading}
+                commandId={commandId}
+              />
+            </Col>
+          </Row>
+        </div>
+      ),
+    },
+  ];
+  
+  const handleTabChange = (key) => {
+    setActiveTab(key);
+  };
   
   if (loading) {
     return (
-      <div className="computer-detail-page">
-        <Skeleton active paragraph={{ rows: 10 }} />
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
+        <Spin size="large" tip="Loading computer details..." />
       </div>
     );
   }
   
   if (error) {
     return (
-      <div className="computer-detail-page">
+      <div className="not-found">
         <Alert
           message="Error"
           description={error}
           type="error"
           showIcon
         />
-        <Button 
-          onClick={handleGoBack} 
-          icon={<ArrowLeftOutlined />} 
-          style={{ marginTop: '16px' }}
-        >
-          Go Back
+        <Button type="primary" onClick={handleGoBack} style={{ marginTop: '16px' }}>
+          <ArrowLeftOutlined /> Go Back
         </Button>
       </div>
     );
@@ -132,19 +292,15 @@ const ComputerDetailPage = () => {
   
   if (!computer) {
     return (
-      <div className="computer-detail-page">
-        <Alert
+      <div className="not-found">
+        <Alert 
           message="Computer Not Found"
           description="The requested computer could not be found."
           type="warning"
           showIcon
         />
-        <Button 
-          onClick={handleGoBack} 
-          icon={<ArrowLeftOutlined />} 
-          style={{ marginTop: '16px' }}
-        >
-          Go Back
+        <Button type="primary" onClick={handleGoBack} style={{ marginTop: '16px' }}>
+          <ArrowLeftOutlined /> Go Back
         </Button>
       </div>
     );
@@ -152,74 +308,51 @@ const ComputerDetailPage = () => {
   
   return (
     <div className="computer-detail-page">
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        {/* Header with back button */}
-        <div className="page-header">
-          <Space>
-            <Button 
-              onClick={handleGoBack} 
-              icon={<ArrowLeftOutlined />}
-            >
-              Back
-            </Button>
+      <div className="page-header" style={{ marginBottom: '24px' }}>
+        <Breadcrumb items={[
+          { title: <><HomeOutlined /> Home</>, href: '/' },
+          { title: 'Rooms', href: '/rooms' },
+          { title: computer.room?.name || 'Room', href: `/rooms/${computer.room_id}` },
+          { title: computer.name || 'Computer' }
+        ]} />
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
+          <div>
             <Title level={2}>
               <DesktopOutlined /> {computer.name}
             </Title>
-            {renderStatusTag(currentStatus.status)}
-          </Space>
+            <Space>
+              {renderStatusTag(statusData?.status)}
+              <Text type="secondary">
+                ID: {computer.id} &bull; Room: {computer.room?.name || 'Unknown'}
+              </Text>
+            </Space>
+          </div>
+          <div>
+            <Button 
+              icon={<ArrowLeftOutlined />} 
+              onClick={handleGoBack} 
+              style={{ marginRight: '8px' }}
+            >
+              Back
+            </Button>
+            <Button 
+              type="primary" 
+              icon={<ReloadOutlined />} 
+              onClick={handleRefresh}
+            >
+              Refresh
+            </Button>
+          </div>
         </div>
-        
-        {/* Computer Information Card */}
-        <Card title="Computer Information">
-          <Descriptions bordered column={{ xxl: 4, xl: 3, lg: 3, md: 2, sm: 1, xs: 1 }}>
-            <Descriptions.Item label="Status">
-              {renderStatusTag(currentStatus.status)}
-            </Descriptions.Item>
-            <Descriptions.Item label="Last Seen">
-              {formatLastSeen(computer.last_seen)}
-            </Descriptions.Item>
-            <Descriptions.Item label="CPU Usage">
-              <Text>{currentStatus.cpuUsage || 0}%</Text>
-            </Descriptions.Item>
-            <Descriptions.Item label="RAM Usage">
-              <Text>{currentStatus.ramUsage || 0}%</Text>
-            </Descriptions.Item>
-            <Descriptions.Item label="Room">
-              {computer.room?.name || 'Unknown'}
-            </Descriptions.Item>
-            <Descriptions.Item label="Position">
-              X: {computer.pos_x}, Y: {computer.pos_y}
-            </Descriptions.Item>
-            <Descriptions.Item label="Agent ID">
-              {computer.agent_id || 'None'}
-            </Descriptions.Item>
-            <Descriptions.Item label="Description">
-              {computer.description || 'No description'}
-            </Descriptions.Item>
-          </Descriptions>
-        </Card>
-        
-        <Divider />
-        
-        {/* Command Section */}
-        <Row gutter={[16, 16]}>
-          <Col xs={24} lg={12}>
-            <CommandInput 
-              computerId={computer.id} 
-              onCommandSent={handleCommandSent}
-              disabled={currentStatus.status !== 'online'}
-            />
-          </Col>
-          <Col xs={24} lg={12}>
-            <CommandOutput 
-              result={commandResult} 
-              command={commandText}
-              loading={commandLoading}
-              commandId={currentCommand}
-            />
-          </Col>
-        </Row>
-      </Space>
+      </div>
+      
+      <Tabs 
+        activeKey={activeTab}
+        items={items}
+        onChange={handleTabChange}
+        tabBarStyle={{ marginBottom: '16px' }}
+      />
     </div>
   );
 };

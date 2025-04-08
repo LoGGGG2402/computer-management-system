@@ -353,6 +353,56 @@ class WebSocketService {
       return null;
     }
   }
+
+  /**
+   * Send a command to all computers in a room
+   * @param {number} roomId - The room ID
+   * @param {string} command - The command to execute
+   * @param {number} userId - The user ID who initiated the command
+   * @returns {Promise<Array<number>>} Array of computer IDs that received the command
+   */
+  async sendCommandToRoomComputers(roomId, command, userId) {
+    try {
+      // Import models only when needed to avoid circular dependencies
+      const db = require('../database/models');
+      const { v4: uuidv4 } = require('uuid');
+      
+      // Find all computers in the room
+      const computers = await db.Computer.findAll({ 
+        where: { room_id: roomId },
+        attributes: ['id']
+      });
+      
+      const sentComputerIds = [];
+      
+      // Loop through each computer and send command if online
+      for (const computer of computers) {
+        const computerId = computer.id;
+        const isOnline = this.getAgentOnlineStatus(computerId);
+        
+        if (isOnline) {
+          // Generate unique command ID for each computer
+          const commandId = uuidv4();
+          
+          // Store the pending command
+          this.storePendingCommand(commandId, userId, computerId);
+          
+          // Send the command to the agent
+          const sent = this.sendCommandToAgent(computerId, command, commandId);
+          
+          if (sent) {
+            sentComputerIds.push(computerId);
+          }
+        }
+      }
+      
+      console.log(`Command sent to ${sentComputerIds.length} of ${computers.length} computers in room ${roomId}`);
+      return sentComputerIds;
+    } catch (error) {
+      console.error(`Error sending command to room ${roomId}:`, error);
+      throw new Error(`Failed to send command to room: ${error.message}`);
+    }
+  }
 }
 
 module.exports = new WebSocketService();

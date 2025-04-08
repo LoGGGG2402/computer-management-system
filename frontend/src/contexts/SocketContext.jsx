@@ -10,7 +10,6 @@ export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
   const [computerStatuses, setComputerStatuses] = useState({});
-  const [commandResults, setCommandResults] = useState({});
   const { user, isAuthenticated } = useAuth();
 
   // Initialize socket
@@ -73,21 +72,6 @@ export const SocketProvider = ({ children }) => {
       }));
     });
 
-    // Handle command completion
-    socketInstance.on('command:completed', (data) => {
-      console.log('[SocketContext] Command completed:', data);
-      setCommandResults(prev => ({
-        ...prev,
-        [data.commandId]: {
-          computerId: data.computerId,
-          stdout: data.stdout,
-          stderr: data.stderr,
-          exitCode: data.exitCode,
-          timestamp: data.timestamp
-        }
-      }));
-    });
-
     // Connect to the server
     socketInstance.connect();
     setSocket(socketInstance);
@@ -143,32 +127,15 @@ export const SocketProvider = ({ children }) => {
     return computerStatuses[computerId] || { status: 'offline', cpuUsage: 0, ramUsage: 0 };
   }, [computerStatuses]);
 
-  // Get command result
-  const getCommandResult = useCallback((commandId) => {
-    return commandResults[commandId];
-  }, [commandResults]);
-
-  // Clear command result
-  const clearCommandResult = useCallback((commandId) => {
-    setCommandResults(prev => {
-      const newResults = { ...prev };
-      delete newResults[commandId];
-      return newResults;
-    });
-  }, []);
-
   // Context value
   const contextValue = {
     socket,
     connected,
     computerStatuses,
-    commandResults,
     subscribeToRooms,
     unsubscribeFromRooms,
     sendCommand,
-    getComputerStatus,
-    getCommandResult,
-    clearCommandResult
+    getComputerStatus
   };
 
   return (

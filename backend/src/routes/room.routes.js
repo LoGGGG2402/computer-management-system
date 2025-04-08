@@ -20,6 +20,9 @@ router.get('/:id', hasRoomAccess, roomController.getRoomById);
 // Routes that require room access
 router.put('/:id', hasRoomAccess, roomController.updateRoom);
 
+// Send command to all computers in a room
+router.post('/:roomId/command', hasRoomAccess, roomController.handleSendCommandToRoom);
+
 // Admin-only routes below
 router.use('/admin', isAdmin);
 router.post('/', isAdmin, roomController.createRoom);

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Button, Space, Popconfirm, message, Tooltip, Badge, Tag, Typography, Row, Col, Divider, Progress } from 'antd';
+import { Card, Button, Space, Popconfirm, message, Tooltip, Badge, Tag, Typography, Row, Col, Divider, Progress, Popover } from 'antd';
 import { 
   EditOutlined, 
   DeleteOutlined, 
@@ -10,10 +10,12 @@ import {
   ClockCircleOutlined,
   WarningOutlined,
   LaptopOutlined,
-  DatabaseOutlined
+  DatabaseOutlined,
+  CodeOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext';
+import { useCommandResults } from '../../contexts/CommandResultContext';
 import computerService from '../../services/computer.service';
 
 const { Text, Title } = Typography;
@@ -32,9 +34,13 @@ export const cardStyle = {
 const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false }) => {
   const { isAdmin, hasRoomAccess } = useAuth();
   const { getComputerStatus } = useSocket();
+  const { commandResults, clearResult } = useCommandResults();
 
   // Get real-time status data
   const statusData = getComputerStatus(computer?.id);
+  
+  // Get command result for this computer
+  const commandResult = computer?.id ? commandResults[computer.id] : null;
   
   // Check if user has access to this computer
   const hasComputerAccess = computer && computer.room_id && 
@@ -65,6 +71,27 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
     if (!timestamp) return 'Never';
     const date = new Date(timestamp);
     return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+  };
+
+  // Get a human-readable time from timestamp
+  const getTimeAgo = (timestamp) => {
+    if (!timestamp) return 'Never';
+    
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffMs = now - time;
+    
+    const diffSecs = Math.floor(diffMs / 1000);
+    if (diffSecs < 60) return `${diffSecs}s ago`;
+    
+    const diffMins = Math.floor(diffSecs / 60);
+    if (diffMins < 60) return `${diffMins}m ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
   };
 
   // Calculate time since last seen
@@ -102,6 +129,73 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
     return '#f5222d'; // Red
   };
 
+  // Render command result popover content
+  const renderCommandResultContent = () => {
+    if (!commandResult) return null;
+    
+    return (
+      <div style={{ maxWidth: '300px' }}>
+        <div style={{ marginBottom: '8px' }}>
+          <Text strong>Command Result</Text>
+          <Button 
+            size="small" 
+            type="text" 
+            style={{ float: 'right', padding: '0' }}
+            onClick={() => clearResult(computer.id)}
+          >
+            Clear
+          </Button>
+        </div>
+        
+        <div style={{ marginBottom: '8px' }}>
+          <Tag color={commandResult.exitCode === 0 ? 'success' : 'error'}>
+            Exit Code: {commandResult.exitCode}
+          </Tag>
+          <Text type="secondary" style={{ fontSize: '12px', marginLeft: '8px' }}>
+            {getTimeAgo(commandResult.timestamp)}
+          </Text>
+        </div>
+        
+        {commandResult.stdout && (
+          <div style={{ marginBottom: '8px' }}>
+            <Text strong>Output:</Text>
+            <div style={{ 
+              background: '#f5f5f5', 
+              padding: '8px', 
+              borderRadius: '4px',
+              maxHeight: '150px',
+              overflowY: 'auto',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+              fontSize: '12px'
+            }}>
+              {commandResult.stdout}
+            </div>
+          </div>
+        )}
+        
+        {commandResult.stderr && (
+          <div>
+            <Text strong type="danger">Error:</Text>
+            <div style={{ 
+              background: '#fff2f0', 
+              padding: '8px', 
+              borderRadius: '4px',
+              maxHeight: '150px',
+              overflowY: 'auto',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+              fontSize: '12px',
+              color: '#ff4d4f'
+            }}>
+              {commandResult.stderr}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Render a simplified version for the RoomLayout view
   if (simplified) {
     return (
@@ -121,6 +215,23 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
             <span style={{ marginLeft: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px', flex: 1 }}>
               {computer.name}
             </span>
+            
+            {/* Command result indicator */}
+            {commandResult && (
+              <Popover
+                content={renderCommandResultContent()}
+                title={null}
+                trigger="hover"
+                placement="right"
+                overlayStyle={{ width: '300px' }}
+              >
+                <Badge 
+                  count={<CodeOutlined style={{ color: commandResult.exitCode === 0 ? '#52c41a' : '#f5222d' }} />} 
+                  size="small"
+                  style={{ marginLeft: '4px' }}
+                />
+              </Popover>
+            )}
           </div>
         }
         className="computer-card"
@@ -323,6 +434,23 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
                 <Tag color="blue">
                   <HomeOutlined /> {computer.room.name}
                 </Tag>
+              )}
+              
+              {/* Command result indicator for full card */}
+              {commandResult && (
+                <Popover
+                  content={renderCommandResultContent()}
+                  title={null}
+                  trigger="hover"
+                  placement="bottom"
+                >
+                  <Tag 
+                    icon={<CodeOutlined />} 
+                    color={commandResult.exitCode === 0 ? 'success' : 'error'}
+                  >
+                    Command Result
+                  </Tag>
+                </Popover>
               )}
             </Space>
           </div>

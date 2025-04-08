@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Tabs, Button, Space, Skeleton, message, Typography, Modal, Row, Col, Popconfirm } from 'antd';
-import { LayoutOutlined, UnorderedListOutlined, ArrowLeftOutlined, EditOutlined, DeleteOutlined, UserAddOutlined } from '@ant-design/icons';
+import { Card, Tabs, Button, Space, Skeleton, message, Typography, Modal, Row, Col, Popconfirm, Input, Divider } from 'antd';
+import { LayoutOutlined, UnorderedListOutlined, ArrowLeftOutlined, EditOutlined, DeleteOutlined, UserAddOutlined, SendOutlined, CodeOutlined } from '@ant-design/icons';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import RoomLayout from '../../components/room/RoomLayout';
 import RoomForm from '../../components/room/RoomForm';
@@ -22,6 +22,10 @@ const RoomDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('layout');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  // Command input state
+  const [command, setCommand] = useState('');
+  const [sendingCommand, setSendingCommand] = useState(false);
   
   // For the edit modal
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
@@ -125,6 +129,32 @@ const RoomDetailPage = () => {
     }
   };
 
+  // Handle sending command to all computers in room
+  const handleSendCommand = async () => {
+    if (!command.trim()) return;
+    
+    try {
+      setSendingCommand(true);
+      const result = await roomService.sendCommandToRoom(id, command.trim());
+      
+      // Show success message with count of computers receiving the command
+      const computerCount = result.data?.computerIds?.length || 0;
+      if (computerCount > 0) {
+        message.success(`Command sent to ${computerCount} online computers in this room`);
+      } else {
+        message.warning('No online computers available to receive the command');
+      }
+      
+      // Clear the command input after sending
+      setCommand('');
+    } catch (error) {
+      message.error(error.response?.data?.message || 'Failed to send command');
+      console.error('Error sending command to room:', error);
+    } finally {
+      setSendingCommand(false);
+    }
+  };
+
   // Check if user has access to this room
   const canAccessRoom = isAdmin || (room && hasRoomAccess(id));
 
@@ -225,6 +255,43 @@ const RoomDetailPage = () => {
             </Col>
           </Row>
         </div>
+        
+        {/* Command section */}
+        {canAccessRoom && (
+          <div className="command-section mb-6">
+            <Divider>
+              <Space>
+                <CodeOutlined />
+                <span>Room Command</span>
+              </Space>
+            </Divider>
+            <Row gutter={[16, 16]} align="middle">
+              <Col span={18}>
+                <Input 
+                  placeholder="Enter command to send to all computers in this room..." 
+                  value={command}
+                  onChange={(e) => setCommand(e.target.value)}
+                  onPressEnter={handleSendCommand}
+                  disabled={sendingCommand}
+                  prefix={<CodeOutlined />}
+                  allowClear
+                />
+              </Col>
+              <Col span={6}>
+                <Button 
+                  type="primary" 
+                  icon={<SendOutlined />} 
+                  onClick={handleSendCommand}
+                  loading={sendingCommand}
+                  disabled={!command.trim()}
+                  block
+                >
+                  Send to Room
+                </Button>
+              </Col>
+            </Row>
+          </div>
+        )}
         
         <div className="mt-6">
           <Tabs 
