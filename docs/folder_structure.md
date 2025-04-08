@@ -13,19 +13,38 @@ computer-management-system/
 ├── agent/                    # Thư mục gốc cho Agent (Python)
 │   ├── config/               # Cấu hình Agent
 │   │   └── agent_config.json # File cấu hình Agent
-│   ├── logs/                 # Thư mục chứa log files của Agent
 │   ├── src/                  # Mã nguồn chính của Agent
-│   │   ├── agent.py          # Logic xử lý chính của Agent
+│   │   ├── __init__.py       # File khởi tạo
 │   │   ├── main.py           # Điểm vào của Agent
-│   │   ├── modules/          # Các module chức năng của Agent
-│   │   │   └── system_monitor.py # Module thu thập thông tin hệ thống
+│   │   ├── auth/             # Module xử lý xác thực
+│   │   │   ├── __init__.py
+│   │   │   ├── mfa_handler.py   # Xử lý MFA
+│   │   │   └── token_manager.py # Quản lý token xác thực
+│   │   ├── communication/    # Module giao tiếp
+│   │   │   ├── __init__.py
+│   │   │   ├── http_client.py   # Client HTTP
+│   │   │   └── ws_client.py     # Client WebSocket
+│   │   ├── config/           # Module quản lý cấu hình
+│   │   │   ├── __init__.py
+│   │   │   └── config_manager.py
+│   │   ├── core/             # Module xử lý chính
+│   │   │   ├── __init__.py
+│   │   │   └── agent.py         # Logic xử lý chính của Agent
+│   │   ├── monitoring/       # Module giám sát
+│   │   │   ├── __init__.py
+│   │   │   ├── process_monitor.py # Giám sát quy trình
+│   │   │   └── system_monitor.py  # Giám sát hệ thống
 │   │   └── utils/            # Tiện ích hỗ trợ
+│   │       ├── __init__.py
+│   │       ├── logger.py     # Xử lý logging
 │   │       └── utils.py      # Các hàm tiện ích
-│   ├── storage/              # Lưu trữ dữ liệu của Agent (ID, token, settings)
+│   ├── storage/              # Lưu trữ dữ liệu của Agent
+│   │   ├── device_id         # ID thiết bị
+│   │   ├── room_config.json  # Cấu hình phòng
+│   │   └── logs/             # Thư mục logs
 │   └── requirements.txt      # Các thư viện Python cần thiết
 │
 ├── backend/                  # Thư mục gốc cho Backend (Node.js/Express)
-│   ├── config/               # Cấu hình backend
 │   ├── package.json          # Quản lý dependencies của Backend
 │   └── src/                  # Mã nguồn chính của Backend
 │       ├── app.js            # Khởi tạo Express app
@@ -34,33 +53,23 @@ computer-management-system/
 │       │   ├── auth.config.js # Cấu hình xác thực, JWT
 │       │   └── db.config.js  # Cấu hình kết nối cơ sở dữ liệu
 │       ├── controllers/      # Xử lý các request HTTP
-│       │   ├── auth.controller.js       # Xử lý xác thực
-│       │   ├── computer.controller.js   # Quản lý máy tính
-│       │   ├── room.controller.js       # Quản lý phòng
-│       │   └── user.controller.js       # Quản lý người dùng
+│       │   ├── agent.controller.js    # Xử lý yêu cầu từ Agent
+│       │   ├── auth.controller.js     # Xử lý xác thực
+│       │   ├── computer.controller.js # Quản lý máy tính
+│       │   ├── room.controller.js     # Quản lý phòng
+│       │   └── user.controller.js     # Quản lý người dùng
 │       ├── database/         # Tương tác với cơ sở dữ liệu
 │       │   ├── migrations/   # Database migrations
-│       │   │   ├── 20250406130724-create-users.js
-│       │   │   ├── 20250406130735-create-rooms.js
-│       │   │   ├── 20250406130743-create-computers.js
-│       │   │   ├── 20250406130836-create-user-room-assignments.js
-│       │   │   └── 20250407012946-update-tables-for-new-design.js
 │       │   ├── models/       # Định nghĩa các model
-│       │   │   ├── computer.model.js
-│       │   │   ├── index.js  # Khởi tạo và kết nối các model
-│       │   │   ├── room.model.js
-│       │   │   ├── user.model.js
-│       │   │   └── userRoomAssignment.model.js
 │       │   └── seeders/      # Dữ liệu mẫu
-│       │       ├── 20250406133756-admin-user.js
-│       │       ├── 20250406133928-sample-rooms.js
-│       │       └── 20250406141253-sample-computers.js
 │       ├── middleware/       # Middleware
 │       │   ├── authAdmin.js           # Kiểm tra quyền Admin
+│       │   ├── authAgentToken.js      # Xác thực token Agent
 │       │   ├── authComputerAccess.js  # Kiểm tra quyền truy cập Computer
 │       │   ├── authJwt.js             # Xác thực JWT token
 │       │   └── authRoomAccess.js      # Kiểm tra quyền truy cập Room
 │       ├── routes/           # Định nghĩa các routes API
+│       │   ├── agent.routes.js
 │       │   ├── auth.routes.js
 │       │   ├── computer.routes.js
 │       │   ├── index.js      # Tổng hợp và export tất cả routes
@@ -69,8 +78,10 @@ computer-management-system/
 │       ├── services/         # Logic nghiệp vụ
 │       │   ├── auth.service.js
 │       │   ├── computer.service.js
+│       │   ├── mfa.service.js
 │       │   ├── room.service.js
-│       │   └── user.service.js
+│       │   ├── user.service.js
+│       │   └── websocket.service.js
 │       ├── sockets/          # Xử lý WebSocket connections
 │       │   └── index.js
 │       └── utils/            # Tiện ích
@@ -96,40 +107,28 @@ computer-management-system/
         │   └── react.svg     # Logo React
         ├── components/       # Các component tái sử dụng
         │   ├── admin/
-        │   │   ├── AssignmentComponent.jsx # Phân công người dùng vào phòng
-        │   │   ├── UserForm.jsx            # Form tạo/cập nhật người dùng
-        │   │   └── UserList.jsx            # Danh sách người dùng
         │   ├── computer/
-        │   │   ├── ComputerCard.jsx        # Hiển thị thông tin máy tính
-        │   │   ├── ComputerForm.jsx        # Form cập nhật máy tính
-        │   │   └── ComputerList.jsx        # Danh sách máy tính
         │   └── room/
-        │       ├── RoomForm.jsx            # Form tạo/cập nhật phòng
-        │       ├── RoomLayout.jsx          # Hiển thị layout phòng
-        │       └── RoomList.jsx            # Danh sách phòng
         ├── contexts/         # React Contexts
-        │   └── AuthContext.jsx # Context quản lý trạng thái xác thực
-        ├── hooks/            # Custom hooks
+        │   ├── AuthContext.jsx # Context quản lý trạng thái xác thực
+        │   └── SocketContext.jsx # Context quản lý kết nối Socket
         ├── layouts/          # Layout components
         │   ├── Header.jsx    # Component header
         │   └── MainLayout.jsx # Layout chính của ứng dụng
         ├── pages/            # Các trang chính
         │   ├── LoginPage.jsx # Trang đăng nhập
         │   ├── Admin/
-        │   │   ├── ComputerManagementPage.jsx # Quản lý máy tính (Admin)
-        │   │   └── UserManagementPage.jsx     # Quản lý người dùng (Admin)
-        │   ├── dashboard/    # Các trang dashboard
-        │   └── room/         # Các trang hiển thị phòng
+        │   ├── dashboard/
+        │   └── room/
         ├── router/           # Cấu hình routing
         │   ├── index.jsx     # Định nghĩa routes chính
         │   └── ProtectedRoute.jsx # Bảo vệ route cho người dùng đã đăng nhập
         ├── services/         # Các service giao tiếp với Backend
-        │   ├── api.js        # Cấu hình axios và các hàm xử lý HTTP chung
-        │   ├── auth.service.js # Service xác thực
-        │   ├── computer.service.js # Service quản lý máy tính
-        │   ├── room.service.js # Service quản lý phòng
-        │   └── user.service.js # Service quản lý người dùng
-        └── utils/            # Các hàm tiện ích
+            ├── api.js        # Cấu hình axios và các hàm xử lý HTTP chung
+            ├── auth.service.js # Service xác thực
+            ├── computer.service.js # Service quản lý máy tính
+            ├── room.service.js # Service quản lý phòng
+            └── user.service.js # Service quản lý người dùng
 ```
 
 ## Đặc điểm cấu trúc:
@@ -149,7 +148,11 @@ computer-management-system/
 - Services trong `services/` giúp giao tiếp với Backend API.
 
 ### Agent (Python)
-- Cấu trúc đơn giản với điểm vào là `main.py`.
-- Mô-đun hóa theo chức năng trong thư mục `modules/`.
+- Cấu trúc mô-đun hóa với điểm vào là `main.py`.
+- Tổ chức theo chức năng với các modules: `auth/`, `communication/`, `config/`, `core/`, `monitoring/`, `utils/`.
+- Logic chính nằm trong `core/agent.py`.
+- `auth/` xử lý xác thực (MFA, token).
+- `communication/` quản lý giao tiếp HTTP và WebSocket.
+- `monitoring/` thu thập thông tin hệ thống.
 - Cấu hình được lưu trong `config/agent_config.json`.
 - Dữ liệu cục bộ được lưu trong `storage/`.

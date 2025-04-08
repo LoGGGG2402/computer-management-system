@@ -567,7 +567,7 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
 ### Client-side Events (WebSocket từ Frontend tới Backend)
 
 #### Authentication
-* **Event:** `auth`
+* **Event:** `frontend:authenticate`
 * **Data:**
     ```json
     {
@@ -579,39 +579,49 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
     ```json
     {
       "status": "success|error",
-      "message": "string"
+      "message": "string",
+      "userId": "integer (if success)",
+      "role": "string (if success, 'admin' or 'user')"
     }
     ```
 
-#### Subscribe to Room
-* **Event:** `subscribe_room`
+#### Subscribe to Rooms
+* **Event:** `frontend:subscribe`
 * **Data:**
     ```json
     {
-      "roomId": "integer"
+      "roomIds": ["integer", "integer", ...]
     }
     ```
-* **Response Event:** `subscribe_room_response`
+* **Response Event:** `subscribe_response`
 * **Response Data:**
     ```json
     {
       "status": "success|error",
-      "roomId": "integer",
+      "subscribedRooms": ["integer", "integer", ...],
+      "failedRooms": ["integer", "integer", ...],
       "message": "string (on error)"
     }
     ```
 
-#### Unsubscribe from Room
-* **Event:** `unsubscribe_room`
+#### Unsubscribe from Rooms
+* **Event:** `frontend:unsubscribe`
 * **Data:**
     ```json
     {
-      "roomId": "integer"
+      "roomIds": ["integer", "integer", ...]
+    }
+    ```
+* **Response Event:** `unsubscribe_response`
+* **Response Data:**
+    ```json
+    {
+      "status": "success|error"
     }
     ```
 
 #### Send Command to Computer
-* **Event:** `send_command`
+* **Event:** `frontend:send_command`
 * **Data:**
     ```json
     {
@@ -630,23 +640,80 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
     }
     ```
 
-### Server-side Events (WebSocket từ Backend tới Frontend)
+### Agent-side Events (WebSocket từ Agent tới Backend)
 
-#### Computer Status Update
-* **Event:** `computer_status_update`
+#### Agent Authentication
+* **Event:** `agent:authenticate_ws`
 * **Data:**
     ```json
     {
-      "computerId": "integer",
-      "status": "online|offline",
-      "lastSeen": "timestamp",
+      "agentId": "string",
+      "token": "string"
+    }
+    ```
+* **Response Event:** `agent:ws_auth_success` or `agent:ws_auth_failed`
+* **Response Success Data:**
+    ```json
+    {
+      "computerId": "integer"
+    }
+    ```
+* **Response Error Data:**
+    ```json
+    {
+      "message": "string"
+    }
+    ```
+
+#### Agent Status Update
+* **Event:** `agent:status_update`
+* **Data:**
+    ```json
+    {
       "cpuUsage": "number (percentage)",
       "ramUsage": "number (percentage)"
     }
     ```
 
-#### Command Result
-* **Event:** `command_result`
+#### Agent Command Result
+* **Event:** `agent:command_result`
+* **Data:**
+    ```json
+    {
+      "commandId": "string (uuid)",
+      "stdout": "string",
+      "stderr": "string",
+      "exitCode": "integer"
+    }
+    ```
+
+### Server-side Events (WebSocket từ Backend tới Frontend và Agent)
+
+#### Computer Status Update (to Frontend)
+* **Event:** `computer:status_updated`
+* **Data:**
+    ```json
+    {
+      "computerId": "integer",
+      "status": "string ('online'|'offline')",
+      "cpuUsage": "number (percentage)",
+      "ramUsage": "number (percentage)",
+      "timestamp": "timestamp"
+    }
+    ```
+
+#### Command Execution (to Agent)
+* **Event:** `command:execute`
+* **Data:**
+    ```json
+    {
+      "commandId": "string (uuid)",
+      "command": "string"
+    }
+    ```
+
+#### Command Completion (to Frontend)
+* **Event:** `command:completed`
 * **Data:**
     ```json
     {
@@ -658,32 +725,32 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
     }
     ```
 
-#### Error Reported
-* **Event:** `error_reported`
+#### Admin MFA Notification (to Admin)
+* **Event:** `admin:new_agent_mfa`
 * **Data:**
     ```json
     {
-      "computerId": "integer",
-      "error": {
-        "id": "string (uuid)",
-        "type": "string",
-        "description": "string",
-        "reported_by": "integer",
-        "reported_at": "timestamp",
-        "status": "active"
-      }
+      "unique_agent_id": "string",
+      "mfaCode": "string",
+      "roomInfo": {
+        "room": "string",
+        "roomId": "integer",
+        "posX": "integer",
+        "posY": "integer",
+        "maxColumns": "integer",
+        "maxRows": "integer"
+      },
+      "timestamp": "timestamp"
     }
     ```
 
-#### Error Resolved
-* **Event:** `error_resolved`
+#### Admin Agent Registration Notification (to Admin)
+* **Event:** `admin:agent_registered`
 * **Data:**
     ```json
     {
+      "unique_agent_id": "string",
       "computerId": "integer",
-      "errorId": "string (uuid)",
-      "resolvedBy": "integer",
-      "resolvedAt": "timestamp",
-      "resolutionNotes": "string"
+      "timestamp": "timestamp"
     }
     ```

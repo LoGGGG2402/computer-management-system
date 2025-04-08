@@ -104,3 +104,75 @@ def format_bytes(bytes: int, decimals: int = 2) -> str:
         i += 1
         
     return f"{bytes:.{decimals}f} {size_names[i]}"
+
+def get_room_config(storage_path: str) -> Optional[Dict[str, Any]]:
+    """
+    Get the room configuration from storage.
+    
+    Args:
+        storage_path (str): Path to the storage directory
+        
+    Returns:
+        Optional[Dict[str, Any]]: Room configuration if exists, None otherwise
+    """
+    config_path = os.path.join(storage_path, 'room_config.json')
+    return load_json(config_path)
+
+def save_room_config(storage_path: str, room: str, pos_x: int, pos_y: int) -> bool:
+    """
+    Save room configuration to storage.
+    
+    Args:
+        storage_path (str): Path to the storage directory
+        room (str): Room identifier
+        pos_x (int): X position in the room
+        pos_y (int): Y position in the room
+        
+    Returns:
+        bool: True if saved successfully
+    """
+    config = {
+        'room': room,
+        'position': {
+            'x': pos_x,
+            'y': pos_y
+        }
+    }
+    config_path = os.path.join(storage_path, 'room_config.json')
+    return save_json(config, config_path)
+
+def prompt_room_config() -> Tuple[str, int, int]:
+    """
+    Prompt user for room configuration.
+    
+    Returns:
+        Tuple[str, int, int]: Room identifier, X position, Y position
+    """
+    print("\n" + "="*50)
+    print("COMPUTER MANAGEMENT SYSTEM - ROOM CONFIGURATION")
+    print("="*50)
+    print("\nPlease enter the room configuration for this computer.\n")
+    
+    while True:
+        try:
+            room = input("Enter room identifier: ").strip()
+            if not room:
+                print("Room identifier cannot be empty. Please try again.")
+                continue
+            
+            pos_x = input("Enter X position in the room: ").strip()
+            if not pos_x.isdigit():
+                print("X position must be a number. Please try again.")
+                continue
+                
+            pos_y = input("Enter Y position in the room: ").strip()
+            if not pos_y.isdigit():
+                print("Y position must be a number. Please try again.")
+                continue
+                
+            return room, int(pos_x), int(pos_y)
+            
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            print("An error occurred. Please try again.")

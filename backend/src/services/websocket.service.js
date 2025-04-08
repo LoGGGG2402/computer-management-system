@@ -86,15 +86,28 @@ class WebSocketService {
    * Notify admin users about a new MFA code for an agent
    * @param {string} agentId - The unique agent ID
    * @param {string} mfaCode - The generated MFA code
+   * @param {Object} roomInfo - Additional room information
    */
-  notifyAdminsNewMfa(agentId, mfaCode) {
-    if (!this.io) return;
+  notifyAdminsNewMfa(agentId, mfaCode, roomInfo = {}) {
+    if (!this.io) {
+      console.log('WebSocket IO not initialized');
+      return;
+    }
+
+    console.log(`[WebSocket] Sending MFA notification to admins:`, {
+      agentId,
+      mfaCode,
+      roomInfo,
+      adminSockets: Array.from(this.adminSockets)
+    });
 
     // Emit to each admin socket individually
     this.adminSockets.forEach(socketId => {
+      console.log(`[WebSocket] Emitting MFA to socket ${socketId}`);
       this.io.to(socketId).emit('admin:new_agent_mfa', {
         unique_agent_id: agentId,
         mfaCode,
+        roomInfo,
         timestamp: new Date()
       });
     });

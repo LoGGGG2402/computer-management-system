@@ -11,16 +11,22 @@ class AuthService {
    * @returns {Object} - User data with token
    */
   async login(username, password) {
-    const response = await api.post(`/auth/login`, {
-      username,
-      password
-    });
-    
-    if (response.data.data.token) {
-      localStorage.setItem('user', JSON.stringify(response.data.data));
+    try {
+      const response = await api.post(`/auth/login`, {
+        username,
+        password
+      });
+      
+      if (response.data.data.token) {
+        localStorage.setItem('user', JSON.stringify(response.data.data));
+      }
+      
+      return response.data.data;
+    } catch (error) {
+      const errorMessage = error.extractedMessage || 'Login failed. Please check your credentials.';
+      console.error('Login error:', errorMessage);
+      throw new Error(errorMessage);
     }
-    
-    return response.data.data;
   }
 
   /**
@@ -51,8 +57,14 @@ class AuthService {
    * @returns {Promise} - User profile data
    */
   async getProfile() {
-    const response = await api.get(`/auth/me`);
-    return response.data.data;
+    try {
+      const response = await api.get(`/auth/me`);
+      return response.data.data;
+    } catch (error) {
+      const errorMessage = error.extractedMessage || 'Failed to fetch user profile';
+      console.error('Profile error:', errorMessage);
+      throw new Error(errorMessage);
+    }
   }
 
   /**
@@ -64,8 +76,9 @@ class AuthService {
       const response = await api.get('/rooms');
       return response.data.data.rooms;
     } catch (error) {
-      console.error('Error fetching user rooms:', error);
-      throw error;
+      const errorMessage = error.extractedMessage || 'Failed to fetch user rooms';
+      console.error('Rooms error:', errorMessage);
+      throw new Error(errorMessage);
     }
   }
 

@@ -1,0 +1,128 @@
+"""
+WebSocket client module for the Computer Management System Agent.
+This module provides functionality for real-time communication with the backend server.
+"""
+import socketio
+from typing import Dict, Any, Optional, Callable
+
+from src.utils.logger import get_logger
+
+# Get logger for this module
+logger = get_logger(__name__)
+
+class WSClient:
+    """WebSocket client for real-time communication with the backend server."""
+    
+    def __init__(self, server_url: str):
+        """
+        Initialize the WebSocket client.
+        
+        Args:
+            server_url (str): WebSocket server URL
+        """
+        self.server_url = server_url
+        self.sio = socketio.Client()
+        self.connected = False
+        self.command_callback = None
+        
+        self._setup_default_events()
+        logger.debug(f"WebSocket client initialized with server URL: {server_url}")
+    
+    def _setup_default_events(self):
+        """Set up default socket.io event handlers."""
+        
+        self.sio.on('connect', self._on_connect)
+        self.sio.on('disconnect', self._on_disconnect)
+        self.sio.on('command', self._on_command)
+        logger.debug("Default WebSocket event handlers set up.")
+    
+    def _on_connect(self):
+        """Handle WebSocket connection event."""
+        self.connected = True
+        logger.info("Connected to WebSocket server.")
+    
+    def _on_disconnect(self):
+        """Handle WebSocket disconnection event."""
+        self.connected = False
+        logger.info("Disconnected from WebSocket server.")
+    
+    def _on_command(self, data: Dict[str, Any]):
+        """Handle incoming command event."""
+        if self.command_callback:
+            self.command_callback(data)
+        else:
+            logger.warning("No command handler registered.")
+    
+    def register_command_handler(self, callback: Callable[[Dict[str, Any]], None]):
+        """
+        Register a callback function to handle incoming commands.
+        
+        Args:
+            callback: Function to call when a command is received
+        """
+        self.command_callback = callback
+        logger.debug("Command handler registered.")
+    
+    def connect_and_authenticate(self, agent_id: str, token: str) -> bool:
+        """
+        Connect to the WebSocket server and authenticate.
+        
+        Args:
+            agent_id (str): Unique agent ID
+            token (str): Agent authentication token
+            
+        Returns:
+            bool: True if connected and authenticated successfully
+        """
+        try:
+            self.sio.connect(self.server_url, headers={"Agent-ID": agent_id, "Authorization": f"Bearer {token}"})
+            logger.info("WebSocket client connected and authenticated.")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to connect and authenticate: {e}")
+            return False
+    
+    def disconnect(self):
+        """Disconnect from the WebSocket server."""
+        try:
+            self.sio.disconnect()
+            logger.info("WebSocket client disconnected.")
+        except Exception as e:
+            logger.error(f"Failed to disconnect: {e}")
+    
+    def send_status_update(self, status_data: Dict[str, Any]) -> bool:
+        """
+        Send a status update to the server.
+        
+        Args:
+            status_data: Status data to send
+            
+        Returns:
+            bool: True if sent successfully
+        """
+        try:
+            self.sio.emit('status_update', status_data)
+            logger.info("Status update sent.")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send status update: {e}")
+            return False
+    
+    def send_command_result(self, command_id: str, result: Dict[str, Any]) -> bool:
+        """
+        Send a command execution result to the server.
+        
+        Args:
+            command_id: ID of the command that was executed
+            result: Result data to send
+            
+        Returns:
+            bool: True if sent successfully
+        """
+        try:
+            self.sio.emit('command_result', {"command_id": command_id, "result": result})
+            logger.info(f"Command result for {command_id} sent.")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send command result: {e}")
+            return False

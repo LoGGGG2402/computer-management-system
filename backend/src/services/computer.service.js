@@ -22,11 +22,12 @@ class ComputerService {
   }
 
   /**
-   * Generate a new token and assign it to an agent
+   * Generate a new token and assign it to an agent with position information
    * @param {string} agentId - The unique agent ID
+   * @param {Object} positionInfo - Position information {roomId, posX, posY}
    * @returns {Promise<string>} The plain text token for the agent to store
    */
-  async generateAndAssignAgentToken(agentId) {
+  async generateAndAssignAgentToken(agentId, positionInfo = null) {
     // Generate a random token
     const plainToken = crypto.randomBytes(32).toString('hex');
     
@@ -37,12 +38,27 @@ class ComputerService {
     // Find or create the computer record
     let computer = await this.findComputerByAgentId(agentId);
     
+    const updateData = {
+      agent_token_hash: tokenHash,
+      last_seen: new Date()
+    };
+    
+    // Add position information if provided
+    if (positionInfo && positionInfo.roomId) {
+      updateData.room_id = positionInfo.roomId;
+      
+      if (positionInfo.posX !== undefined) {
+        updateData.position_x = positionInfo.posX;
+      }
+      
+      if (positionInfo.posY !== undefined) {
+        updateData.position_y = positionInfo.posY;
+      }
+    }
+    
     if (computer) {
       // Update the existing computer
-      await computer.update({
-        agent_token_hash: tokenHash,
-        last_seen: new Date()
-      });
+      await computer.update(updateData);
     } else {
       // Create a new computer record
       computer = await Computer.create({
@@ -51,7 +67,10 @@ class ComputerService {
         name: `Computer-${agentId.substring(0, 8)}`,
         status: 'offline',
         has_active_errors: false,
-        last_seen: new Date()
+        last_seen: new Date(),
+        room_id: positionInfo?.roomId,
+        position_x: positionInfo?.posX,
+        position_y: positionInfo?.posY
       });
     }
     

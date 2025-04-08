@@ -1,6 +1,4 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { notification } from 'antd';
 import io from 'socket.io-client';
 import { useAuth } from './AuthContext';
 
@@ -13,28 +11,31 @@ export const SocketProvider = ({ children }) => {
   const [connected, setConnected] = useState(false);
   const [computerStatuses, setComputerStatuses] = useState({});
   const { user, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
 
   // Initialize socket
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !user) {
+      console.log('[SocketContext] Not connecting - User not authenticated:', { isAuthenticated, user });
+      return;
+    }
 
-    // Create socket connection
+    console.log('[SocketContext] Initializing socket connection');
     const socketInstance = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
       autoConnect: false,
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      auth: { token: user.token }
     });
 
     // Set up event listeners
     socketInstance.on('connect', () => {
-      console.log('WebSocket connected');
+      console.log('[SocketContext] Socket connected, authenticating...');
       setConnected(true);
       
       // Authenticate with backend
       socketInstance.emit('frontend:authenticate', {
-        token: localStorage.getItem('token')
+        token: user.token
       });
     });
 
@@ -49,10 +50,11 @@ export const SocketProvider = ({ children }) => {
     });
 
     socketInstance.on('auth_response', (response) => {
+      console.log('[SocketContext] Authentication response:', response);
       if (response.status === 'success') {
-        console.log('WebSocket authentication successful');
+        console.log('[SocketContext] Socket authentication successful');
       } else {
-        console.error('WebSocket authentication failed:', response.message);
+        console.error('[SocketContext] Socket authentication failed:', response.message);
       }
     });
 
@@ -69,33 +71,6 @@ export const SocketProvider = ({ children }) => {
       }));
     });
 
-    // Set up Admin-specific event listeners
-    if (user?.role === 'admin') {
-      // Listen for new MFA codes
-      socketInstance.on('admin:new_agent_mfa', (data) => {
-        notification.info({
-          message: 'New Agent MFA',
-          description: `Agent ID: ${data.unique_agent_id} requires MFA verification with code: ${data.mfaCode}`,
-          duration: 10, // Show for 10 seconds
-          onClick: () => {
-            navigate('/admin/agents');
-          },
-        });
-      });
-
-      // Listen for new agent registrations
-      socketInstance.on('admin:agent_registered', (data) => {
-        notification.success({
-          message: 'New Agent Registered',
-          description: `A new agent (ID: ${data.unique_agent_id}) has been registered. Computer ID: ${data.computerId}`,
-          duration: 8,
-          onClick: () => {
-            navigate('/admin/computers');
-          },
-        });
-      });
-    }
-
     // Connect to the server
     socketInstance.connect();
     setSocket(socketInstance);
@@ -106,7 +81,7 @@ export const SocketProvider = ({ children }) => {
         socketInstance.disconnect();
       }
     };
-  }, [isAuthenticated, user?.role, navigate]);
+  }, [isAuthenticated, user]);
 
   // Subscribe to rooms (for computer status updates)
   const subscribeToRooms = useCallback((roomIds) => {

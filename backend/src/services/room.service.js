@@ -326,6 +326,104 @@ class RoomService {
       throw error;
     }
   }
+
+  /**
+   * Check if a position in a room is available
+   * @param {string} roomName - Room name
+   * @param {number} posX - X position
+   * @param {number} posY - Y position
+   * @returns {Object} - Result {valid: boolean, message: string, room: Object}
+   */
+  async isPositionAvailable(roomName, posX, posY) {
+    try {
+      // Find the room by name
+      const room = await Room.findOne({
+        where: { name: roomName },
+        include: [{
+          model: Computer,
+          as: "computers",
+          attributes: ['id', 'pos_x', 'pos_y']
+        }]
+      });
+
+      // If room doesn't exist
+      if (!room) {
+        return { 
+          valid: false, 
+          message: `Phòng "${roomName}" không tồn tại`, 
+          room: null 
+        };
+      }
+
+      // Validate position against room dimensions
+      if (!room.layout || !room.layout.columns || !room.layout.rows) {
+        return { 
+          valid: false, 
+          message: "Phòng không có cấu hình layout hợp lệ", 
+          room 
+        };
+      }
+
+      // Check if position is within room bounds
+      if (posX < 0 || posX >= room.layout.columns || posY < 0 || posY >= room.layout.rows) {
+        return { 
+          valid: false, 
+          message: `Vị trí (${posX}, ${posY}) nằm ngoài kích thước phòng (${room.layout.columns}x${room.layout.rows})`, 
+          room 
+        };
+      }
+
+      // Check if position is already occupied by another computer
+      const isOccupied = room.computers.some(
+        comp => comp.pos_x === posX && comp.pos_y === posY
+      );
+
+      if (isOccupied) {
+        return { 
+          valid: false, 
+          message: `Vị trí (${posX}, ${posY}) đã được sử dụng bởi một máy tính khác`, 
+          room 
+        };
+      }
+
+      // Position is valid and available
+      return { 
+        valid: true, 
+        message: "Vị trí hợp lệ và khả dụng", 
+        room 
+      };
+    } catch (error) {
+      console.error("Error checking position availability:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a room name matches a given room ID
+   * @param {string} roomName - The name of the room
+   * @param {number} roomId - The room ID to check against
+   * @returns {Promise<boolean>} - True if the room name matches the given ID
+   */
+  async isRoomNameMatchesId(roomName, roomId) {
+    try {
+      if (!roomName || !roomId) {
+        return false;
+      }
+
+      // Find the room by its ID
+      const room = await Room.findByPk(roomId);
+      
+      // If room doesn't exist or name doesn't match
+      if (!room || room.name !== roomName) {
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Error checking room name match:", error);
+      return false; // Return false on any error
+    }
+  }
 }
 
 module.exports = new RoomService();

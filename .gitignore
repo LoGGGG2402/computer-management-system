@@ -58,3 +58,5 @@ frontend/package-lock.json
 backend/package-lock.json
 package-lock.json
 .aiexclude
+agent/storage/device_id
+agent/storage/room_config.json

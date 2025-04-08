@@ -2,11 +2,11 @@
 MFA handler module for the Computer Management System Agent.
 This module provides functionality for handling MFA codes.
 """
-import logging
-import getpass
 from typing import Optional
+from src.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+# Get logger for this module
+logger = get_logger(__name__)
 
 def prompt_for_mfa() -> str:
     """
@@ -24,19 +24,17 @@ def prompt_for_mfa() -> str:
     
     while True:
         try:
-            # Using input() as specified in the requirements
             mfa_code = input("Enter MFA code: ").strip()
             
             if not mfa_code:
                 print("MFA code cannot be empty. Please try again.")
                 continue
                 
-            # Basic validation - typically MFA codes are numeric and fixed length
-            if not mfa_code.isdigit():
-                print("MFA code must be numeric. Please try again.")
-                continue
+            # Bỏ kiểm tra isdigit để chấp nhận MFA code có cả chữ và số
+            # if not mfa_code.isdigit():
+            #     print("MFA code must be numeric. Please try again.")
+            #     continue
                 
-            # Once we get a valid code, return it
             logger.info("MFA code entered by user")
             return mfa_code
             
@@ -54,3 +52,5 @@ def display_registration_success() -> None:
     print("="*50)
     print("\nThis agent has been successfully registered with the management system.")
     print("The agent will now connect to the server and begin monitoring.\n")
+    
+    logger.info("Agent registration successful - success message displayed to user")

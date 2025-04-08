@@ -3,6 +3,7 @@ const { Server } = require('socket.io');
 const dotenv = require('dotenv');
 const app = require('./app');
 const db = require('./database/models');
+const { initializeWebSocket } = require('./sockets');
 
 // Load environment variables
 dotenv.config();
@@ -18,8 +19,8 @@ const io = new Server(server, {
   }
 });
 
-// Socket handlers
-require('./sockets')(io);
+// Initialize Socket handlers
+initializeWebSocket(io);
 
 // Set port
 const PORT = process.env.PORT || 3000;

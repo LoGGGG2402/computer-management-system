@@ -1,5 +1,70 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
+import { notification } from 'antd';
 import Header from './Header';
+import { useSocket } from '../contexts/SocketContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useEffect } from 'react';
+
+// Notification handler component
+const NotificationHandler = () => {
+  const { socket } = useSocket();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!socket || user?.role !== 'admin') {
+      console.log('[NotificationHandler] Not listening for MFA - Conditions not met:', {
+        socketExists: !!socket,
+        userRole: user?.role
+      });
+      return;
+    }
+
+    console.log('[NotificationHandler] Starting to listen for MFA notifications');
+
+    // Listen for new MFA codes
+    socket.on('admin:new_agent_mfa', (data) => {
+      console.log('[NotificationHandler] Received MFA notification:', data);
+      
+      // Create room information text if available
+      const roomInfoText = data.roomInfo ? 
+        `\nPhòng: ${data.roomInfo.room || 'Không xác định'}` +
+        `\nVị trí: (${data.roomInfo.posX || 0}, ${data.roomInfo.posY || 0})` +
+        `\nRoom ID: ${data.roomInfo.roomId || 'N/A'}` : '';
+      
+      // Display alert for easy visibility of MFA code
+      alert(`MFA Code: ${data.mfaCode}\nAgent ID: ${data.unique_agent_id}${roomInfoText}`);
+      
+      notification.info({
+        message: 'New Agent MFA',
+        description: `Agent ID: ${data.unique_agent_id} requires MFA verification with code: ${data.mfaCode}${roomInfoText}`,
+        duration: 10,
+        onClick: () => {
+          navigate('/admin/agents');
+        },
+      });
+    });
+
+    // Listen for new agent registrations
+    socket.on('admin:agent_registered', (data) => {
+      notification.success({
+        message: 'New Agent Registered',
+        description: `A new agent (ID: ${data.unique_agent_id}) has been registered. Computer ID: ${data.computerId}`,
+        duration: 8,
+        onClick: () => {
+          navigate('/admin/computers');
+        },
+      });
+    });
+
+    return () => {
+      socket.off('admin:new_agent_mfa');
+      socket.off('admin:agent_registered');
+    };
+  }, [socket, user?.role, navigate]);
+
+  return null;
+};
 
 const MainLayout = () => {
   return (
@@ -23,6 +88,7 @@ const MainLayout = () => {
           </div>
         </div>
       </footer>
+      <NotificationHandler />
     </div>
   );
 };

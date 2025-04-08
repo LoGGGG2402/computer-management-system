@@ -3,5 +3,24 @@
     "api_endpoint": "/api/v1",
     "monitoring_interval": 60,
     "reconnect_delay": 5,
-    "storage_path": "../storage"
+    "storage_path": "../storage",
+    "log_level": {
+        "console": "INFO",
+        "file": "DEBUG"
+    },
+    "modules": {
+        "system_monitor": {
+            "enabled": true,
+            "interval": 60
+        },
+        "network_monitor": {
+            "enabled": true,
+            "interval": 120
+        },
+        "process_monitor": {
+            "enabled": true,
+            "interval": 60,
+            "track_top_processes": 10
+        }
+    }
 }
