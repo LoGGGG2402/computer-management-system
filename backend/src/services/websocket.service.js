@@ -164,11 +164,22 @@ class WebSocketService {
    */
   async updateAndBroadcastOnlineStatus(computerId) {
     try {
-      // Update cache with online status
-      this.updateRealtimeCache(computerId, { status: 'online' });
+      // Import computerService to avoid circular dependencies
+      const computerService = require('./computer.service');
       
-      // Get the latest status from db or cache
+      // Update the last seen timestamp in database
+      await computerService.updateLastSeen(computerId);
+      
+      // Update cache with online status
+      this.updateRealtimeCache(computerId, { 
+        status: 'online',
+        lastSeen: new Date()
+      });
+      
+      // Get the latest status from cache
       await this.broadcastStatusUpdate(computerId);
+      
+      console.log(`Updated online status for computer ${computerId}`);
     } catch (error) {
       console.error(`Error updating online status for computer ${computerId}:`, error);
     }
@@ -183,14 +194,21 @@ class WebSocketService {
       const computerId = this.findComputerIdBySocketId(socketId);
       
       if (computerId) {
+        console.log(`Handling disconnect for agent with computer ID ${computerId}`);
+        
         // Unregister the socket
         this.unregisterAgentSocket(computerId);
         
         // Update cache with offline status
-        this.updateRealtimeCache(computerId, { status: 'offline' });
+        this.updateRealtimeCache(computerId, { 
+          status: 'offline',
+          lastDisconnected: new Date()
+        });
         
-        // Broadcast the status update
+        // Broadcast the status update to the room
         await this.broadcastStatusUpdate(computerId);
+        
+        console.log(`Agent for computer ${computerId} is now marked as offline`);
       }
     } catch (error) {
       console.error(`Error handling agent disconnect for socket ${socketId}:`, error);
@@ -324,14 +342,12 @@ class WebSocketService {
    */
   async getComputerRoomId(computerId) {
     try {
-      // Implementation depends on your database structure
-      // This is a placeholder - replace with actual implementation
-      // For example, you might inject computerService and call:
-      // const computer = await computerService.getComputerById(computerId);
-      // return computer?.room_id || null;
+      // Import computerService only when needed to avoid circular dependencies
+      const computerService = require('./computer.service');
       
-      // For now, we'll return a mock value
-      return 1; // Replace with actual implementation
+      // Get computer info from database
+      const computer = await computerService.getComputerById(computerId);
+      return computer?.room_id || null;
     } catch (error) {
       console.error(`Error getting room ID for computer ${computerId}:`, error);
       return null;

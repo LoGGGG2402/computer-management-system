@@ -157,11 +157,24 @@ class HttpClient:
             "Authorization": f"Bearer {agent_token}",
             "X-Agent-ID": unique_agent_id
         }
+        
+        # Format the payload according to the expected backend format
+        payload = {
+            "cpu": stats.get("cpu", 0),
+            "ram": stats.get("ram", 0)
+        }
+        
         try:
-            response = requests.put(endpoint, json=stats, headers=headers)
+            logger.debug(f"Sending status update with payload: {payload}")
+            response = requests.put(endpoint, json=payload, headers=headers)
+            
+            if response.status_code == 204:  # No Content
+                logger.debug("Status updated successfully with 204 response")
+                return True, {}
+                
             response.raise_for_status()
-            logger.debug(f"Status updated successfully: {response.json()}")
-            return True, response.json()
+            logger.debug("Status updated successfully")
+            return True, response.json() if response.text else {}
         except requests.RequestException as e:
             logger.error(f"Failed to update status: {e}")
             error_message = "Unknown error"
@@ -191,15 +204,28 @@ class HttpClient:
             "Authorization": f"Bearer {agent_token}",
             "X-Agent-ID": unique_agent_id
         }
+        
+        # Format the payload according to the expected backend format
         payload = {
-            "command_id": command_id,
-            "result": result
+            "commandId": command_id,
+            "stdout": result.get("stdout", ""),
+            "stderr": result.get("stderr", ""),
+            "exitCode": result.get("exitCode", 1)
         }
+        
         try:
+            logger.debug(f"Sending command result for ID {command_id}")
+            logger.debug(f"Command result payload: {payload}")
+            
             response = requests.post(endpoint, json=payload, headers=headers)
+            
+            if response.status_code == 204:  # No Content
+                logger.debug("Command result sent successfully with 204 response")
+                return True, {}
+                
             response.raise_for_status()
-            logger.debug(f"Command result sent successfully: {response.json()}")
-            return True, response.json()
+            logger.debug("Command result sent successfully")
+            return True, response.json() if response.text else {}
         except requests.RequestException as e:
             logger.error(f"Failed to send command result: {e}")
             error_message = "Unknown error"
@@ -207,5 +233,7 @@ class HttpClient:
             if hasattr(e, 'response') and e.response:
                 error_message = self._extract_error_message(e.response)
                 logger.error(f"Server error: {error_message}")
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response text: {e.response.text}")
             
             return False, {"error": error_message, "status": "error"}

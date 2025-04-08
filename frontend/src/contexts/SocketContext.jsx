@@ -10,6 +10,7 @@ export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
   const [computerStatuses, setComputerStatuses] = useState({});
+  const [commandResults, setCommandResults] = useState({});
   const { user, isAuthenticated } = useAuth();
 
   // Initialize socket
@@ -60,12 +61,28 @@ export const SocketProvider = ({ children }) => {
 
     // Update computer status when received
     socketInstance.on('computer:status_updated', (data) => {
+      console.log('[SocketContext] Received status update:', data);
       setComputerStatuses(prev => ({
         ...prev,
         [data.computerId]: {
           status: data.status,
           cpuUsage: data.cpuUsage,
           ramUsage: data.ramUsage,
+          timestamp: data.timestamp
+        }
+      }));
+    });
+
+    // Handle command completion
+    socketInstance.on('command:completed', (data) => {
+      console.log('[SocketContext] Command completed:', data);
+      setCommandResults(prev => ({
+        ...prev,
+        [data.commandId]: {
+          computerId: data.computerId,
+          stdout: data.stdout,
+          stderr: data.stderr,
+          exitCode: data.exitCode,
           timestamp: data.timestamp
         }
       }));
@@ -87,6 +104,7 @@ export const SocketProvider = ({ children }) => {
   const subscribeToRooms = useCallback((roomIds) => {
     if (!socket || !connected) return;
     
+    console.log('[SocketContext] Subscribing to rooms:', roomIds);
     socket.emit('frontend:subscribe', { roomIds });
   }, [socket, connected]);
 
@@ -94,35 +112,63 @@ export const SocketProvider = ({ children }) => {
   const unsubscribeFromRooms = useCallback((roomIds) => {
     if (!socket || !connected) return;
     
+    console.log('[SocketContext] Unsubscribing from rooms:', roomIds);
     socket.emit('frontend:unsubscribe', { roomIds });
   }, [socket, connected]);
 
   // Send a command to an agent
   const sendCommand = useCallback((computerId, command) => {
-    if (!socket || !connected) return;
+    if (!socket || !connected) {
+      console.error('[SocketContext] Cannot send command: not connected');
+      return Promise.reject(new Error('Not connected to the server'));
+    }
     
-    return new Promise((resolve) => {
-      socket.emit('frontend:send_command', { computerId, command });
-      
-      const onCommandSent = (response) => {
-        if (response.computerId === computerId) {
-          socket.off('command_sent', onCommandSent);
+    console.log('[SocketContext] Sending command to computer:', computerId, command);
+    
+    return new Promise((resolve, reject) => {
+      socket.emit('frontend:send_command', { computerId, command }, (response) => {
+        if (response && response.success) {
+          console.log('[SocketContext] Command sent successfully:', response);
           resolve(response);
+        } else {
+          console.error('[SocketContext] Failed to send command:', response);
+          reject(new Error(response?.message || 'Failed to send command'));
         }
-      };
-      
-      socket.on('command_sent', onCommandSent);
+      });
     });
   }, [socket, connected]);
+
+  // Get real-time status for a specific computer
+  const getComputerStatus = useCallback((computerId) => {
+    return computerStatuses[computerId] || { status: 'offline', cpuUsage: 0, ramUsage: 0 };
+  }, [computerStatuses]);
+
+  // Get command result
+  const getCommandResult = useCallback((commandId) => {
+    return commandResults[commandId];
+  }, [commandResults]);
+
+  // Clear command result
+  const clearCommandResult = useCallback((commandId) => {
+    setCommandResults(prev => {
+      const newResults = { ...prev };
+      delete newResults[commandId];
+      return newResults;
+    });
+  }, []);
 
   // Context value
   const contextValue = {
     socket,
     connected,
     computerStatuses,
+    commandResults,
     subscribeToRooms,
     unsubscribeFromRooms,
-    sendCommand
+    sendCommand,
+    getComputerStatus,
+    getCommandResult,
+    clearCommandResult
   };
 
   return (

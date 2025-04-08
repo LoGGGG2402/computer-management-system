@@ -69,7 +69,7 @@ const RoomDetailPage = () => {
 
   const handleViewComputer = (computerId) => {
     // Navigate to computer detail page
-    message.info('View computer functionality will be implemented soon');
+    navigate(`/computers/${computerId}`);
   };
   
   const handleRefresh = () => {

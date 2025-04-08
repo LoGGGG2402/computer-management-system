@@ -89,6 +89,21 @@ const computerService = {
       throw error;
     }
   },
+
+  /**
+   * Send command to a computer
+   * @param {string} id - Computer ID
+   * @param {string} command - Command to execute
+   * @returns {Promise} Promise with command ID
+   */
+  sendCommand: async (id, command) => {
+    try {
+      const response = await api.post(`/computers/${id}/command`, { command });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
 };
 
 export default computerService;

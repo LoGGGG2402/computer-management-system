@@ -34,6 +34,7 @@ class WSClient:
         self.sio.on('connect', self._on_connect)
         self.sio.on('disconnect', self._on_disconnect)
         self.sio.on('command', self._on_command)
+        self.sio.on('command:execute', self._on_command_execute)
         logger.debug("Default WebSocket event handlers set up.")
     
     def _on_connect(self):
@@ -48,6 +49,14 @@ class WSClient:
     
     def _on_command(self, data: Dict[str, Any]):
         """Handle incoming command event."""
+        if self.command_callback:
+            self.command_callback(data)
+        else:
+            logger.warning("No command handler registered.")
+    
+    def _on_command_execute(self, data: Dict[str, Any]):
+        """Handle incoming command execute event."""
+        logger.info(f"Received command:execute event: {data}")
         if self.command_callback:
             self.command_callback(data)
         else:

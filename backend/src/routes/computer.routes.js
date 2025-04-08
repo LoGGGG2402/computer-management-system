@@ -19,6 +19,9 @@ router.get('/:id', hasComputerAccess, computerController.getComputerById);
 // Routes that require computer access
 router.put('/:id', hasComputerAccess, computerController.updateComputer);
 
+// Command route - requires computer access
+router.post('/:id/command', hasComputerAccess, computerController.sendCommand);
+
 // Admin-only routes below
 router.delete('/:id', isAdmin, computerController.deleteComputer);
 

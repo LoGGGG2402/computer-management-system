@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Table, Button, Space, message, Empty, Tag, Badge, Tooltip, Form, Input, Select, Row, Col, Card, Checkbox } from 'antd';
 import { EyeOutlined, SearchOutlined, ReloadOutlined, FilterOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import computerService from '../../services/computer.service';
 import roomService from '../../services/room.service';
 
@@ -16,6 +17,7 @@ const ComputerList = ({
   loading: propLoading 
 }) => {
   const [form] = Form.useForm();
+  const navigate = useNavigate();
   
   // State management
   const [computers, setComputers] = useState([]);
@@ -191,6 +193,17 @@ const ComputerList = ({
     }
   };
 
+  // Handle navigation to ComputerDetailPage
+  const handleViewComputer = (computerId) => {
+    if (onView) {
+      // Use the provided onView function if it exists
+      onView(computerId);
+    } else {
+      // Otherwise, navigate directly to the ComputerDetailPage
+      navigate(`/computers/${computerId}`);
+    }
+  };
+
   // UI Components
   const getOnlineStatus = computer => (
     <Space>
@@ -273,7 +286,7 @@ const ComputerList = ({
           <Button 
             type="default" 
             icon={<EyeOutlined />}
-            onClick={() => onView(record.id)}
+            onClick={() => handleViewComputer(record.id)}
           >
             View
           </Button>

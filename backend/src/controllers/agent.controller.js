@@ -222,12 +222,31 @@ class AgentController {
    */
   async handleStatusUpdate(req, res, next) {
     try {
-      // To be implemented in stage 5
-      return res.status(200).json({
-        status: 'success',
-        message: 'Status updated'
+      // Get the computer ID from the authenticated request
+      const computerId = req.computer.id;
+      
+      // Get system metrics from request body
+      const { cpu, ram } = req.body;
+      
+      console.log(`[AgentController] Received status update from computer ${computerId}:`, { cpu, ram });
+      
+      // Update the realtime cache with new system metrics
+      websocketService.updateRealtimeCache(computerId, { 
+        cpuUsage: cpu, 
+        ramUsage: ram,
+        status: 'online' 
       });
+      
+      // Update the computer's last seen timestamp in the database
+      await computerService.updateLastSeen(computerId);
+      
+      // Broadcast the status update to clients
+      await websocketService.broadcastStatusUpdate(computerId);
+      
+      // Return 204 No Content status
+      return res.sendStatus(204);
     } catch (error) {
+      console.error(`[AgentController] Error handling status update:`, error);
       next(error);
     }
   }
@@ -240,12 +259,39 @@ class AgentController {
    */
   async handleCommandResult(req, res, next) {
     try {
-      // To be implemented in stage 5
-      return res.status(200).json({
-        status: 'success',
-        message: 'Command result received'
+      // Get parameters from request body
+      const { commandId, stdout, stderr, exitCode } = req.body;
+      
+      // Get computer ID from the authenticated request
+      const computerId = req.computer.id;
+      
+      console.log(`[AgentController] Received command result from computer ${computerId}:`, { 
+        commandId, 
+        exitCode,
+        stdoutLength: stdout?.length || 0,
+        stderrLength: stderr?.length || 0 
       });
+      
+      if (!commandId) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Command ID is required'
+        });
+      }
+      
+      // Notify the user who initiated the command about its completion
+      websocketService.notifyCommandCompletion(commandId, { 
+        computerId, 
+        stdout, 
+        stderr, 
+        exitCode,
+        timestamp: new Date()
+      });
+      
+      // Return 204 No Content status
+      return res.sendStatus(204);
     } catch (error) {
+      console.error(`[AgentController] Error handling command result:`, error);
       next(error);
     }
   }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Tooltip, Button, Popconfirm, message, Empty, Badge } from 'antd';
 import { EditOutlined, DeleteOutlined, SettingOutlined, DesktopOutlined, GlobalOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import computerService from '../../services/computer.service';
 import roomService from '../../services/room.service';
 import { useAuth } from '../../contexts/AuthContext';
@@ -11,6 +12,7 @@ const RoomLayout = ({ roomId, computers, onEditComputer, onViewComputer, onRefre
   const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(true);
   const { isAdmin, hasRoomAccess } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (computers && computers.length) {
@@ -32,6 +34,12 @@ const RoomLayout = ({ roomId, computers, onEditComputer, onViewComputer, onRefre
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handle navigation to ComputerDetailPage
+  const handleViewComputer = (computerId) => {
+    // Navigate to the ComputerDetailPage using the navigate function
+    navigate(`/computers/${computerId}`);
   };
 
   // Check if user has access to this room
@@ -74,7 +82,7 @@ const RoomLayout = ({ roomId, computers, onEditComputer, onViewComputer, onRefre
                 <ComputerCard 
                   computer={computer}
                   onEdit={onEditComputer}
-                  onView={onViewComputer}
+                  onView={handleViewComputer}
                   onRefresh={onRefresh}
                   simplified={true}
                 />

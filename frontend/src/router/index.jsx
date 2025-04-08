@@ -7,6 +7,7 @@ import LoginPage from '../pages/LoginPage';
 import Dashboard from '../pages/dashboard/Dashboard';
 import RoomPage from '../pages/room/RoomPage'; 
 import RoomDetailPage from '../pages/room/RoomDetailPage';
+import ComputerDetailPage from '../pages/computer/ComputerDetailPage';
 
 // Import admin pages
 import AdminDashboard from '../pages/dashboard/AdminDashboard';
@@ -50,6 +51,11 @@ const router = createBrowserRouter([
             path: '/rooms/:id',
             element: <RoomDetailPage />,
           },
+          // Computer routes
+          {
+            path: '/computers/:id',
+            element: <ComputerDetailPage />,
+          },
         ]
       }
     ]
@@ -70,6 +76,11 @@ const router = createBrowserRouter([
           {
             path: '/admin/rooms',
             element: <RoomPage />,
+          },
+          // Computer detail page for admin
+          {
+            path: '/admin/computers/:id',
+            element: <ComputerDetailPage />,
           },
           // Computer and User management are now handled within AdminDashboard
         ]

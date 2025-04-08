@@ -22,6 +22,25 @@ class SystemMonitor:
         """Initialize the system monitor."""
         logger.debug("SystemMonitor initialized")
     
+    def get_stats(self) -> Dict[str, Any]:
+        """
+        Get basic system statistics for status reporting.
+        
+        Returns:
+            Dict with CPU and RAM usage information
+        """
+        cpu_percent = psutil.cpu_percent(interval=0.5)
+        memory = psutil.virtual_memory()
+        
+        stats = {
+            "cpu": cpu_percent,
+            "ram": memory.percent,
+            "timestamp": time.time()
+        }
+        
+        logger.debug(f"System stats collected: {stats}")
+        return stats
+    
     def get_system_info(self) -> Dict[str, Any]:
         """
         Get basic system information.

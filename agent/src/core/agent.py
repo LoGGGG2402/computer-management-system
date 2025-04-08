@@ -8,6 +8,7 @@ import time
 import uuid
 import socket
 import platform
+import threading
 from typing import Dict, Any, Optional
 
 # Import modules from the new directory structure
@@ -15,6 +16,7 @@ from src.config.config_manager import ConfigManager
 from src.communication.http_client import HttpClient
 from src.communication.ws_client import WSClient
 from src.monitoring.system_monitor import SystemMonitor
+from src.core.command_executor import CommandExecutor
 from src.auth.token_manager import load_token, save_token
 from src.auth.mfa_handler import prompt_for_mfa, display_registration_success
 from src.utils.utils import run_command, get_room_config, prompt_room_config, save_room_config
@@ -50,6 +52,9 @@ class Agent:
         self.ws_client = WSClient(self.config_manager.get('server_url'))
         self.system_monitor = SystemMonitor()
         self.agent_token = None
+        
+        # Command executor will be initialized after authentication
+        self.command_executor = None
         
         # Set up command handler
         self.ws_client.register_command_handler(self.handle_command)
@@ -237,6 +242,27 @@ class Agent:
             command_data: Command data from server
         """
         try:
+            logger.info(f"Received command: {command_data}")
+            
+            # For command:execute event
+            if 'commandId' in command_data and 'command' in command_data:
+                command_id = command_data['commandId']
+                command = command_data['command']
+                
+                # Initialize command executor if not already done
+                if not self.command_executor:
+                    self.command_executor = CommandExecutor(
+                        self.http_client,
+                        self.device_id,
+                        self.agent_token
+                    )
+                
+                # Execute the command
+                logger.info(f"Executing command: {command} (ID: {command_id})")
+                self.command_executor.run_command(command, command_id)
+                return
+                
+            # Legacy command handling (if any)
             command_id = command_data.get('id')
             command_type = command_data.get('type')
             command_params = command_data.get('params', {})
@@ -245,7 +271,7 @@ class Agent:
                 logger.error("Invalid command format")
                 return
                 
-            logger.info(f"Handling command: {command_type} (ID: {command_id})")
+            logger.info(f"Handling legacy command: {command_type} (ID: {command_id})")
             
             result = None
             if command_type == 'shell':
@@ -267,7 +293,7 @@ class Agent:
             )
             
         except Exception as e:
-            logger.error(f"Error handling command: {e}")
+            logger.error(f"Error handling command: {e}", exc_info=True)
     
     def collect_system_stats(self) -> Dict[str, Any]:
         """
@@ -301,28 +327,52 @@ class Agent:
             logger.error(f"Error connecting to server: {e}")
             return False
     
-    def start_monitoring(self):
-        """Start the monitoring loop."""
-        try:
-            monitoring_interval = self.config_manager.get('monitoring_interval', 60)
+    def _start_status_reporting_thread(self):
+        """
+        Start a thread to periodically report system status to the server.
+        Uses threading.Timer for periodic execution.
+        """
+        if not self.running:
+            return
             
-            while self.running:
-                stats = self.collect_system_stats()
-                success = self.http_client.update_status(
-                    self.agent_token,
-                    self.device_id,
-                    stats
-                )
-                
-                if not success:
-                    logger.warning("Failed to update status")
-                    
-                # Sleep for the configured interval
-                time.sleep(monitoring_interval)
+        # Get monitoring interval from config (default 30 seconds)
+        interval = 30  # Fixed interval as per requirement
+        
+        logger.debug(f"Starting status reporting thread with interval: {interval}s")
+        
+        # Send initial status update
+        self._send_status_update()
+        
+        # Schedule the next update
+        self.status_timer = threading.Timer(interval, self._start_status_reporting_thread)
+        self.status_timer.daemon = True  # Allow the program to exit even if the timer is running
+        self.status_timer.start()
+        
+    def _send_status_update(self):
+        """
+        Send system status update to the server.
+        Gets current CPU and RAM usage and sends it.
+        """
+        try:
+            # Get basic system stats (CPU and RAM usage)
+            stats = self.system_monitor.get_stats()
+            
+            logger.debug(f"Sending status update: {stats}")
+            
+            # Send the update to the server
+            success, response = self.http_client.update_status(
+                self.agent_token,
+                self.device_id,
+                stats
+            )
+            
+            if not success:
+                logger.warning(f"Failed to send status update: {response.get('error', 'Unknown error')}")
+            else:
+                logger.debug("Status update sent successfully")
                 
         except Exception as e:
-            logger.error(f"Error in monitoring loop: {e}")
-            self.running = False
+            logger.error(f"Error sending status update: {e}", exc_info=True)
     
     def start(self):
         """Start the agent."""
@@ -338,12 +388,29 @@ class Agent:
             logger.error("Failed to connect to server")
             return
             
-        # Start monitoring
+        # Start status reporting thread
         self.running = True
-        self.start_monitoring()
+        self._start_status_reporting_thread()
+        
+        # Main agent loop (can be used for other periodic tasks)
+        try:
+            while self.running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Agent interrupted by user")
+            self.stop()
+        except Exception as e:
+            logger.error(f"Error in agent main loop: {e}", exc_info=True)
+            self.stop()
     
     def stop(self):
         """Stop the agent."""
         logger.info("Stopping agent...")
         self.running = False
+        
+        # Cancel the status reporting timer if it exists
+        if hasattr(self, 'status_timer') and self.status_timer:
+            self.status_timer.cancel()
+            
+        # Disconnect from WebSocket
         self.ws_client.disconnect()

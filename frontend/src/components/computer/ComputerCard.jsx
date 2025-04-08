@@ -13,6 +13,7 @@ import {
   DatabaseOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSocket } from '../../contexts/SocketContext';
 import computerService from '../../services/computer.service';
 
 const { Text, Title } = Typography;
@@ -30,7 +31,11 @@ export const cardStyle = {
 
 const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false }) => {
   const { isAdmin, hasRoomAccess } = useAuth();
+  const { getComputerStatus } = useSocket();
 
+  // Get real-time status data
+  const statusData = getComputerStatus(computer?.id);
+  
   // Check if user has access to this computer
   const hasComputerAccess = computer && computer.room_id && 
     (isAdmin || hasRoomAccess(computer.room_id));
@@ -80,15 +85,15 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
     return `${diffDays}d ago`;
   };
 
-  // Determine online status based on last_seen
-  const isOnline = computer.last_seen && 
-    (new Date() - new Date(computer.last_seen) < 5 * 60 * 1000); // 5 minutes threshold
+  // Determine online status based on real-time data or fallback to last_seen
+  const isOnline = statusData?.status === 'online' || 
+    (computer.status === 'online') || 
+    (computer.last_seen && (new Date() - new Date(computer.last_seen) < 5 * 60 * 1000)); // 5 minutes threshold
 
-  // Random value for demo purposes
-  const getRandomUsage = () => Math.floor(Math.random() * 100);
-  const cpuUsage = getRandomUsage();
-  const ramUsage = getRandomUsage();
-  const diskUsage = getRandomUsage();
+  // Get real-time CPU and RAM usage or use defaults
+  const cpuUsage = statusData?.cpuUsage ?? 0;
+  const ramUsage = statusData?.ramUsage ?? 0;
+  const diskUsage = computer.diskUsage ?? 50; // No real-time disk data yet
 
   // Get status color
   const getStatusColor = (value) => {
