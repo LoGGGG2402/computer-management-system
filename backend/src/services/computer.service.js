@@ -208,6 +208,28 @@ class ComputerService {
   }
 
   /**
+   * Update the last_seen timestamp of a computer
+   * @param {number} computerId - The ID of the computer
+   * @returns {Promise<boolean>} True if updated successfully
+   */
+  async updateLastSeen(computerId) {
+    try {
+      const computer = await Computer.findByPk(computerId);
+      
+      if (!computer) {
+        throw new Error('Computer not found');
+      }
+      
+      await computer.update({ last_seen: new Date() });
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating computer last seen timestamp:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Delete a computer
    * @param {number} id - The computer ID
    * @returns {Promise<boolean>} True if deleted, throws error otherwise

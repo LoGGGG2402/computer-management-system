@@ -58,6 +58,8 @@ class Agent:
         
         # Set up command handler
         self.ws_client.register_command_handler(self.handle_command)
+        # Set up command result handler for acknowledgements
+        self.ws_client.register_command_result_handler(self.handle_command_result)
         
         logger.info(f"Agent initialized for device: {self.device_id} in room: {self.room_config['room']}")
     
@@ -254,7 +256,8 @@ class Agent:
                     self.command_executor = CommandExecutor(
                         self.http_client,
                         self.device_id,
-                        self.agent_token
+                        self.agent_token,
+                        self.ws_client  # Truyền WebSocket client vào đây
                     )
                 
                 # Execute the command
@@ -284,16 +287,44 @@ class Agent:
                 logger.warning(f"Unknown command type: {command_type}")
                 result = {"error": "Unknown command type"}
                 
-            # Send command result back to server
-            self.http_client.send_command_result(
-                self.agent_token,
-                self.device_id,
-                command_id,
-                result or {"error": "Command failed"}
-            )
+            # Gửi kết quả qua WebSocket nếu có thể
+            if self.ws_client and self.ws_client.connected:
+                self.ws_client.send_command_result(command_id, result or {"error": "Command failed"})
+            else:
+                # Fallback to HTTP
+                self.http_client.send_command_result(
+                    self.agent_token,
+                    self.device_id,
+                    command_id,
+                    result or {"error": "Command failed"}
+                )
             
         except Exception as e:
             logger.error(f"Error handling command: {e}", exc_info=True)
+    
+    def handle_command_result(self, result_data: Dict[str, Any]):
+        """
+        Handle a command result acknowledgment received from the server.
+        
+        Args:
+            result_data: Command result data from server
+        """
+        try:
+            command_id = result_data.get('commandId')
+            status = result_data.get('status')
+            logger.info(f"Received command result acknowledgment: {command_id} ({status})")
+            
+            # Additional handling for command results can be added here
+            # For example, resending if the server reports an error
+            
+            if status == 'error':
+                error_message = result_data.get('message', 'Unknown error')
+                logger.warning(f"Server reported error for command {command_id}: {error_message}")
+                
+                # Optional: implement retry logic if needed
+                
+        except Exception as e:
+            logger.error(f"Error handling command result acknowledgment: {e}", exc_info=True)
     
     def collect_system_stats(self) -> Dict[str, Any]:
         """

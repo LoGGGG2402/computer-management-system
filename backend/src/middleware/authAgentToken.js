@@ -29,8 +29,8 @@ const verifyAgentToken = async (req, res, next) => {
     const computerId = await computerService.verifyAgentToken(agentId, token);
     
     if (computerId) {
-      // Attach computer ID to request for use in controllers
-      req.computerId = computerId;
+      // Attach computer object to request for use in controllers
+      req.computer = { id: computerId };
       next();
     } else {
       // Return error for invalid token

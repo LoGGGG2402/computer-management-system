@@ -10,27 +10,27 @@ export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
   const [computerStatuses, setComputerStatuses] = useState({});
+  const [authResponse, setAuthResponse] = useState(null);
+  const [commandStatus, setCommandStatus] = useState({});
   const { user, isAuthenticated } = useAuth();
+  
+  // Track command promises to resolve them when responses come back
+  const [commandPromises, setCommandPromises] = useState({});
 
   // Initialize socket
   useEffect(() => {
-    if (!isAuthenticated || !user) {
-      console.log('[SocketContext] Not connecting - User not authenticated:', { isAuthenticated, user });
-      return;
-    }
+    if (!isAuthenticated || !user) return;
 
-    console.log('[SocketContext] Initializing socket connection');
     const socketInstance = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
       autoConnect: false,
       reconnection: true,
       reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      auth: { token: user.token }
+      reconnectionDelay: 1000
     });
 
     // Set up event listeners
     socketInstance.on('connect', () => {
-      console.log('[SocketContext] Socket connected, authenticating...');
+      console.log('Socket connected!');
       setConnected(true);
       
       // Authenticate with backend
@@ -40,27 +40,59 @@ export const SocketProvider = ({ children }) => {
     });
 
     socketInstance.on('disconnect', () => {
-      console.log('WebSocket disconnected');
+      console.log('Socket disconnected!');
       setConnected(false);
     });
 
-    socketInstance.on('error', (error) => {
-      console.error('WebSocket error:', error);
-      setConnected(false);
+    // Handle authentication response
+    socketInstance.on('auth_response', (data) => {
+      console.log('Authentication response:', data);
+      setAuthResponse(data);
     });
 
-    socketInstance.on('auth_response', (response) => {
-      console.log('[SocketContext] Authentication response:', response);
-      if (response.status === 'success') {
-        console.log('[SocketContext] Socket authentication successful');
-      } else {
-        console.error('[SocketContext] Socket authentication failed:', response.message);
+    // Handle command sent confirmation
+    socketInstance.on('command_sent', (data) => {
+      console.log('Command sent status:', data);
+      
+      // Update command status
+      setCommandStatus(prev => ({
+        ...prev,
+        [data.commandId]: {
+          ...data,
+          timestamp: Date.now()
+        }
+      }));
+      
+      // Resolve the corresponding promise
+      if (commandPromises[data.commandId]) {
+        if (data.status === 'success') {
+          commandPromises[data.commandId].resolve(data);
+        } else {
+          commandPromises[data.commandId].reject(new Error(data.message || 'Failed to send command'));
+        }
+        
+        // Remove the promise from the tracking object
+        setCommandPromises(prev => {
+          const newPromises = { ...prev };
+          delete newPromises[data.commandId];
+          return newPromises;
+        });
       }
+    });
+
+    // Handle room subscription response
+    socketInstance.on('subscribe_response', (data) => {
+      console.log('Room subscription response:', data);
+    });
+
+    // Handle room unsubscription response
+    socketInstance.on('unsubscribe_response', (data) => {
+      console.log('Room unsubscription response:', data);
     });
 
     // Update computer status when received
     socketInstance.on('computer:status_updated', (data) => {
-      console.log('[SocketContext] Received status update:', data);
+      console.log('Status update received for computer:', data.computerId);
       setComputerStatuses(prev => ({
         ...prev,
         [data.computerId]: {
@@ -75,6 +107,7 @@ export const SocketProvider = ({ children }) => {
     // Connect to the server
     socketInstance.connect();
     setSocket(socketInstance);
+    console.log('Socket connection initialized');
 
     // Cleanup function
     return () => {
@@ -84,58 +117,69 @@ export const SocketProvider = ({ children }) => {
     };
   }, [isAuthenticated, user]);
 
-  // Subscribe to rooms (for computer status updates)
+  // Core functionality - subscribe to rooms
   const subscribeToRooms = useCallback((roomIds) => {
     if (!socket || !connected) return;
-    
-    console.log('[SocketContext] Subscribing to rooms:', roomIds);
+    console.log('Subscribing to rooms:', roomIds);
     socket.emit('frontend:subscribe', { roomIds });
   }, [socket, connected]);
 
-  // Unsubscribe from rooms
+  // Core functionality - unsubscribe from rooms
   const unsubscribeFromRooms = useCallback((roomIds) => {
     if (!socket || !connected) return;
-    
-    console.log('[SocketContext] Unsubscribing from rooms:', roomIds);
+    console.log('Unsubscribing from rooms:', roomIds);
     socket.emit('frontend:unsubscribe', { roomIds });
   }, [socket, connected]);
 
-  // Send a command to an agent
+  // Core functionality - send a command to an agent
   const sendCommand = useCallback((computerId, command) => {
     if (!socket || !connected) {
-      console.error('[SocketContext] Cannot send command: not connected');
       return Promise.reject(new Error('Not connected to the server'));
     }
     
-    console.log('[SocketContext] Sending command to computer:', computerId, command);
+    console.log(`Sending command to computer ${computerId}: ${command}`);
     
+    // Generate a new promise for this command
     return new Promise((resolve, reject) => {
-      socket.emit('frontend:send_command', { computerId, command }, (response) => {
-        if (response && response.success) {
-          console.log('[SocketContext] Command sent successfully:', response);
-          resolve(response);
-        } else {
-          console.error('[SocketContext] Failed to send command:', response);
-          reject(new Error(response?.message || 'Failed to send command'));
-        }
+      // Let the backend generate the commandId
+      socket.emit('frontend:send_command', { 
+        computerId, 
+        command 
       });
+      
+      // Store the promise callbacks for resolution when we get the response
+      const tempCommandId = `temp_${Date.now()}`;
+      setCommandPromises(prev => ({
+        ...prev,
+        [tempCommandId]: { resolve, reject }
+      }));
+      
+      // Set a timeout to reject the promise if no response is received
+      setTimeout(() => {
+        setCommandPromises(prev => {
+          if (prev[tempCommandId]) {
+            prev[tempCommandId].reject(new Error('Command timed out'));
+            const newPromises = { ...prev };
+            delete newPromises[tempCommandId];
+            return newPromises;
+          }
+          return prev;
+        });
+      }, 10000); // 10 second timeout
     });
   }, [socket, connected]);
 
-  // Get real-time status for a specific computer
-  const getComputerStatus = useCallback((computerId) => {
-    return computerStatuses[computerId] || { status: 'offline', cpuUsage: 0, ramUsage: 0 };
-  }, [computerStatuses]);
-
-  // Context value
+  // Context value with essential properties and methods
   const contextValue = {
     socket,
     connected,
     computerStatuses,
+    authResponse,
+    commandStatus,
     subscribeToRooms,
     unsubscribeFromRooms,
     sendCommand,
-    getComputerStatus
+    getComputerStatus: (computerId) => computerStatuses[computerId] || { status: 'offline', cpuUsage: 0, ramUsage: 0 }
   };
 
   return (
