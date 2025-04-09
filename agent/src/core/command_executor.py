@@ -3,6 +3,7 @@ Command execution module for the Computer Management System Agent.
 This module provides functionality to run shell commands and capture their output.
 """
 import subprocess
+import time
 from typing import Dict, Any
 
 from src.utils.logger import get_logger
@@ -23,7 +24,7 @@ class CommandExecutor:
             http_client: HTTP client instance for sending results
             agent_id: The unique agent ID
             agent_token: The agent authentication token
-            ws_client: WebSocket client instance (optional)
+            ws_client: WebSocket client instance (required for sending results)
         """
         self.http_client = http_client
         self.agent_id = agent_id
@@ -81,7 +82,7 @@ class CommandExecutor:
     
     def _send_result(self, command_id: str, result: Dict[str, Any]):
         """
-        Send command result to the server.
+        Send command result to the server using WebSocket.
         
         Args:
             command_id: The ID of the command
@@ -90,27 +91,69 @@ class CommandExecutor:
         try:
             logger.debug(f"Sending command result for ID: {command_id}")
             
-            # Try WebSocket first if available
-            if self.ws_client and self.ws_client.connected:
+            # Check WebSocket connection and try to send result
+            if not self.ws_client:
+                logger.error("WebSocket client not initialized")
+                return
+                
+            if not self.ws_client.connected:
+                logger.warning("WebSocket not connected, attempting to reconnect")
+                # Try to reconnect before sending
+                max_attempts = 3
+                for attempt in range(max_attempts):
+                    logger.debug(f"Reconnection attempt {attempt + 1}/{max_attempts}")
+                    reconnected = self.ws_client.connect_and_authenticate(self.agent_id, self.agent_token)
+                    if reconnected:
+                        logger.info("Successfully reconnected to WebSocket server")
+                        break
+                    
+                    if attempt < max_attempts - 1:
+                        wait_time = 2 * (attempt + 1)  # Exponential backoff
+                        logger.debug(f"Waiting {wait_time} seconds before next attempt")
+                        time.sleep(wait_time)
+                        
+            # Try to send the command result via WebSocket
+            if self.ws_client.connected:
                 success = self.ws_client.send_command_result(command_id, result)
                 if success:
                     logger.debug("Command result sent successfully via WebSocket")
-                    return
                 else:
-                    logger.warning("Failed to send via WebSocket, falling back to HTTP")
-            
-            # Fallback to HTTP if WebSocket not available or failed
-            success, response = self.http_client.send_command_result(
-                self.agent_token,
-                self.agent_id,
-                command_id,
-                result
-            )
-            
-            if not success:
-                logger.error(f"Failed to send command result: {response.get('error', 'Unknown error')}")
+                    logger.error("Failed to send command result via WebSocket")
             else:
-                logger.debug("Command result sent successfully via HTTP")
+                logger.error("Cannot send command result: WebSocket not connected")
                 
         except Exception as e:
             logger.error(f"Error sending command result: {e}", exc_info=True)
+            
+    def handle_legacy_command(self, command_data: Dict[str, Any]):
+        """
+        Handle a legacy format command.
+        
+        Args:
+            command_data: Command data with legacy format
+        """
+        try:
+            command_id = command_data.get('id', 'unknown')
+            command_type = command_data.get('type')
+            
+            if command_type == 'shell':
+                # Extract command from data
+                command = command_data.get('command', '')
+                if command:
+                    self.run_command(command, command_id)
+                else:
+                    logger.error("Legacy shell command missing 'command' field")
+                    self._send_result(command_id, {
+                        "stdout": "",
+                        "stderr": "Invalid command format - missing command field",
+                        "exitCode": 1
+                    })
+            else:
+                logger.warning(f"Unsupported legacy command type: {command_type}")
+                self._send_result(command_id, {
+                    "stdout": "",
+                    "stderr": f"Unsupported command type: {command_type}",
+                    "exitCode": 1
+                })
+        except Exception as e:
+            logger.error(f"Error handling legacy command: {e}", exc_info=True)

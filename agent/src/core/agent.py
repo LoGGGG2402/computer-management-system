@@ -136,72 +136,35 @@ class Agent:
         success, response = self.http_client.identify_agent(self.device_id, self.room_config)
         if not success:
             logger.error("Failed to identify agent with server")
+            logger.error(f"Server response: {response}")
             return False
-            
-        # Direct token response (skip MFA)
-        if response.get('status') == 'success' and response.get('agentToken'):
+        
+        if response.get('status') == 'mfa_required':
+            # MFA verification
+            mfa_code = prompt_for_mfa()
+            success, response = self.http_client.verify_mfa(self.device_id, mfa_code, self.room_config)
+            if not success:
+                logger.error(f"MFA verification failed {response}")
+                return False
+                
             self.agent_token = response.get('agentToken')
+            if not self.agent_token:
+                logger.error("No token received from server")
+                return False
+                
             save_token(self.device_id, self.agent_token, storage_path)
             display_registration_success()
             return True
-            
-        # Authentication required
-        if response.get('status') == 'authentication_required':
-            success, renew_response = self.http_client.identify_agent(
-                self.device_id, self.room_config, force_renew=True
-            )
-            
-            if success and renew_response.get('status') == 'success' and renew_response.get('agentToken'):
-                self.agent_token = renew_response.get('agentToken')
-                save_token(self.device_id, self.agent_token, storage_path)
-                display_registration_success()
-                return True
-                
-            logger.error("Failed to renew token")
-            return False
-            
-        # Position error
-        if response.get('status') == 'position_error':
-            error_message = response.get('message', 'Invalid position')
-            logger.error(f"Position error: {error_message}")
-            
-            # Request new room configuration
-            room, pos_x, pos_y = prompt_room_config()
-            self.room_config = {
-                'room': room,
-                'position': {'x': pos_x, 'y': pos_y}
-            }
-            
-            if not save_room_config(storage_path, room, pos_x, pos_y):
-                logger.error("Failed to save new room configuration")
-                return False
-                
-            # Retry authentication with new room config
-            success, response = self.http_client.identify_agent(self.device_id, self.room_config)
-            if not success:
-                return False
-                
-            if response.get('status') == 'success' and response.get('agentToken'):
-                self.agent_token = response.get('agentToken')
-                save_token(self.device_id, self.agent_token, storage_path)
-                display_registration_success()
-                return True
         
-        # MFA verification
-        mfa_code = prompt_for_mfa()
-        success, response = self.http_client.verify_mfa(self.device_id, mfa_code, self.room_config)
-        if not success:
-            logger.error("MFA verification failed")
-            return False
-            
-        self.agent_token = response.get('agentToken')
-        if not self.agent_token:
-            logger.error("No token received from server")
-            return False
-            
-        save_token(self.device_id, self.agent_token, storage_path)
-        display_registration_success()
-        return True
+        if 'agentToken' in response:
+            self.agent_token = response['agentToken']
+            save_token(self.device_id, self.agent_token, storage_path)
+            logger.info("Agent registered successfully")
+            return True
+        
+        logger.error("Failed to register agent with server")
+        logger.error(f"Server response: {response}")
+        return False
     
     def handle_command(self, command_data: Dict[str, Any]):
         """
@@ -308,19 +271,35 @@ class Agent:
         self.status_timer.start()
         
     def _send_status_update(self):
-        """Send system status update to the server."""
+        """Send system status update to the server using WebSocket."""
         try:
+            # Get system statistics
             stats = self.system_monitor.get_stats()
-            logger.debug(f"Sending status update: {stats}")
+            logger.debug(f"Sending status update via WebSocket: {stats}")
             
-            success, response = self.http_client.update_status(
-                self.agent_token,
-                self.device_id,
-                stats
-            )
+            # Format data for WebSocket
+            status_data = {
+                "cpuUsage": stats.get("cpu", 0),
+                "ramUsage": stats.get("ram", 0),
+                "diskUsage": stats.get("disk", 0),
+            }
             
-            if not success:
-                logger.warning(f"Failed to send status update: {response.get('error', 'Unknown error')}")
+            # Send via WebSocket
+            if self.ws_client.connected:
+                success = self.ws_client.send_status_update(status_data)
+                if not success:
+                    logger.warning("Failed to send status update via WebSocket")
+            else:
+                logger.warning("Cannot send status update: WebSocket not connected")
+                
+                # Try to reconnect if WebSocket is not connected
+                reconnected = self.connect_to_server()
+                if reconnected:
+                    logger.info("Reconnected to WebSocket server")
+                    # Try sending again after reconnecting
+                    self.ws_client.send_status_update(status_data)
+                else:
+                    logger.error("Failed to reconnect to WebSocket server")
             
         except Exception as e:
             logger.error(f"Error sending status update: {e}", exc_info=True)

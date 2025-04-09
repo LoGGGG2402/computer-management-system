@@ -32,7 +32,7 @@ class SystemMonitor:
         stats = {
             "cpu": psutil.cpu_percent(interval=0.5),
             "ram": psutil.virtual_memory().percent,
-            "timestamp": time.time()
+            "disk": psutil.disk_usage('/').percent
         }
         
         logger.debug(f"System stats collected: {stats}")

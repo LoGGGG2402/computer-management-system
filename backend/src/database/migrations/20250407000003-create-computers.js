@@ -44,6 +44,12 @@ module.exports = {
       cpu_info: {
         type: Sequelize.STRING(255)
       },
+      total_disk_space: {
+        type: Sequelize.BIGINT
+      },
+      gpu_info: {
+        type: Sequelize.STRING(255)
+      },
       errors: {
         type: Sequelize.JSONB,
         defaultValue: '[]'

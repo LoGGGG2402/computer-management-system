@@ -41,6 +41,14 @@ module.exports = (sequelize, DataTypes) => {
     cpu_info: {
       type: DataTypes.STRING(255)
     },
+    total_disk_space: {
+      type: DataTypes.BIGINT,
+      allowNull: true
+    },
+    gpu_info: {
+      type: DataTypes.STRING(255),
+      allowNull: true
+    },
     errors: {
       type: DataTypes.JSONB,
       defaultValue: '[]'

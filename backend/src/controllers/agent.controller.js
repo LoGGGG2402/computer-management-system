@@ -1,7 +1,7 @@
-const computerService = require('../services/computer.service');
-const mfaService = require('../services/mfa.service');
-const websocketService = require('../services/websocket.service');
-const roomService = require('../services/room.service');
+const computerService = require("../services/computer.service");
+const mfaService = require("../services/mfa.service");
+const websocketService = require("../services/websocket.service");
+const roomService = require("../services/room.service");
 
 /**
  * Controller for agent communication
@@ -15,143 +15,91 @@ class AgentController {
    */
   async handleIdentifyRequest(req, res, next) {
     try {
-      const { unique_agent_id, roomInfo, forceRenewToken } = req.body;
-      
-      console.log('[AgentController] Received identify request:', { unique_agent_id, roomInfo, forceRenewToken });
-      
+      const { unique_agent_id, positionInfo, forceRenewToken } = req.body;
+
+      console.log("[AgentController] Received identify request:", {
+        unique_agent_id,
+        positionInfo,
+        forceRenewToken,
+      });
+
       if (!unique_agent_id) {
         return res.status(400).json({
-          status: 'error',
-          message: 'Agent ID is required'
+          status: "error",
+          message: "Agent ID is required",
         });
       }
-      
+
       // Check if computer with this agent ID exists and has a token
-      const computer = await computerService.findComputerByAgentId(unique_agent_id);
-      console.log('[AgentController] Found computer:', computer);
-      
+      const computer = await computerService.findComputerByAgentId(
+        unique_agent_id
+      );
+      console.log("[AgentController] Found computer:", computer);
+
       // Kiểm tra nếu client yêu cầu cấp mới token và computer đã tồn tại trong database
-      if (forceRenewToken && computer) {
-        console.log('[AgentController] Client requested token renewal');
-        
-        // Kiểm tra vị trí và room
-        let roomId = computer.room_id;
-        let posX = computer.pos_x;
-        let posY = computer.pos_y;
-        
-        // Sử dụng vị trí từ request nếu có và hợp lệ
-        if (roomInfo && roomInfo.room && roomInfo.posX !== undefined && roomInfo.posY !== undefined) {
-          const positionCheck = await roomService.isPositionAvailable(roomInfo.room, parseInt(roomInfo.posX), parseInt(roomInfo.posY));
-          
-          if (positionCheck.valid) {
-            roomId = positionCheck.room.id;
-            posX = parseInt(roomInfo.posX);
-            posY = parseInt(roomInfo.posY);
-          }
-        }
-        
-        // Tạo positionInfo để truyền vào generateAndAssignAgentToken
-        const positionInfo = {
-          roomId: roomId,
-          posX: posX,
-          posY: posY
-        };
-        
+      if (
+        (forceRenewToken && computer && computer.room_id === positionInfo.roomId,
+        computer.pos_x === positionInfo.posX,
+        computer.pos_y === positionInfo.posY)
+      ) {
+        console.log("[AgentController] Client requested token renewal");
         // Generate and assign a new token for the agent
-        const plainToken = await computerService.generateAndAssignAgentToken(unique_agent_id, positionInfo);
-        
+        const { plainToken } =
+          await computerService.generateAndAssignAgentToken(
+            unique_agent_id,
+            null,
+            computer
+          );
+
         // Notify admins about token renewal
-        websocketService.notifyAdminsAgentRegistered(unique_agent_id, computer.id);
-        
+        websocketService.notifyAdminsAgentRegistered(
+          unique_agent_id,
+          computer.id
+        );
+
         return res.status(200).json({
-          status: 'success',
-          agentToken: plainToken
+          status: "success",
+          agentToken: plainToken,
         });
       }
-      
-      if (!computer || !computer.agent_token_hash) {
-        // Kiểm tra nếu computer với unique_agent_id này đã tồn tại nhưng chưa có token
-        if (computer && !computer.agent_token_hash) {
-          // Kiểm tra xem vị trí có khớp với thông tin yêu cầu không
-          const positionMatches = roomInfo && 
-                                 roomInfo.posX === computer.pos_x && 
-                                 roomInfo.posY === computer.pos_y &&
-                                 await roomService.isRoomNameMatchesId(roomInfo.room, computer.room_id);
-          
-          if (positionMatches) {
-            console.log('[AgentController] Agent exists without token at same position, generating token directly');
-            
-            // Tạo positionInfo để truyền vào generateAndAssignAgentToken
-            const positionInfo = {
-              roomId: computer.room_id,
-              posX: computer.pos_x,
-              posY: computer.pos_y
-            };
-            
-            // Generate and assign a token for the agent
-            const plainToken = await computerService.generateAndAssignAgentToken(unique_agent_id, positionInfo);
-            
-            // Notify admins about successful registration without MFA
-            websocketService.notifyAdminsAgentRegistered(unique_agent_id, computer.id);
-            
-            return res.status(200).json({
-              status: 'success',
-              agentToken: plainToken
-            });
-          }
-        }
-        
-        // Tiếp tục xử lý như bình thường nếu không phải trường hợp đặc biệt
-        // Kiểm tra thông tin phòng và vị trí
-        if (roomInfo && roomInfo.room && roomInfo.posX !== undefined && roomInfo.posY !== undefined) {
-          // Chuyển đổi tọa độ sang số nếu cần
-          const posX = parseInt(roomInfo.posX);
-          const posY = parseInt(roomInfo.posY);
-          
-          // Kiểm tra vị trí trong phòng có khả dụng không
-          const positionCheck = await roomService.isPositionAvailable(roomInfo.room, posX, posY);
-          console.log('[AgentController] Position check result:', positionCheck);
-          
-          if (!positionCheck.valid) {
-            // Vị trí không khả dụng, yêu cầu agent cung cấp thông tin khác
-            return res.status(400).json({
-              status: 'position_error',
-              message: positionCheck.message
-            });
-          }
-          
-          // Cập nhật roomInfo với thông tin bổ sung từ phòng
-          roomInfo.roomId = positionCheck.room.id;
-          roomInfo.maxColumns = positionCheck.room.layout.columns;
-          roomInfo.maxRows = positionCheck.room.layout.rows;
-        } else {
-          // Thiếu thông tin phòng hoặc vị trí
-          return res.status(400).json({
-            status: 'position_error',
-            message: 'Vui lòng cung cấp đầy đủ thông tin phòng và vị trí (room, posX, posY)'
-          });
-        }
-        
-        // Generate MFA code for new registration
-        const mfaCode = mfaService.generateAndStoreMfa(unique_agent_id);
-        console.log('[AgentController] Generated MFA code:', { unique_agent_id, mfaCode, roomInfo });
-        
-        // Notify admins about the new MFA request with room info
-        websocketService.notifyAdminsNewMfa(unique_agent_id, mfaCode, roomInfo);
-        
+
+      if (computer && computer.agent_token_hash) {
+        console.log("[AgentController] Agent exists, token already assigned");
         return res.status(200).json({
-          status: 'mfa_required'
+          status: "success",
+        });
+      }
+
+      // Check if position is available
+      let resulst = await roomService.isPositionAvailable(
+        positionInfo.room,
+        positionInfo.posX,
+        positionInfo.posY
+      );
+      if (resulst.valid) {
+        let mfacode = mfaService.generateAndStoreMfa(unique_agent_id, positionInfo);
+        console.log("[AgentController] Generated MFA code:", {
+          unique_agent_id,
+          mfacode,
+          positionInfo,
+        });
+        // Notify admins about the new MFA request with room info
+        websocketService.notifyAdminsNewMfa(unique_agent_id, mfacode, positionInfo);
+        return res.status(200).json({
+          status: "mfa_required",
         });
       } else {
-        // Agent exists but needs to authenticate
-        console.log('[AgentController] Agent exists, authentication required');
-        return res.status(200).json({
-          status: 'authentication_required'
+        return res.status(400).json({
+          status: "position_error",
+          message: resulst.message,
         });
       }
     } catch (error) {
-      console.error('[AgentController] Error in handleIdentifyRequest:', error);
-      next(error);
+      console.error("[AgentController] Error in handleIdentifyRequest:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "Internal server error",
+      });
     }
   }
 
@@ -163,86 +111,87 @@ class AgentController {
    */
   async handleVerifyMfa(req, res, next) {
     try {
-      const { unique_agent_id, mfaCode, roomInfo } = req.body;
-      
-      console.log('[AgentController] Received verify MFA request:', { unique_agent_id, roomInfo });
-      
+      const { unique_agent_id, mfaCode, positionInfo } = req.body;
+
+      console.log("[AgentController] Received verify MFA request:", {
+        unique_agent_id,
+        positionInfo,
+      });
+
       if (!unique_agent_id || !mfaCode) {
         return res.status(400).json({
-          status: 'error',
-          message: 'Agent ID and MFA code are required'
+          status: "error",
+          message: "Agent ID and MFA code are required",
         });
       }
-      
-      // Verify the MFA code
-      const isValid = mfaService.verifyMfa(unique_agent_id, mfaCode);
-      
+
+      // Verify the MFA code with positionInfo for additional security
+      const isValid = mfaService.verifyMfa(unique_agent_id, mfaCode, positionInfo);
+
       if (isValid) {
-        // Chuẩn bị thông tin vị trí
-        let positionInfo = null;
-        
-        if (roomInfo && roomInfo.roomId && roomInfo.posX !== undefined && roomInfo.posY !== undefined) {
-          positionInfo = {
-            roomId: roomInfo.roomId,
-            posX: parseInt(roomInfo.posX),
-            posY: parseInt(roomInfo.posY)
-          };
-        }
-        
         // Generate and assign a token for the agent, cùng với thông tin vị trí
-        const plainToken = await computerService.generateAndAssignAgentToken(unique_agent_id, positionInfo);
-        
-        // Get the computer for notification
-        const computer = await computerService.findComputerByAgentId(unique_agent_id);
-        
+        const { computer, plainToken } =
+          await computerService.generateAndAssignAgentToken(
+            unique_agent_id,
+            positionInfo
+          );
+
         // Notify admins about successful registration
-        websocketService.notifyAdminsAgentRegistered(unique_agent_id, computer.id);
-        
+        websocketService.notifyAdminsAgentRegistered(
+          unique_agent_id,
+          computer.id
+        );
+
         return res.status(200).json({
-          status: 'success',
-          agentToken: plainToken
+          status: "success",
+          agentToken: plainToken,
         });
       } else {
         return res.status(401).json({
-          status: 'error',
-          message: 'Invalid or expired MFA code'
+          status: "error",
+          message: "Invalid or expired MFA code",
         });
       }
     } catch (error) {
-      console.error('[AgentController] Error in handleVerifyMfa:', error);
+      console.error("[AgentController] Error in handleVerifyMfa:", error);
       next(error);
     }
   }
 
   /**
-   * Handle agent status update
+   * Handle agent status update - DEPRECATED: Now handled via WebSocket
    * @param {Object} req - Express request object
    * @param {Object} res - Express response object
    * @param {Function} next - Express next middleware function
+   * @deprecated Use WebSocket communication instead
    */
   async handleStatusUpdate(req, res, next) {
+    console.warn("[AgentController] Deprecated HTTP route called: handleStatusUpdate");
     try {
       // Get the computer ID from the authenticated request
       const computerId = req.computer.id;
-      
+
       // Get system metrics from request body
-      const { cpu, ram } = req.body;
-      
-      console.log(`[AgentController] Received status update from computer ${computerId}:`, { cpu, ram });
-      
+      const { cpu, ram, disk } = req.body;
+
+      console.log(
+        `[AgentController] Received status update from computer ${computerId}:`,
+        { cpu, ram, disk }
+      );
+
       // Update the realtime cache with new system metrics
-      websocketService.updateRealtimeCache(computerId, { 
-        cpuUsage: cpu, 
+      websocketService.updateRealtimeCache(computerId, {
+        cpuUsage: cpu,
         ramUsage: ram,
-        status: 'online' 
+        diskUsage: disk
       });
-      
+
       // Update the computer's last seen timestamp in the database
       await computerService.updateLastSeen(computerId);
-      
+
       // Broadcast the status update to clients
       await websocketService.broadcastStatusUpdate(computerId);
-      
+
       // Return 204 No Content status
       return res.sendStatus(204);
     } catch (error) {
@@ -252,46 +201,93 @@ class AgentController {
   }
 
   /**
-   * Handle agent command result
+   * Handle agent command result - DEPRECATED: Now handled via WebSocket
    * @param {Object} req - Express request object
    * @param {Object} res - Express response object
    * @param {Function} next - Express next middleware function
+   * @deprecated Use WebSocket communication instead
    */
   async handleCommandResult(req, res, next) {
+    console.warn("[AgentController] Deprecated HTTP route called: handleCommandResult");
     try {
       // Get parameters from request body
       const { commandId, stdout, stderr, exitCode } = req.body;
-      
+
       // Get computer ID from the authenticated request
       const computerId = req.computer.id;
-      
-      console.log(`[AgentController] Received command result from computer ${computerId}:`, { 
-        commandId, 
-        exitCode,
-        stdoutLength: stdout?.length || 0,
-        stderrLength: stderr?.length || 0 
-      });
-      
+
+      console.log(
+        `[AgentController] Received command result from computer ${computerId}:`,
+        {
+          commandId,
+          exitCode,
+          stdoutLength: stdout?.length || 0,
+          stderrLength: stderr?.length || 0,
+        }
+      );
+
       if (!commandId) {
         return res.status(400).json({
-          status: 'error',
-          message: 'Command ID is required'
+          status: "error",
+          message: "Command ID is required",
         });
       }
-      
+
       // Notify the user who initiated the command about its completion
-      websocketService.notifyCommandCompletion(commandId, { 
-        computerId, 
-        stdout, 
-        stderr, 
+      websocketService.notifyCommandCompletion(commandId, {
+        computerId,
+        stdout,
+        stderr,
         exitCode,
-        timestamp: new Date()
+        timestamp: new Date(),
       });
-      
+
       // Return 204 No Content status
       return res.sendStatus(204);
     } catch (error) {
       console.error(`[AgentController] Error handling command result:`, error);
+      next(error);
+    }
+  }
+
+  /**
+   * Handle hardware information update from agent
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   * @param {Function} next - Express next middleware function
+   */
+  async handleHardwareInfo(req, res, next) {
+    try {
+      // Get the computer ID from the authenticated request
+      const computerId = req.computer.id;
+
+      // Get hardware information from request body
+      const { total_disk_space, gpu_info, cpu_info, total_ram } = req.body;
+
+      console.log(
+        `[AgentController] Received hardware info from computer ${computerId}:`,
+        { total_disk_space, gpu_info, cpu_info, total_ram }
+      );
+
+      if (!total_disk_space) {
+        return res.status(400).json({
+          status: "error",
+          message: "Total disk space is required"
+        });
+      }
+
+      // Update the computer record with new hardware information
+      await computerService.updateComputer(computerId, {
+        total_disk_space,
+        gpu_info: gpu_info || null,
+        cpu_info: cpu_info || null,
+        total_ram: total_ram || null
+      });
+
+      // Return 204 No Content status
+      return res.sendStatus(204);
+    } catch (error) {
+      console.error(`[AgentController] Error handling hardware info:`, error);
       next(error);
     }
   }

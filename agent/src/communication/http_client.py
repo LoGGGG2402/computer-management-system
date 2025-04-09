@@ -70,7 +70,7 @@ class HttpClient:
         
         # Add room information if available
         if room_config:
-            payload["roomInfo"] = {
+            payload["positionInfo"] = {
                 "room": room_config.get('room'),
                 "posX": room_config.get('position', {}).get('x'),
                 "posY": room_config.get('position', {}).get('y')
@@ -109,7 +109,7 @@ class HttpClient:
         
         # Add room information if available
         if room_config:
-            payload["roomInfo"] = {
+            payload["positionInfo"] = {
                 "room": room_config.get('room'),
                 "posX": room_config.get('position', {}).get('x'),
                 "posY": room_config.get('position', {}).get('y')
@@ -152,6 +152,7 @@ class HttpClient:
         Returns:
             Tuple[bool, Dict]: (success, response_data)
         """
+        logger.warning("update_status via HTTP is deprecated. Use WebSocket instead.")
         endpoint = f"{self.base_url}/status"
         headers = {
             "Authorization": f"Bearer {agent_token}",
@@ -184,56 +185,5 @@ class HttpClient:
                 logger.error(f"Server error: {error_message}")
             
             return False, {"error": error_message, "status": "error"}
-    
-    def send_command_result(self, agent_token: str, unique_agent_id: str, command_id: str, 
-                          result: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
-        """
-        Send command execution result to the backend server.
-        
-        Args:
-            agent_token (str): Agent authentication token
-            unique_agent_id (str): Unique identifier for this agent
-            command_id (str): ID of the command that was executed
-            result (Dict[str, Any]): Command execution result
-            
-        Returns:
-            Tuple[bool, Dict]: (success, response_data)
-        """
-        endpoint = f"{self.base_url}/command-result"
-        headers = {
-            "Authorization": f"Bearer {agent_token}",
-            "X-Agent-ID": unique_agent_id
-        }
-        
-        # Format the payload according to the expected backend format
-        payload = {
-            "commandId": command_id,
-            "stdout": result.get("stdout", ""),
-            "stderr": result.get("stderr", ""),
-            "exitCode": result.get("exitCode", 1)
-        }
-        
-        try:
-            logger.debug(f"Sending command result for ID {command_id}")
-            logger.debug(f"Command result payload: {payload}")
-            
-            response = requests.post(endpoint, json=payload, headers=headers)
-            
-            if response.status_code == 204:  # No Content
-                logger.debug("Command result sent successfully with 204 response")
-                return True, {}
-                
-            response.raise_for_status()
-            logger.debug("Command result sent successfully")
-            return True, response.json() if response.text else {}
-        except requests.RequestException as e:
-            logger.error(f"Failed to send command result: {e}")
-            error_message = "Unknown error"
-            
-            if hasattr(e, 'response') and e.response:
-                error_message = self._extract_error_message(e.response)
-                logger.error(f"Server error: {error_message}")
-                logger.error(f"Response status: {e.response.status_code}")
-                logger.error(f"Response text: {e.response.text}")
-            
-            return False, {"error": error_message, "status": "error"}
+
+    # Send command result method has been removed as this is now handled via WebSocket

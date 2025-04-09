@@ -27,17 +27,17 @@ const NotificationHandler = () => {
       console.log('[NotificationHandler] Received MFA notification:', data);
       
       // Create room information text if available
-      const roomInfoText = data.roomInfo ? 
-        `\nPhòng: ${data.roomInfo.room || 'Không xác định'}` +
-        `\nVị trí: (${data.roomInfo.posX || 0}, ${data.roomInfo.posY || 0})` +
-        `\nRoom ID: ${data.roomInfo.roomId || 'N/A'}` : '';
+      const positionInfoText = data.positionInfo ? 
+        `\nPhòng: ${data.positionInfo.room || 'Không xác định'}` +
+        `\nVị trí: (${data.positionInfo.posX || 0}, ${data.positionInfo.posY || 0})` +
+        `\nRoom ID: ${data.positionInfo.roomId || 'N/A'}` : '';
       
       // Display alert for easy visibility of MFA code
-      alert(`MFA Code: ${data.mfaCode}\nAgent ID: ${data.unique_agent_id}${roomInfoText}`);
+      alert(`MFA Code: ${data.mfaCode}\nAgent ID: ${data.unique_agent_id}${positionInfoText}`);
       
       notification.info({
         message: 'New Agent MFA',
-        description: `Agent ID: ${data.unique_agent_id} requires MFA verification with code: ${data.mfaCode}${roomInfoText}`,
+        description: `Agent ID: ${data.unique_agent_id} requires MFA verification with code: ${data.mfaCode}${positionInfoText}`,
         duration: 10,
         onClick: () => {
           navigate('/admin/agents');

@@ -11,7 +11,9 @@ import {
   WarningOutlined,
   LaptopOutlined,
   DatabaseOutlined,
-  CodeOutlined
+  CodeOutlined,
+  HddOutlined,
+  RocketOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext';
@@ -61,6 +63,13 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
 
   // Format RAM size to be more readable
   const formatRAMSize = (bytes) => {
+    if (!bytes) return 'Unknown';
+    const gb = parseInt(bytes) / (1024 * 1024 * 1024);
+    return `${gb.toFixed(2)} GB`;
+  };
+
+  // Format disk space size to be more readable
+  const formatDiskSize = (bytes) => {
     if (!bytes) return 'Unknown';
     const gb = parseInt(bytes) / (1024 * 1024 * 1024);
     return `${gb.toFixed(2)} GB`;
@@ -120,7 +129,7 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
   // Get real-time CPU and RAM usage or use defaults
   const cpuUsage = statusData?.cpuUsage ?? 0;
   const ramUsage = statusData?.ramUsage ?? 0;
-  const diskUsage = computer.diskUsage ?? 50; // No real-time disk data yet
+  const diskUsage = statusData?.diskUsage ?? 0; // No real-time disk data yet
 
   // Get status color
   const getStatusColor = (value) => {
@@ -335,11 +344,21 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
               </Tooltip>
             </Col>
             <Col span={12}>
-              <Tooltip title="Windows Version">
+              <Tooltip title="Disk Space">
                 <p style={{ margin: '2px 0', display: 'flex', alignItems: 'center', fontSize: '11px' }}>
-                  <LaptopOutlined style={{ marginRight: '4px', fontSize: '11px' }} />
+                  <HddOutlined style={{ marginRight: '4px', fontSize: '11px' }} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11px' }}>
-                    {computer.windows_version || 'No OS info'}
+                    {formatDiskSize(computer.total_disk_space)}
+                  </span>
+                </p>
+              </Tooltip>
+            </Col>
+            <Col span={12}>
+              <Tooltip title="GPU">
+                <p style={{ margin: '2px 0', display: 'flex', alignItems: 'center', fontSize: '11px' }}>
+                  <RocketOutlined style={{ marginRight: '4px', fontSize: '11px' }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11px' }}>
+                    {computer.gpu_info || 'No GPU info'}
                   </span>
                 </p>
               </Tooltip>
@@ -578,6 +597,18 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
               <Text>{formatRAMSize(computer.total_ram)}</Text>
             </Space>
           </Col>
+          <Col span={12}>
+            <Space align="center">
+              <HddOutlined />
+              <Text>{formatDiskSize(computer.total_disk_space)}</Text>
+            </Space>
+          </Col>
+          <Col span={12}>
+            <Space align="center">
+              <RocketOutlined />
+              <Text>{computer.gpu_info || 'GPU unknown'}</Text>
+            </Space>
+          </Col>
           {computer.room?.name && (
             <Col span={12}>
               <Space align="center">
@@ -600,7 +631,7 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
         </Row>
 
         {/* Errors section */}
-        {computer.errors && computer.errors.length > 0 && (
+        {computer.errors && Array.isArray(computer.errors) && computer.errors.length > 0 && (
           <>
             <Divider style={{ margin: '10px 0' }} />
             <div style={{ 

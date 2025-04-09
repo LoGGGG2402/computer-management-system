@@ -65,6 +65,7 @@ export const SocketProvider = ({ children }) => {
           status: data.status,
           cpuUsage: data.cpuUsage,
           ramUsage: data.ramUsage,
+          diskUsage: data.diskUsage,
           timestamp: data.timestamp
         }
       }));
@@ -105,7 +106,7 @@ export const SocketProvider = ({ children }) => {
     authResponse,
     subscribeToRooms,
     unsubscribeFromRooms,
-    getComputerStatus: (computerId) => computerStatuses[computerId] || { status: 'offline', cpuUsage: 0, ramUsage: 0 }
+    getComputerStatus: (computerId) => computerStatuses[computerId] || { status: 'offline', cpuUsage: 0, ramUsage: 0, diskUsage: 0 }
   };
 
   return (

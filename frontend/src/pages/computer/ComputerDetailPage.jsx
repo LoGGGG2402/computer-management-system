@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Card, Row, Col, Tabs, Spin, Button, message, Typography, Divider, Breadcrumb, Tag, Space, Alert } from 'antd';
-import { HomeOutlined, DesktopOutlined, ArrowLeftOutlined, ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, GlobalOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { HomeOutlined, DesktopOutlined, ArrowLeftOutlined, ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, GlobalOutlined, InfoCircleOutlined, HddOutlined, RocketOutlined } from '@ant-design/icons';
 import computerService from '../../services/computer.service';
 import { useSocket } from '../../contexts/SocketContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -100,6 +100,13 @@ const ComputerDetailPage = () => {
     const date = new Date(timestamp);
     return date.toLocaleString();
   };
+
+  // Format disk size to be more readable
+  const formatDiskSize = (bytes) => {
+    if (!bytes) return 'Unknown';
+    const gb = bytes / (1024 * 1024 * 1024);
+    return `${gb.toFixed(2)} GB`;
+  };
   
   // Render status tag
   const renderStatusTag = (status) => {
@@ -166,6 +173,14 @@ const ComputerDetailPage = () => {
                 <Text>{computer?.ip_address || 'Not set'}</Text>
               </Col>
               <Col span={12}>
+                <Text strong>Disk Space: </Text>
+                <Text>{computer?.total_disk_space ? formatDiskSize(computer.total_disk_space) : 'Unknown'}</Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>GPU: </Text>
+                <Text>{computer?.gpu_info || 'Unknown'}</Text>
+              </Col>
+              <Col span={12}>
                 <Text strong>Agent ID: </Text>
                 <Text>{computer?.unique_agent_id || 'Not registered'}</Text>
               </Col>
@@ -193,6 +208,10 @@ const ComputerDetailPage = () => {
                 <Text>{statusData?.ramUsage || 0}%</Text>
               </Col>
               <Col span={12}>
+                <Text strong>Disk Usage: </Text>
+                <Text>{statusData?.diskUsage || 0}%</Text>
+              </Col>
+              <Col span={12}>
                 <Text strong>Last Updated: </Text>
                 <Text>
                   {statusData?.timestamp 
@@ -203,7 +222,7 @@ const ComputerDetailPage = () => {
             </Row>
             
             {/* Errors section */}
-            {computer?.errors && computer.errors.length > 0 && (
+            {computer.errors && Array.isArray(computer.errors) && computer.errors.length > 0 && (
               <Row gutter={[16, 16]} style={{ marginTop: '32px' }}>
                 <Col span={24}>
                   <Title level={4}>Errors</Title>
@@ -212,6 +231,7 @@ const ComputerDetailPage = () => {
                     message="Error Information"
                     description={
                       <ul style={{ margin: '5px 0 0 0', paddingLeft: '20px' }}>
+                        {console.log(computer.errors)}
                         {computer.errors.map((error, index) => (
                           <li key={index}>
                             <Text type="danger">{error}</Text>

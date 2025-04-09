@@ -9,7 +9,9 @@ router.post('/identify', agentController.handleIdentifyRequest);
 router.post('/verify-mfa', agentController.handleVerifyMfa);
 
 // Protected agent routes (require agent token authentication)
-router.put('/status', verifyAgentToken, agentController.handleStatusUpdate);
-router.post('/command-result', verifyAgentToken, agentController.handleCommandResult);
+// Status updates are now handled via WebSocket
+// Command results are now handled via WebSocket
+// Only hardware info remains as HTTP since it's not real-time data
+router.post('/hardware-info', verifyAgentToken, agentController.handleHardwareInfo);
 
 module.exports = router;

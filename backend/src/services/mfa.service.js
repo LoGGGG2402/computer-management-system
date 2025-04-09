@@ -9,22 +9,17 @@ class MfaService {
   constructor() {
     // Create a cache with a default TTL of 5 minutes (300 seconds)
     this.mfaCache = new NodeCache({ stdTTL: 300 });
-    
-    // Map to track agent_id to MFA code mapping for better management
-    this.agentMfaMap = new Map();
   }
 
   /**
    * Generate and store a new MFA code for an agent
    * @param {string} agentId - The unique agent ID to generate MFA for
+   * @param {Object} positionInfo - The room information 
    * @returns {string} The generated MFA code
    */
-  generateAndStoreMfa(agentId) {
+  generateAndStoreMfa(agentId, positionInfo) {
     // Check if there's an existing MFA code for this agent
-    if (this.agentMfaMap.has(agentId)) {
-      // Get the old MFA code
-      const oldMfaCode = this.agentMfaMap.get(agentId);
-      
+    if (this.mfaCache.has(agentId)) {
       // Remove the old MFA code from the cache
       this.mfaCache.del(agentId);
       
@@ -41,44 +36,32 @@ class MfaService {
 
     // Create a unique key binding the MFA code to this specific agent
     // This prevents using a code generated for one agent with another agent_id
-    const uniqueHash = this.generateUniqueHash(agentId, mfaCode);
+    const uniqueHash = crypto
+    .createHash('sha256')
+    .update(`${agentId}-${mfaCode}-${Date.now()}`)
+    .digest('hex');
     
-    // Store in cache with the agent ID as key and an object containing both code and hash
+    // Store in cache with the agent ID as key and an object containing code, hash, positionInfo
     this.mfaCache.set(agentId, {
       code: mfaCode,
       hash: uniqueHash,
-      generatedFor: agentId
+      generatedFor: agentId,
+      positionInfo: positionInfo // Store the room information
     });
     
-    // Track the agent to MFA code mapping
-    this.agentMfaMap.set(agentId, mfaCode);
-    
-    console.log(`[MfaService] Generated new MFA code for agent: ${agentId}`);
+    console.log(`[MfaService] Generated new MFA code for agent: ${agentId} in room: ${positionInfo?.id || 'unknown'}`);
 
     return mfaCode;
-  }
-
-  /**
-   * Generate a unique hash binding an MFA code to a specific agent ID
-   * @param {string} agentId - The unique agent ID 
-   * @param {string} mfaCode - The MFA code
-   * @returns {string} A hash that uniquely identifies this agent-MFA pair
-   * @private
-   */
-  generateUniqueHash(agentId, mfaCode) {
-    return crypto
-      .createHash('sha256')
-      .update(`${agentId}-${mfaCode}-${Date.now()}`)
-      .digest('hex');
   }
 
   /**
    * Verify an MFA code for an agent
    * @param {string} agentId - The unique agent ID to verify MFA for
    * @param {string} code - The MFA code to verify
+   * @param {Object} positionInfo - The room information to verify against stored positionInfo
    * @returns {boolean} True if the code is valid, false otherwise
    */
-  verifyMfa(agentId, code) {
+  verifyMfa(agentId, code, positionInfo) {
     // Get the stored MFA info for this agent
     const storedMfaInfo = this.mfaCache.get(agentId);
 
@@ -94,39 +77,20 @@ class MfaService {
       return false;
     }
 
+    // Verify the room information
+    if (storedMfaInfo.positionInfo !== positionInfo) {
+      console.log(`[MfaService] Room information mismatch for agent: ${agentId}`);
+      return false;
+    }
+
     // If the code matches, delete it from cache and return true
     if (storedMfaInfo.code === code) {
       this.mfaCache.del(agentId);
-      this.agentMfaMap.delete(agentId);
       console.log(`[MfaService] MFA code verified and removed for agent: ${agentId}`);
       return true;
     }
 
     console.log(`[MfaService] Invalid MFA code attempt for agent: ${agentId}`);
-    return false;
-  }
-  
-  /**
-   * Check if an agent has an active MFA code
-   * @param {string} agentId - The unique agent ID to check
-   * @returns {boolean} True if the agent has an active MFA code, false otherwise
-   */
-  hasActiveMfa(agentId) {
-    return this.agentMfaMap.has(agentId);
-  }
-  
-  /**
-   * Invalidate an MFA code for an agent
-   * @param {string} agentId - The unique agent ID to invalidate MFA for
-   * @returns {boolean} True if an MFA code was invalidated, false if none existed
-   */
-  invalidateMfa(agentId) {
-    if (this.agentMfaMap.has(agentId)) {
-      this.mfaCache.del(agentId);
-      this.agentMfaMap.delete(agentId);
-      console.log(`[MfaService] MFA code manually invalidated for agent: ${agentId}`);
-      return true;
-    }
     return false;
   }
 }

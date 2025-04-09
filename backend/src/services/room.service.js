@@ -399,29 +399,17 @@ class RoomService {
   }
 
   /**
-   * Check if a room name matches a given room ID
-   * @param {string} roomName - The name of the room
-   * @param {number} roomId - The room ID to check against
-   * @returns {Promise<boolean>} - True if the room name matches the given ID
+   * Get id by room name
+   * @param {string} roomName - Room name
+   * @returns {number|null} - Room ID or null if not found
    */
-  async isRoomNameMatchesId(roomName, roomId) {
+  async getRoomIdByName(roomName) {
     try {
-      if (!roomName || !roomId) {
-        return false;
-      }
-
-      // Find the room by its ID
-      const room = await Room.findByPk(roomId);
-      
-      // If room doesn't exist or name doesn't match
-      if (!room || room.name !== roomName) {
-        return false;
-      }
-      
-      return true;
+      const room = await Room.findOne({ where: { name: roomName } });
+      return room ? room.id : null;
     } catch (error) {
-      console.error("Error checking room name match:", error);
-      return false; // Return false on any error
+      console.error("Error fetching room ID by name:", error);
+      throw error;
     }
   }
 }
