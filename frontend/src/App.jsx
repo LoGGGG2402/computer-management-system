@@ -2,15 +2,15 @@ import { RouterProvider } from 'react-router-dom'
 import router from './router'
 import { AuthProvider } from './contexts/AuthContext'
 import { SocketProvider } from './contexts/SocketContext'
-import { CommandResultProvider } from './contexts/CommandResultContext'
+import { CommandHandleProvider } from './contexts/CommandHandleContext'
 
 function App() {
   return (
     <AuthProvider>
       <SocketProvider>
-        <CommandResultProvider>
+        <CommandHandleProvider>
           <RouterProvider router={router} />
-        </CommandResultProvider>
+        </CommandHandleProvider>
       </SocketProvider>
     </AuthProvider>
   )

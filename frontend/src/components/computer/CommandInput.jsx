@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { Input, Button, Form, Card, Alert, Typography, Space } from 'antd';
 import { CodeOutlined, SendOutlined, WarningOutlined } from '@ant-design/icons';
-import { useSocket } from '../../contexts/SocketContext';
+import { useCommandHandle } from '../../contexts/CommandHandleContext';
 
 const { TextArea } = Input;
 const { Text, Title } = Typography;
 
 const CommandInput = ({ computerId, onCommandSent = () => {}, disabled = false }) => {
   const [form] = Form.useForm();
-  const { sendCommand } = useSocket();
+  const { sendCommand } = useCommandHandle();
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -23,7 +23,7 @@ const CommandInput = ({ computerId, onCommandSent = () => {}, disabled = false }
     setError(null);
     
     try {
-      // Use the sendCommand function from SocketContext
+      // Use the sendCommand function from CommandHandleContext
       const result = await sendCommand(computerId, values.command.trim());
       setLastCommandId(result.commandId);
       

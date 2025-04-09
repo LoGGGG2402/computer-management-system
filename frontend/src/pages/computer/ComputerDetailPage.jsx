@@ -6,6 +6,7 @@ import computerService from '../../services/computer.service';
 import { useSocket } from '../../contexts/SocketContext';
 import { useCommandResults } from '../../contexts/CommandResultContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCommandHandle } from '../../contexts/CommandHandleContext';
 import ComputerCard from '../../components/computer/ComputerCard';
 import CommandInput from '../../components/computer/CommandInput';
 import CommandOutput from '../../components/computer/CommandOutput';

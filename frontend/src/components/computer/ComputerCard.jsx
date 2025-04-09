@@ -15,7 +15,7 @@ import {
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext';
-import { useCommandResults } from '../../contexts/CommandResultContext';
+import { useCommandHandle } from '../../contexts/CommandHandleContext';
 import computerService from '../../services/computer.service';
 
 const { Text, Title } = Typography;
@@ -34,7 +34,7 @@ export const cardStyle = {
 const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false }) => {
   const { isAdmin, hasRoomAccess } = useAuth();
   const { getComputerStatus } = useSocket();
-  const { commandResults, clearResult } = useCommandResults();
+  const { commandResults, clearResult } = useCommandHandle();
 
   // Get real-time status data
   const statusData = getComputerStatus(computer?.id);

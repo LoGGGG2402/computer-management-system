@@ -11,11 +11,7 @@ export const SocketProvider = ({ children }) => {
   const [connected, setConnected] = useState(false);
   const [computerStatuses, setComputerStatuses] = useState({});
   const [authResponse, setAuthResponse] = useState(null);
-  const [commandStatus, setCommandStatus] = useState({});
   const { user, isAuthenticated } = useAuth();
-  
-  // Track command promises to resolve them when responses come back
-  const [commandPromises, setCommandPromises] = useState({});
 
   // Initialize socket
   useEffect(() => {
@@ -48,36 +44,6 @@ export const SocketProvider = ({ children }) => {
     socketInstance.on('auth_response', (data) => {
       console.log('Authentication response:', data);
       setAuthResponse(data);
-    });
-
-    // Handle command sent confirmation
-    socketInstance.on('command_sent', (data) => {
-      console.log('Command sent status:', data);
-      
-      // Update command status
-      setCommandStatus(prev => ({
-        ...prev,
-        [data.commandId]: {
-          ...data,
-          timestamp: Date.now()
-        }
-      }));
-      
-      // Resolve the corresponding promise
-      if (commandPromises[data.commandId]) {
-        if (data.status === 'success') {
-          commandPromises[data.commandId].resolve(data);
-        } else {
-          commandPromises[data.commandId].reject(new Error(data.message || 'Failed to send command'));
-        }
-        
-        // Remove the promise from the tracking object
-        setCommandPromises(prev => {
-          const newPromises = { ...prev };
-          delete newPromises[data.commandId];
-          return newPromises;
-        });
-      }
     });
 
     // Handle room subscription response
@@ -131,54 +97,14 @@ export const SocketProvider = ({ children }) => {
     socket.emit('frontend:unsubscribe', { roomIds });
   }, [socket, connected]);
 
-  // Core functionality - send a command to an agent
-  const sendCommand = useCallback((computerId, command) => {
-    if (!socket || !connected) {
-      return Promise.reject(new Error('Not connected to the server'));
-    }
-    
-    console.log(`Sending command to computer ${computerId}: ${command}`);
-    
-    // Generate a new promise for this command
-    return new Promise((resolve, reject) => {
-      // Let the backend generate the commandId
-      socket.emit('frontend:send_command', { 
-        computerId, 
-        command 
-      });
-      
-      // Store the promise callbacks for resolution when we get the response
-      const tempCommandId = `temp_${Date.now()}`;
-      setCommandPromises(prev => ({
-        ...prev,
-        [tempCommandId]: { resolve, reject }
-      }));
-      
-      // Set a timeout to reject the promise if no response is received
-      setTimeout(() => {
-        setCommandPromises(prev => {
-          if (prev[tempCommandId]) {
-            prev[tempCommandId].reject(new Error('Command timed out'));
-            const newPromises = { ...prev };
-            delete newPromises[tempCommandId];
-            return newPromises;
-          }
-          return prev;
-        });
-      }, 10000); // 10 second timeout
-    });
-  }, [socket, connected]);
-
   // Context value with essential properties and methods
   const contextValue = {
     socket,
     connected,
     computerStatuses,
     authResponse,
-    commandStatus,
     subscribeToRooms,
     unsubscribeFromRooms,
-    sendCommand,
     getComputerStatus: (computerId) => computerStatuses[computerId] || { status: 'offline', cpuUsage: 0, ramUsage: 0 }
   };
 
