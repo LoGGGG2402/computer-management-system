@@ -4,7 +4,6 @@ import { Card, Row, Col, Tabs, Spin, Button, message, Typography, Divider, Bread
 import { HomeOutlined, DesktopOutlined, ArrowLeftOutlined, ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, GlobalOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import computerService from '../../services/computer.service';
 import { useSocket } from '../../contexts/SocketContext';
-import { useCommandResults } from '../../contexts/CommandResultContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCommandHandle } from '../../contexts/CommandHandleContext';
 import ComputerCard from '../../components/computer/ComputerCard';
@@ -16,9 +15,8 @@ const { Title, Text } = Typography;
 const ComputerDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
   const { subscribeToRooms, unsubscribeFromRooms, getComputerStatus } = useSocket();
-  const { commandResults } = useCommandResults();
+  const { commandResults } = useCommandHandle();
   const { isAdmin, hasRoomAccess } = useAuth();
   
   const [computer, setComputer] = useState(null);

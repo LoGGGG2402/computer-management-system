@@ -5,8 +5,8 @@ This module provides functionality to monitor system processes.
 import psutil
 from typing import Dict, Any, List
 
-from agent.src.utils.logger import get_logger
-from agent.src.utils.utils import format_bytes
+from src.utils.logger import get_logger
+from src.utils.utils import format_bytes
 
 # Get logger for this module
 logger = get_logger(__name__)

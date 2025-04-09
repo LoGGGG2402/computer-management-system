@@ -3,7 +3,6 @@ Command execution module for the Computer Management System Agent.
 This module provides functionality to run shell commands and capture their output.
 """
 import subprocess
-import shlex
 from typing import Dict, Any
 
 from src.utils.logger import get_logger

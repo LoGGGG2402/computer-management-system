@@ -3,7 +3,7 @@ WebSocket client module for the Computer Management System Agent.
 This module provides functionality for real-time communication with the backend server.
 """
 import socketio
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Callable
 
 from src.utils.logger import get_logger
 

@@ -22,7 +22,7 @@ class HttpClient:
             base_url (str): Base URL of the backend server
         """
         self.base_url = f"{base_url}/api/agent"
-        logger.debug(f"HTTP client initialized with base URL: {self.base_url}")
+        logger.info(f"HTTP client initialized with base URL: {self.base_url}")
     
     def _extract_error_message(self, response) -> str:
         """

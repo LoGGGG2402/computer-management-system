@@ -13,7 +13,6 @@ sys.path.insert(0, parent_dir)
 
 # Import the configuration manager and logger
 from src.config.config_manager import config_manager
-from src.utils.logger import init_application_logger
 from src.core.agent import Agent
 
 def parse_arguments():
@@ -49,12 +48,6 @@ def main():
     # Create logs directory if it doesn't exist
     logs_dir = os.path.join(storage_path, 'logs')
     os.makedirs(logs_dir, exist_ok=True)
-    
-    # Initialize logger with config
-    logger = init_application_logger({
-        'debug': config_manager.get('debug', args.debug),
-        'storage_path': storage_path
-    })
     
     try:
         # Initialize and start the agent

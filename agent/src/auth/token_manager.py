@@ -63,7 +63,6 @@ def load_token(agent_id: str, storage_path: str) -> Optional[str]:
     try:
         if KEYRING_AVAILABLE:
             token = keyring.get_password(SERVICE_NAME, agent_id)
-            delete_token(agent_id, storage_path)  # Remove from keyring after loading
             if token:
                 logger.info(f"Token loaded securely for agent_id: {agent_id}")
                 return token

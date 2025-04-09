@@ -2,7 +2,6 @@
 MFA handler module for the Computer Management System Agent.
 This module provides functionality for handling MFA codes.
 """
-from typing import Optional
 from src.utils.logger import get_logger
 
 # Get logger for this module

@@ -17,6 +17,10 @@ DEFAULT_LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 # Global logger dictionary to maintain references
 loggers = {}
 
+LOG_FILE = None
+LOG_LEVEL = logging.DEBUG
+
+
 def setup_logger(
     name: str = "agent", 
     log_file: Optional[str] = None,
@@ -85,42 +89,16 @@ def get_logger(name: str = "agent") -> logging.Logger:
     Returns:
         Logger instance
     """
+
+    global LOG_FILE
+    if LOG_FILE is None:
+        LOG_FILE = os.path.join(os.path.dirname(__file__), 'logs', 'agent.log')
+    
     if name in loggers:
         return loggers[name]
     else:
         # Return a new logger with default settings (no file logging)
-        return setup_logger(name=name)
+        return setup_logger(name=name, log_file=LOG_FILE,
+                            console_level=LOG_LEVEL,
+                            file_level=LOG_LEVEL)
 
-def init_application_logger(config: Dict[str, Any]) -> logging.Logger:
-    """
-    Initialize the main application logger based on configuration.
-    
-    Args:
-        config: Application configuration dictionary
-        
-    Returns:
-        Main application logger
-    """
-    # Determine log file path from config
-    storage_path = config.get('storage_path', '../storage')
-    log_dir = os.path.join(storage_path, 'logs')
-    log_file = os.path.join(log_dir, 'agent.log')
-    
-    # Determine log level from config
-    debug_mode = config.get('debug', False)
-    console_level = logging.DEBUG if debug_mode else logging.INFO
-    
-    # Setup the main logger
-    logger = setup_logger(
-        name="agent",
-        log_file=log_file,
-        console_level=console_level,
-        file_level=logging.DEBUG
-    )
-    
-    # Log startup information
-    logger.info("Logger initialized")
-    if debug_mode:
-        logger.debug("Debug logging enabled")
-    
-    return logger
