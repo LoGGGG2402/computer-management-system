@@ -8,6 +8,7 @@ import ComputerList from '../../components/computer/ComputerList';
 import AssignmentComponent from '../../components/admin/AssignmentComponent';
 import roomService from '../../services/room.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCommandHandle } from '../../contexts/CommandHandleContext';
 
 const { Title } = Typography;
 
@@ -16,6 +17,7 @@ const RoomDetailPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAdmin, hasRoomAccess } = useAuth();
+  const { sendCommandToRoom } = useCommandHandle();
   
   const [room, setRoom] = useState(null);
   const [computers, setComputers] = useState([]);
@@ -129,16 +131,18 @@ const RoomDetailPage = () => {
     }
   };
 
-  // Handle sending command to all computers in room
+  // Handle sending command to all computers in room via WebSocket
   const handleSendCommand = async () => {
     if (!command.trim()) return;
     
     try {
       setSendingCommand(true);
-      const result = await roomService.sendCommandToRoom(id, command.trim());
+      
+      // Sử dụng WebSocket thay vì HTTP API
+      const result = await sendCommandToRoom(id, command.trim());
       
       // Show success message with count of computers receiving the command
-      const computerCount = result.data?.computerIds?.length || 0;
+      const computerCount = result?.computerIds?.length || 0;
       if (computerCount > 0) {
         message.success(`Command sent to ${computerCount} online computers in this room`);
       } else {
@@ -148,7 +152,7 @@ const RoomDetailPage = () => {
       // Clear the command input after sending
       setCommand('');
     } catch (error) {
-      message.error(error.response?.data?.message || 'Failed to send command');
+      message.error(error?.message || 'Failed to send command');
       console.error('Error sending command to room:', error);
     } finally {
       setSendingCommand(false);

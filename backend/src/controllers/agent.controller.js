@@ -201,56 +201,6 @@ class AgentController {
   }
 
   /**
-   * Handle agent command result - DEPRECATED: Now handled via WebSocket
-   * @param {Object} req - Express request object
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   * @deprecated Use WebSocket communication instead
-   */
-  async handleCommandResult(req, res, next) {
-    console.warn("[AgentController] Deprecated HTTP route called: handleCommandResult");
-    try {
-      // Get parameters from request body
-      const { commandId, stdout, stderr, exitCode } = req.body;
-
-      // Get computer ID from the authenticated request
-      const computerId = req.computer.id;
-
-      console.log(
-        `[AgentController] Received command result from computer ${computerId}:`,
-        {
-          commandId,
-          exitCode,
-          stdoutLength: stdout?.length || 0,
-          stderrLength: stderr?.length || 0,
-        }
-      );
-
-      if (!commandId) {
-        return res.status(400).json({
-          status: "error",
-          message: "Command ID is required",
-        });
-      }
-
-      // Notify the user who initiated the command about its completion
-      websocketService.notifyCommandCompletion(commandId, {
-        computerId,
-        stdout,
-        stderr,
-        exitCode,
-        timestamp: new Date(),
-      });
-
-      // Return 204 No Content status
-      return res.sendStatus(204);
-    } catch (error) {
-      console.error(`[AgentController] Error handling command result:`, error);
-      next(error);
-    }
-  }
-
-  /**
    * Handle hardware information update from agent
    * @param {Object} req - Express request object
    * @param {Object} res - Express response object

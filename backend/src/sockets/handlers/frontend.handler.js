@@ -144,6 +144,68 @@ const setupFrontendHandlers = (io, socket) => {
       });
     }
   });
+
+  // Frontend send command to all computers in a room
+  socket.on('frontend:send_room_command', async (payload) => {
+    try {
+      const { roomId, command } = payload;
+      const userId = socket.data.userId;
+      
+      if (!userId) {
+        socket.emit('room_command_sent', { 
+          status: 'error', 
+          message: 'Not authenticated',
+          roomId
+        });
+        return;
+      }
+      
+      // Check room access
+      const isAdmin = socket.data.role === 'admin';
+      let hasAccess = isAdmin;
+      
+      if (!hasAccess) {
+        hasAccess = await roomService.checkUserRoomAccess(userId, roomId);
+      }
+      
+      if (!hasAccess) {
+        socket.emit('room_command_sent', { 
+          status: 'error', 
+          message: 'No access to this room',
+          roomId 
+        });
+        return;
+      }
+      
+      try {
+        // Send command to all online computers in the room
+        const computerIds = await websocketService.sendCommandToRoomComputers(roomId, command, userId);
+        
+        socket.emit('room_command_sent', { 
+          status: 'success', 
+          roomId,
+          computerIds,
+          commandCount: computerIds.length
+        });
+        
+        console.log(`User ${userId} sent command to ${computerIds.length} computers in room ${roomId}`);
+      } catch (error) {
+        console.error(`Error sending command to room ${roomId}:`, error);
+        socket.emit('room_command_sent', { 
+          status: 'error', 
+          message: error.message || 'Failed to send command to room',
+          roomId 
+        });
+      }
+    } catch (error) {
+      console.error('Send room command error:', error);
+      socket.emit('room_command_sent', { 
+        status: 'error', 
+        message: 'Failed to process room command',
+        roomId: payload?.roomId
+      });
+    }
+  });
 };
 
 /**

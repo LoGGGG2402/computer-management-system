@@ -125,22 +125,9 @@ const roomService = {
     } catch (error) {
       throw error;
     }
-  },
-
-  /**
-   * Send a command to all computers in a room
-   * @param {string} roomId - Room ID
-   * @param {string} command - Command to execute on all computers
-   * @returns {Promise} Promise with command send status and affected computer IDs
-   */
-  sendCommandToRoom: async (roomId, command) => {
-    try {
-      const response = await api.post(`/rooms/${roomId}/command`, { command });
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
   }
+  
+  // Phương thức sendCommandToRoom đã được loại bỏ vì giờ sử dụng WebSocket
 };
 
 export default roomService;

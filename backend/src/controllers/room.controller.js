@@ -1,5 +1,4 @@
 const roomService = require('../services/room.service');
-const websocketService = require('../services/websocket.service');
 
 /**
  * Controller for room management operations
@@ -256,44 +255,6 @@ class RoomController {
       return res.status(404).json({
         status: 'error',
         message: error.message || 'Failed to get users in room'
-      });
-    }
-  }
-
-  /**
-   * Send a command to all computers in a room
-   * @param {Object} req - Express request object
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   */
-  async handleSendCommandToRoom(req, res, next) {
-    try {
-      const roomId = parseInt(req.params.roomId);
-      const { command } = req.body;
-      const userId = req.user.id;
-      
-      if (!roomId || !command) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'Room ID and command are required'
-        });
-      }
-      
-      // Send command to all computers in the room
-      const sentComputerIds = await websocketService.sendCommandToRoomComputers(roomId, command, userId);
-      
-      return res.status(202).json({
-        status: 'success',
-        message: 'Command sent to online agents in room',
-        data: { 
-          computerIds: sentComputerIds 
-        }
-      });
-    } catch (error) {
-      console.error('Send command to room error:', error);
-      return res.status(500).json({
-        status: 'error',
-        message: error.message || 'Failed to send command to room'
       });
     }
   }

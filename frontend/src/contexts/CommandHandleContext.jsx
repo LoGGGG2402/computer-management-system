@@ -70,11 +70,42 @@ export const CommandHandleProvider = ({ children }) => {
         });
       }
     });
+    
+    // Handle room command response
+    socket.on('room_command_sent', (data) => {
+      console.log('Room command sent status:', data);
+      
+      // Update command status for room commands
+      setCommandStatus(prev => ({
+        ...prev,
+        [`room_${data.roomId}`]: {
+          ...data,
+          timestamp: Date.now()
+        }
+      }));
+      
+      // Resolve the corresponding promise for room commands
+      if (commandPromises[`room_${data.roomId}`]) {
+        if (data.status === 'success') {
+          commandPromises[`room_${data.roomId}`].resolve(data);
+        } else {
+          commandPromises[`room_${data.roomId}`].reject(new Error(data.message || 'Failed to send command to room'));
+        }
+        
+        // Remove the promise from the tracking object
+        setCommandPromises(prev => {
+          const newPromises = { ...prev };
+          delete newPromises[`room_${data.roomId}`];
+          return newPromises;
+        });
+      }
+    });
 
     // Cleanup
     return () => {
       socket.off('command:completed', handleCommandCompleted);
       socket.off('command_sent');
+      socket.off('room_command_sent');
     };
   }, [socket, connected, commandPromises]);
 
@@ -113,6 +144,44 @@ export const CommandHandleProvider = ({ children }) => {
           return prev;
         });
       }, 10000); // 10 second timeout
+    });
+  }, [socket, connected]);
+  
+  // Send command to all computers in a room
+  const sendCommandToRoom = useCallback((roomId, command) => {
+    if (!socket || !connected) {
+      return Promise.reject(new Error('Not connected to the server'));
+    }
+    
+    console.log(`Sending command to room ${roomId}: ${command}`);
+    
+    // Generate a new promise for this command
+    return new Promise((resolve, reject) => {
+      // Emit the room command event to server
+      socket.emit('frontend:send_room_command', { 
+        roomId, 
+        command 
+      });
+      
+      // Store the promise callbacks for resolution when we get the response
+      const promiseId = `room_${roomId}`;
+      setCommandPromises(prev => ({
+        ...prev,
+        [promiseId]: { resolve, reject }
+      }));
+      
+      // Set a timeout to reject the promise if no response is received
+      setTimeout(() => {
+        setCommandPromises(prev => {
+          if (prev[promiseId]) {
+            prev[promiseId].reject(new Error('Room command timed out'));
+            const newPromises = { ...prev };
+            delete newPromises[promiseId];
+            return newPromises;
+          }
+          return prev;
+        });
+      }, 15000); // 15 second timeout for room commands
     });
   }, [socket, connected]);
 
@@ -163,7 +232,8 @@ export const CommandHandleProvider = ({ children }) => {
     commandStatus,
     clearResult,
     clearAllResults,
-    sendCommand
+    sendCommand,
+    sendCommandToRoom
   };
 
   return (

@@ -1,6 +1,5 @@
 const express = require('express');
 const roomController = require('../controllers/room.controller');
-const computerController = require('../controllers/computer.controller');
 const { verifyToken } = require('../middleware/authJwt');
 const { isAdmin } = require('../middleware/authAdmin');
 const { hasRoomAccess } = require('../middleware/authRoomAccess');
@@ -19,9 +18,6 @@ router.get('/:id', hasRoomAccess, roomController.getRoomById);
 
 // Routes that require room access
 router.put('/:id', hasRoomAccess, roomController.updateRoom);
-
-// Send command to all computers in a room
-router.post('/:roomId/command', hasRoomAccess, roomController.handleSendCommandToRoom);
 
 // Admin-only routes below
 router.use('/admin', isAdmin);

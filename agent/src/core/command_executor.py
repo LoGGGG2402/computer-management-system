@@ -7,7 +7,6 @@ import time
 from typing import Dict, Any
 
 from src.utils.logger import get_logger
-from src.communication.http_client import HttpClient
 from src.communication.ws_client import WSClient
 
 # Get logger for this module
@@ -16,17 +15,15 @@ logger = get_logger(__name__)
 class CommandExecutor:
     """Class responsible for executing shell commands."""
     
-    def __init__(self, http_client: HttpClient, agent_id: str, agent_token: str, ws_client: WSClient = None):
+    def __init__(self, agent_id: str, agent_token: str, ws_client: WSClient):
         """
         Initialize the command executor.
         
         Args:
-            http_client: HTTP client instance for sending results
             agent_id: The unique agent ID
             agent_token: The agent authentication token
-            ws_client: WebSocket client instance (required for sending results)
+            ws_client: WebSocket client instance for sending results
         """
-        self.http_client = http_client
         self.agent_id = agent_id
         self.agent_token = agent_token
         self.ws_client = ws_client
@@ -62,7 +59,7 @@ class CommandExecutor:
             
             logger.debug(f"Command completed with exit code: {process.returncode}")
             
-            # Send result back to server
+            # Send result back to server via WebSocket only
             self._send_result(command_id, result)
             
         except subprocess.TimeoutExpired:
@@ -112,7 +109,7 @@ class CommandExecutor:
                         logger.debug(f"Waiting {wait_time} seconds before next attempt")
                         time.sleep(wait_time)
                         
-            # Try to send the command result via WebSocket
+            # Send the command result via WebSocket
             if self.ws_client.connected:
                 success = self.ws_client.send_command_result(command_id, result)
                 if success:

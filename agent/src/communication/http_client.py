@@ -140,44 +140,35 @@ class HttpClient:
             
             return False, {"error": error_message, "status": "error"}
     
-    def update_status(self, agent_token: str, unique_agent_id: str, stats: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
+    def send_hardware_info(self, agent_token: str, hardware_data: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
         """
-        Update agent status with the backend server.
+        Send hardware information to the backend server.
         
         Args:
             agent_token (str): Agent authentication token
-            unique_agent_id (str): Unique identifier for this agent
-            stats (Dict[str, Any]): System statistics to update
+            hardware_data (Dict[str, Any]): Hardware information
             
         Returns:
             Tuple[bool, Dict]: (success, response_data)
         """
-        logger.warning("update_status via HTTP is deprecated. Use WebSocket instead.")
-        endpoint = f"{self.base_url}/status"
+        endpoint = f"{self.base_url}/hardware-info"
         headers = {
-            "Authorization": f"Bearer {agent_token}",
-            "X-Agent-ID": unique_agent_id
-        }
-        
-        # Format the payload according to the expected backend format
-        payload = {
-            "cpu": stats.get("cpu", 0),
-            "ram": stats.get("ram", 0)
+            "Authorization": f"Bearer {agent_token}"
         }
         
         try:
-            logger.debug(f"Sending status update with payload: {payload}")
-            response = requests.put(endpoint, json=payload, headers=headers)
+            logger.debug(f"Sending hardware info with payload: {hardware_data}")
+            response = requests.post(endpoint, json=hardware_data, headers=headers)
             
             if response.status_code == 204:  # No Content
-                logger.debug("Status updated successfully with 204 response")
+                logger.debug("Hardware info sent successfully with 204 response")
                 return True, {}
                 
             response.raise_for_status()
-            logger.debug("Status updated successfully")
+            logger.debug("Hardware info sent successfully")
             return True, response.json() if response.text else {}
         except requests.RequestException as e:
-            logger.error(f"Failed to update status: {e}")
+            logger.error(f"Failed to send hardware info: {e}")
             error_message = "Unknown error"
             
             if hasattr(e, 'response') and e.response:
@@ -185,5 +176,3 @@ class HttpClient:
                 logger.error(f"Server error: {error_message}")
             
             return False, {"error": error_message, "status": "error"}
-
-    # Send command result method has been removed as this is now handled via WebSocket

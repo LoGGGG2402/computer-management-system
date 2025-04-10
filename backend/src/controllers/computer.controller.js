@@ -1,6 +1,4 @@
 const computerService = require('../services/computer.service');
-const websocketService = require('../services/websocket.service');
-const { v4: uuidv4 } = require('uuid');
 
 /**
  * Controller for computer management operations
@@ -142,58 +140,6 @@ class ComputerController {
       return res.status(404).json({
         status: 'error',
         message: error.message || 'Computer not found'
-      });
-    }
-  }
-
-  /**
-   * Send a command to a computer
-   * @param {Object} req - Express request object
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   */
-  async sendCommand(req, res, next) {
-    try {
-      const computerId = parseInt(req.params.id);
-      const { command } = req.body;
-      const userId = req.user.id;
-      
-      if (!computerId || !command) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'Computer ID and command are required'
-        });
-      }
-      
-      // Generate a unique command ID
-      const commandId = uuidv4();
-      
-      // Store the pending command
-      websocketService.storePendingCommand(commandId, userId, computerId);
-      
-      // Send the command to the agent
-      const sent = websocketService.sendCommandToAgent(computerId, command, commandId);
-      
-      if (sent) {
-        return res.status(202).json({
-          status: 'success',
-          commandId,
-          message: 'Command sent to agent'
-        });
-      } else {
-        // If the agent is offline, delete the pending command
-        websocketService.pendingCommands.delete(commandId);
-        
-        return res.status(503).json({
-          status: 'error',
-          message: 'Agent is offline'
-        });
-      }
-    } catch (error) {
-      console.error('Send command error:', error);
-      return res.status(500).json({
-        status: 'error',
-        message: 'Failed to send command'
       });
     }
   }

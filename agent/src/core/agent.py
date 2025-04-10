@@ -179,7 +179,6 @@ class Agent:
             # Initialize command executor if needed
             if not self.command_executor:
                 self.command_executor = CommandExecutor(
-                    self.http_client,
                     self.device_id,
                     self.agent_token,
                     self.ws_client
