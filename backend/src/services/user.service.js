@@ -8,31 +8,37 @@ const User = db.User;
 class UserService {
   /**
    * Get all users with pagination
-   * @param {number} page - Page number
+   * @param {number} page - Page number (starts from 1)
    * @param {number} limit - Number of items per page
-   * @param {string} search - Search term for username
+   * @param {string} search - Search term for username (case-insensitive partial match)
    * @param {string} role - Filter by role (admin/user)
-   * @param {boolean} is_active - Filter by active status
-   * @returns {Object} - Paginated users list
+   * @param {boolean} is_active - Filter by active status (true/false)
+   * @returns {Object} - Paginated users list with the following properties:
+   *   - total {number} - Total number of users matching the criteria
+   *   - currentPage {number} - Current page number
+   *   - totalPages {number} - Total number of pages
+   *   - users {Array<Object>} - Array of user objects, each containing:
+   *     - id {number} - User ID
+   *     - username {string} - Username
+   *     - role {string} - User role (admin/user)
+   *     - is_active {boolean} - Whether the user is active
+   *     - created_at {Date} - When the user was created
+   *     - updated_at {Date} - When the user was last updated
    */
   async getAllUsers(page = 1, limit = 10, search = '', role = null, is_active = null) {
     try {
       const offset = (page - 1) * limit;
       
-      // Build where clause
       const whereClause = {};
       
-      // Add username search if provided
       if (search) {
         whereClause.username = { [db.Sequelize.Op.iLike]: `%${search}%` };
       }
       
-      // Add role filter if provided
       if (role && ['admin', 'user'].includes(role)) {
         whereClause.role = role;
       }
       
-      // Add is_active filter if provided
       if (is_active !== null) {
         whereClause.is_active = is_active === 'true' || is_active === true;
       }
@@ -58,8 +64,15 @@ class UserService {
 
   /**
    * Get user by ID
-   * @param {number} id - User ID
-   * @returns {Object} - User data
+   * @param {number} id - User ID to retrieve
+   * @returns {Object} - User data with the following properties:
+   *   - id {number} - User ID
+   *   - username {string} - Username
+   *   - role {string} - User role (admin/user)
+   *   - is_active {boolean} - Whether the user is active
+   *   - created_at {Date} - When the user was created
+   *   - updated_at {Date} - When the user was last updated
+   * @throws {Error} - If user is not found
    */
   async getUserById(id) {
     try {
@@ -80,11 +93,21 @@ class UserService {
   /**
    * Create a new user
    * @param {Object} userData - User data
-   * @returns {Object} - Created user
+   * @param {string} userData.username - Username (unique)
+   * @param {string} userData.password - Plain text password to be hashed
+   * @param {string} [userData.role='user'] - User role (admin/user)
+   * @param {boolean} [userData.is_active=true] - Whether the user is active
+   * @returns {Object} - Created user data with the following properties:
+   *   - id {number} - User ID
+   *   - username {string} - Username
+   *   - role {string} - User role (admin/user)
+   *   - is_active {boolean} - Whether the user is active
+   *   - created_at {Date} - When the user was created
+   *   - updated_at {Date} - When the user was last updated
+   * @throws {Error} - If username already exists
    */
   async createUser(userData) {
     try {
-      // Check if username already exists
       const existingUser = await User.findOne({
         where: { username: userData.username }
       });
@@ -93,7 +116,6 @@ class UserService {
         throw new Error('Username already exists');
       }
       
-      // Create user
       const user = await User.create({
         username: userData.username,
         password_hash: userData.password,
@@ -101,7 +123,6 @@ class UserService {
         is_active: userData.is_active !== undefined ? userData.is_active : true
       });
       
-      // Return user without password
       const { password_hash, ...userWithoutPassword } = user.toJSON();
       return userWithoutPassword;
     } catch (error) {
@@ -111,9 +132,20 @@ class UserService {
 
   /**
    * Update a user
-   * @param {number} id - User ID
+   * @param {number} id - User ID to update
    * @param {Object} userData - User data to update
-   * @returns {Object} - Updated user
+   * @param {string} [userData.username] - New username (must be unique)
+   * @param {string} [userData.password] - New password to be hashed
+   * @param {string} [userData.role] - New role (admin/user)
+   * @param {boolean} [userData.is_active] - New active status
+   * @returns {Object} - Updated user data with the following properties:
+   *   - id {number} - User ID
+   *   - username {string} - Username
+   *   - role {string} - User role (admin/user)
+   *   - is_active {boolean} - Whether the user is active
+   *   - created_at {Date} - When the user was created
+   *   - updated_at {Date} - When the user was last updated
+   * @throws {Error} - If user is not found or if new username already exists
    */
   async updateUser(id, userData) {
     try {
@@ -123,7 +155,6 @@ class UserService {
         throw new Error('User not found');
       }
       
-      // If updating username, check if it already exists
       if (userData.username && userData.username !== user.username) {
         const existingUser = await User.findOne({
           where: { username: userData.username }
@@ -134,7 +165,6 @@ class UserService {
         }
       }
       
-      // Prepare update data
       const updateData = {};
       
       if (userData.username) updateData.username = userData.username;
@@ -142,10 +172,8 @@ class UserService {
       if (userData.role) updateData.role = userData.role;
       if (userData.is_active !== undefined) updateData.is_active = userData.is_active;
       
-      // Update user
       await user.update(updateData);
       
-      // Fetch updated user
       const updatedUser = await User.findByPk(id, {
         attributes: { exclude: ['password_hash'] }
       });
@@ -158,8 +186,9 @@ class UserService {
 
   /**
    * Delete a user (set inactive)
-   * @param {number} id - User ID
-   * @returns {boolean} - Success status
+   * @param {number} id - User ID to delete
+   * @returns {boolean} - Success status (true if user was successfully set to inactive)
+   * @throws {Error} - If user is not found
    */
   async deleteUser(id) {
     try {
@@ -169,7 +198,6 @@ class UserService {
         throw new Error('User not found');
       }
       
-      // Instead of deleting, set user as inactive
       await user.update({ is_active: false });
       
       return true;
@@ -181,7 +209,14 @@ class UserService {
   /**
    * Reactivate an inactive user
    * @param {number} id - User ID to reactivate
-   * @returns {Promise<Object>} The reactivated user
+   * @returns {Promise<Object>} - The reactivated user data with the following properties:
+   *   - id {number} - User ID
+   *   - username {string} - Username
+   *   - role {string} - User role (admin/user)
+   *   - is_active {boolean} - Will be true after reactivation
+   *   - created_at {Date} - When the user was created
+   *   - updated_at {Date} - When the user was last updated
+   * @throws {Error} - If user is not found or is already active
    */
   async reactivateUser(id) {
     const user = await User.findByPk(id);
@@ -196,7 +231,6 @@ class UserService {
     
     await user.update({ is_active: true });
     
-    // Return user without sensitive information
     const { password, ...userData } = user.toJSON();
     return userData;
   }

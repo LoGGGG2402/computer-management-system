@@ -14,29 +14,23 @@ const ROOM_PREFIXES = {
 };
 
 const EVENTS = {
-  // Admin specific
+// Admin specific
   ADMIN_NEW_AGENT_MFA: 'admin:new_agent_mfa',
   ADMIN_AGENT_REGISTERED: 'admin:agent_registered',
-  // Agent -> Server / Server -> Agent
-  COMMAND_EXECUTE: 'command:execute', // Server -> Agent
-  // Server -> Frontend/Subscribers
+  COMMAND_EXECUTE: 'command:execute',
   COMPUTER_STATUS_UPDATED: 'computer:status_updated',
-  COMMAND_COMPLETED: 'command:completed', // Server -> User
+  COMMAND_COMPLETED: 'command:completed',
 };
 
-const PENDING_COMMAND_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-const AGENT_OFFLINE_CHECK_DELAY_MS = 1500; // 1.5 seconds
+const PENDING_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
+const AGENT_OFFLINE_CHECK_DELAY_MS = 1500;
 
 class WebSocketService {
 
-  // --- Initialization ---
-
   constructor() {
     this.io = null;
-    this.computerService = null; // To inject computerService
-    // Use Map to store agent realtime status
-    this.agentRealtimeStatus = new Map(); // Map<computerId, { status, cpuUsage, ..., lastUpdated }>
-    // Map to store pending commands (commandId -> { userId, computerId, timestamp, timeoutId })
+    this.computerService = null;
+    this.agentRealtimeStatus = new Map();
     this.pendingCommands = new Map();
 
     logger.info('WebSocketService initialized (using Map for agent status)');
@@ -54,8 +48,6 @@ class WebSocketService {
     this.io = io;
     logger.info('Socket.IO instance has been set in WebSocketService');
   }
-
-    // --- Internal Helpers ---
 
   /**
    * Ensures the Socket.IO instance is initialized.
@@ -91,17 +83,18 @@ class WebSocketService {
     }
   }
 
-  // --- Admin Notifications ---
-
   /**
    * Notifies admin users about a new MFA code for an agent.
    * @param {string} agentId - The unique agent ID.
    * @param {string} mfaCode - The generated MFA code.
    * @param {Object} [positionInfo={}] - Additional information (e.g., computer lab).
+   * @param {number} [positionInfo.roomId] - Room ID where the agent is located.
+   * @param {number} [positionInfo.posX] - X position in the room grid.
+   * @param {number} [positionInfo.posY] - Y position in the room grid.
+   * @param {string} [positionInfo.roomName] - Name of the room where the agent is located.
    */
-  notifyAdminsNewMfa(agentId, mfaCode, positionInfo = {}) {
+  notifyAdminsNewMfa(mfaCode, positionInfo = {}) {
     const eventData = {
-      unique_agent_id: agentId,
       mfaCode,
       positionInfo,
       timestamp: new Date(),
@@ -124,12 +117,16 @@ class WebSocketService {
     logger.info(`Agent registration notification sent for agent ${agentId} (Computer ID: ${computerId})`);
   }
 
-  // --- Agent Status Management ---
-
   /**
    * Updates the realtime cache for a computer (uses Map).
    * @param {number} computerId - The computer ID.
    * @param {object} data - The status data to update.
+   * @param {string} [data.status] - Computer status (online/offline).
+   * @param {number} [data.cpuUsage] - CPU usage percentage.
+   * @param {number} [data.ramUsage] - RAM usage percentage.
+   * @param {number} [data.diskUsage] - Disk usage percentage.
+   * @param {string} [data.osInfo] - Operating system information.
+   * @param {string} [data.error] - Any error message from the agent.
    */
   updateRealtimeCache(computerId, data) {
     if (!computerId || typeof computerId !== 'number') {
@@ -169,6 +166,14 @@ class WebSocketService {
    * Retrieves the realtime status and system information for an agent from the cache (Map).
    * @param {number} computerId - The computer ID.
    * @returns {object | null} A copy of the agent's status data, or null if not found.
+   * Contains fields such as:
+   * - status: "online" | "offline" - Current connection status.
+   * - cpuUsage: number - CPU usage percentage.
+   * - ramUsage: number - RAM usage percentage.
+   * - diskUsage: number - Disk usage percentage.
+   * - lastUpdated: Date - Timestamp of the last status update.
+   * - error: string - Any error message, if present.
+   * - osInfo: object - Information about the operating system.
    */
   getAgentRealtimeStatus(computerId) {
     if (!computerId) return null;
@@ -179,6 +184,8 @@ class WebSocketService {
   /**
    * Handles an agent's disconnection. Removes status from Map after confirming offline state.
    * @param {import("socket.io").Socket} socket - The disconnected socket instance.
+   * @param {Object} socket.data - Socket metadata.
+   * @param {number} socket.data.computerId - The computer ID associated with this socket.
    */
   async handleAgentDisconnect(socket) {
     const computerId = socket.data?.computerId;
@@ -261,8 +268,6 @@ class WebSocketService {
     }
   }
 
-  // --- Command Handling ---
-
   /**
    * Stores a pending command.
    * @param {string} commandId - The command ID.
@@ -332,7 +337,10 @@ class WebSocketService {
   /**
    * Notifies the initiating user about command completion.
    * @param {string} commandId - The command ID.
-   * @param {object} result - The command execution result from the agent ({ stdout, stderr, exitCode }).
+   * @param {object} result - The command execution result from the agent.
+   * @param {string} result.stdout - Standard output from the command.
+   * @param {string} result.stderr - Standard error from the command.
+   * @param {number} result.exitCode - Exit code from the command.
    */
   notifyCommandCompletion(commandId, result) {
      if (!commandId || !result) {
@@ -372,8 +380,6 @@ class WebSocketService {
 
 }
 
-// Export a singleton instance
 module.exports = new WebSocketService();
-// export constants for use in other modules
 module.exports.EVENTS = EVENTS;
 module.exports.ROOM_PREFIXES = ROOM_PREFIXES;

@@ -13,13 +13,14 @@ class RoomService {
   /**
    * Validate room layout structure
    * @param {Object} layout - Room layout configuration
-   * @returns {boolean} - Validation result
+   * @param {number} layout.columns - Number of columns in the room grid
+   * @param {number} layout.rows - Number of rows in the room grid
+   * @returns {boolean} - Validation result (true if layout is valid)
    */
   validateLayout(layout) {
     try {
       if (!layout) return false;
 
-      // Check required properties
       if (
         !layout.columns ||
         !layout.rows
@@ -27,7 +28,6 @@ class RoomService {
         return false;
       }
 
-      // Validate data types
       if (
         typeof layout.columns !== "number" ||
         typeof layout.rows !== "number"
@@ -35,7 +35,6 @@ class RoomService {
         return false;
       }
 
-      // Validate values
       if (
         layout.columns <= 0 ||
         layout.rows <= 0
@@ -51,12 +50,24 @@ class RoomService {
 
   /**
    * Get all rooms with pagination and filters
-   * @param {number} page - Page number
+   * @param {number} page - Page number (starts from 1)
    * @param {number} limit - Number of items per page
-   * @param {string} name - Filter by room name
+   * @param {string} name - Filter by room name (case-insensitive partial match)
    * @param {number} assigned_user_id - Filter by assigned user ID
    * @param {Object} user - Current user object
-   * @returns {Object} - Paginated rooms list
+   * @param {number} user.id - User ID
+   * @param {string} user.role - User role ('admin' or 'user')
+   * @returns {Object} - Paginated rooms list with the following properties:
+   *   - total {number} - Total number of rooms matching the criteria
+   *   - currentPage {number} - Current page number
+   *   - totalPages {number} - Total number of pages
+   *   - rooms {Array<Object>} - Array of room objects, each containing:
+   *     - id {number} - Room ID
+   *     - name {string} - Room name
+   *     - description {string} - Room description
+   *     - layout {Object} - Room layout configuration with columns and rows
+   *     - created_at {Date} - When the room was created
+   *     - updated_at {Date} - When the room was last updated
    */
   async getAllRooms(page = 1, limit = 10, name = "", assigned_user_id = null, user) {
     try {
@@ -67,9 +78,7 @@ class RoomService {
         whereClause.name = { [Op.iLike]: `%${name}%` };
       }
 
-      // If not admin, only get rooms that user has access to
       if (user.role !== "admin") {
-        // Find all room IDs user has access to
         const userAssignments = await UserRoomAssignment.findAll({
           where: { user_id: user.id },
           attributes: ["room_id"],
@@ -77,20 +86,17 @@ class RoomService {
 
         const roomIds = userAssignments.map((assignment) => assignment.room_id);
 
-        // Add room IDs to where clause
         whereClause.id = { [Op.in]: roomIds };
       }
 
-      // Define include criteria for query
       let include = [];
       
-      // If filtering by assigned user, modify the query to include that filter
       if (assigned_user_id) {
         include.push({
           model: User,
           as: 'assignedUsers',
-          attributes: [], // Don't include user data in the result
-          through: { attributes: [] }, // Don't include junction table
+          attributes: [], 
+          through: { attributes: [] }, 
           where: { id: assigned_user_id }
         });
       }
@@ -98,7 +104,7 @@ class RoomService {
       const { count, rows } = await Room.findAndCountAll({
         where: whereClause,
         include,
-        distinct: true, // This is important when using includes to get accurate count
+        distinct: true, 
         limit,
         offset,
         order: [["id", "ASC"]],
@@ -118,7 +124,28 @@ class RoomService {
   /**
    * Get room by ID with computers
    * @param {number} id - Room ID
-   * @returns {Object} - Room data with computers
+   * @returns {Object} - Room data object with the following properties:
+   *   - id {number} - Room ID
+   *   - name {string} - Room name
+   *   - description {string} - Room description
+   *   - layout {Object} - Room layout configuration with columns and rows
+   *   - created_at {Date} - When the room was created
+   *   - updated_at {Date} - When the room was last updated
+   *   - computers {Array<Object>} - Array of computers in this room, each containing:
+   *     - id {number} - Computer ID
+   *     - name {string} - Computer name
+   *     - status {string} - Status ('online' or 'offline')
+   *     - pos_x {number} - X position in room grid
+   *     - pos_y {number} - Y position in room grid
+   *     - room_id {number} - ID of the room this computer belongs to
+   *     - has_active_errors {boolean} - Whether the computer has active errors
+   *     - last_update {Date} - When the computer was last updated
+   *     - os_info {Object} - Operating system information
+   *     - cpu_info {Object} - CPU information
+   *     - gpu_info {Object} - GPU information
+   *     - total_ram {number} - Total RAM in GB
+   *     - total_disk_space {number} - Total disk space in GB
+   * @throws {Error} - If room is not found
    */
   async getRoomById(id) {
     try {
@@ -152,16 +179,26 @@ class RoomService {
   /**
    * Create a new room
    * @param {Object} roomData - Room data
-   * @returns {Object} - Created room
+   * @param {string} roomData.name - Room name
+   * @param {string} [roomData.description=''] - Room description
+   * @param {Object} [roomData.layout={}] - Room layout configuration
+   * @param {number} [roomData.layout.columns] - Number of columns in the room grid
+   * @param {number} [roomData.layout.rows] - Number of rows in the room grid
+   * @returns {Object} - Created room data with the following properties:
+   *   - id {number} - Room ID
+   *   - name {string} - Room name
+   *   - description {string} - Room description
+   *   - layout {Object} - Room layout configuration
+   *   - created_at {Date} - When the room was created
+   *   - updated_at {Date} - When the room was last updated
+   * @throws {Error} - If room layout format is invalid
    */
   async createRoom(roomData) {
     try {
-      // Validate layout
       if (roomData.layout && !this.validateLayout(roomData.layout)) {
         throw new Error("Invalid room layout format");
       }
 
-      // Create room
       const room = await Room.create({
         name: roomData.name,
         description: roomData.description || "",
@@ -176,9 +213,21 @@ class RoomService {
 
   /**
    * Update a room
-   * @param {number} id - Room ID
+   * @param {number} id - Room ID to update
    * @param {Object} roomData - Room data to update
-   * @returns {Object} - Updated room
+   * @param {string} [roomData.name] - New room name
+   * @param {string} [roomData.description] - New room description
+   * @param {Object} [roomData.layout] - New room layout configuration
+   * @param {number} [roomData.layout.columns] - Number of columns in the room grid
+   * @param {number} [roomData.layout.rows] - Number of rows in the room grid
+   * @returns {Object} - Updated room data with the following properties:
+   *   - id {number} - Room ID
+   *   - name {string} - Room name
+   *   - description {string} - Room description
+   *   - layout {Object} - Room layout configuration
+   *   - created_at {Date} - When the room was created
+   *   - updated_at {Date} - When the room was last updated
+   * @throws {Error} - If room is not found or layout format is invalid
    */
   async updateRoom(id, roomData) {
     try {
@@ -188,12 +237,10 @@ class RoomService {
         throw new Error("Room not found");
       }
 
-      // Validate layout if provided
       if (roomData.layout && !this.validateLayout(roomData.layout)) {
         throw new Error("Invalid room layout format");
       }
 
-      // Prepare update data
       const updateData = {};
 
       if (roomData.name !== undefined) updateData.name = roomData.name;
@@ -201,10 +248,8 @@ class RoomService {
         updateData.description = roomData.description;
       if (roomData.layout !== undefined) updateData.layout = roomData.layout;
 
-      // Update room
       await room.update(updateData);
 
-      // Fetch updated room
       const updatedRoom = await Room.findByPk(id);
 
       return updatedRoom;
@@ -215,8 +260,9 @@ class RoomService {
 
   /**
    * Delete a room
-   * @param {number} id - Room ID
-   * @returns {boolean} - Success status
+   * @param {number} id - Room ID to delete
+   * @returns {boolean} - Success status (true if room was successfully deleted)
+   * @throws {Error} - If room is not found
    */
   async deleteRoom(id) {
     try {
@@ -226,7 +272,6 @@ class RoomService {
         throw new Error("Room not found");
       }
 
-      // Delete room (will cascade delete related assignments and computers)
       await room.destroy();
 
       return true;
@@ -237,9 +282,10 @@ class RoomService {
 
   /**
    * Assign users to a room
-   * @param {number} roomId - Room ID
+   * @param {number} roomId - Room ID to assign users to
    * @param {number[]} userIds - Array of user IDs to assign
    * @returns {number} - Number of assignments created
+   * @throws {Error} - If room is not found or one or more users are not found
    */
   async assignUsersToRoom(roomId, userIds) {
     try {
@@ -249,7 +295,6 @@ class RoomService {
         throw new Error("Room not found");
       }
 
-      // Validate all users exist
       const users = await User.findAll({
         where: { id: { [Op.in]: userIds } },
       });
@@ -258,13 +303,11 @@ class RoomService {
         throw new Error("One or more users not found");
       }
 
-      // Prepare assignments data
       const assignments = userIds.map((userId) => ({
         user_id: userId,
         room_id: roomId,
       }));
 
-      // Create assignments (ignore duplicates)
       const result = await UserRoomAssignment.bulkCreate(assignments, {
         ignoreDuplicates: true,
       });
@@ -277,9 +320,10 @@ class RoomService {
 
   /**
    * Remove user assignments from a room
-   * @param {number} roomId - Room ID
+   * @param {number} roomId - Room ID to remove users from
    * @param {number[]} userIds - Array of user IDs to unassign
    * @returns {number} - Number of assignments removed
+   * @throws {Error} - If room is not found
    */
   async unassignUsersFromRoom(roomId, userIds) {
     try {
@@ -289,7 +333,6 @@ class RoomService {
         throw new Error("Room not found");
       }
 
-      // Delete assignments
       const result = await UserRoomAssignment.destroy({
         where: {
           room_id: roomId,
@@ -305,8 +348,15 @@ class RoomService {
 
   /**
    * Get users assigned to a room
-   * @param {number} roomId - Room ID
-   * @returns {Array} - List of assigned users
+   * @param {number} roomId - Room ID to get assigned users for
+   * @returns {Array<Object>} - List of assigned users, each containing:
+   *   - id {number} - User ID
+   *   - username {string} - Username
+   *   - role {string} - User role (admin/user)
+   *   - is_active {boolean} - Whether the user is active
+   *   - created_at {Date} - When the user was created
+   *   - updated_at {Date} - When the user was last updated
+   * @throws {Error} - If room is not found
    */
   async getUsersInRoom(roomId) {
     try {
@@ -316,14 +366,13 @@ class RoomService {
         throw new Error("Room not found");
       }
 
-      // Get users assigned to the room
       const users = await User.findAll({
         include: [
           {
             model: Room,
             as: "assignedRooms",
             where: { id: roomId },
-            through: { attributes: [] }, // Don't include junction table
+            through: { attributes: [] },
           },
         ],
         attributes: { exclude: ["password_hash"] },
@@ -338,13 +387,21 @@ class RoomService {
   /**
    * Check if a position in a room is available
    * @param {string} roomName - Room name
-   * @param {number} posX - X position
-   * @param {number} posY - Y position
-   * @returns {Object} - Result {valid: boolean, message: string, room: Object}
+   * @param {number} posX - X position in the room grid
+   * @param {number} posY - Y position in the room grid
+   * @returns {Object} - Result with the following properties:
+   *   - valid {boolean} - Whether the position is available
+   *   - message {string} - Description message about the position status
+   *   - room {Object} - Room data if found, null otherwise, containing:
+   *     - id {number} - Room ID
+   *     - name {string} - Room name
+   *     - description {string} - Room description
+   *     - layout {Object} - Room layout configuration with columns and rows
+   *     - computers {Array<Object>} - Array of computers in this room
+   * @throws {Error} - If there's an error checking the position
    */
   async isPositionAvailable(roomName, posX, posY) {
     try {
-      // Find the room by name
       const room = await Room.findOne({
         where: { name: roomName },
         include: [{
@@ -354,7 +411,6 @@ class RoomService {
         }]
       });
 
-      // If room doesn't exist
       if (!room) {
         return { 
           valid: false, 
@@ -363,7 +419,6 @@ class RoomService {
         };
       }
 
-      // Validate position against room dimensions
       if (!room.layout || !room.layout.columns || !room.layout.rows) {
         return { 
           valid: false, 
@@ -372,7 +427,6 @@ class RoomService {
         };
       }
 
-      // Check if position is within room bounds
       if (posX < 0 || posX >= room.layout.columns || posY < 0 || posY >= room.layout.rows) {
         return { 
           valid: false, 
@@ -381,7 +435,6 @@ class RoomService {
         };
       }
 
-      // Check if position is already occupied by another computer
       const isOccupied = room.computers.some(
         comp => comp.pos_x === posX && comp.pos_y === posY
       );
@@ -394,29 +447,27 @@ class RoomService {
         };
       }
 
-      // Position is valid and available
       return { 
         valid: true, 
         message: "Vị trí hợp lệ và khả dụng", 
         room 
       };
     } catch (error) {
-      console.error("Error checking position availability:", error);
       throw error;
     }
   }
 
   /**
-   * Get id by room name
-   * @param {string} roomName - Room name
-   * @returns {number|null} - Room ID or null if not found
+   * Get room ID by room name
+   * @param {string} roomName - Room name to look up
+   * @returns {number|null} - Room ID if found, null otherwise
+   * @throws {Error} - If there's an error fetching the room
    */
   async getRoomIdByName(roomName) {
     try {
       const room = await Room.findOne({ where: { name: roomName } });
       return room ? room.id : null;
     } catch (error) {
-      console.error("Error fetching room ID by name:", error);
       throw error;
     }
   }

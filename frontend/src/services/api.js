@@ -1,106 +1,80 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+/**
+ * API service configuration for backend communication
+ * @module api
+ */
+
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 /**
- * Create a configured axios instance for API requests
+ * Configured axios instance for API communications
  */
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json'
   }
 });
 
 /**
- * Set auth token for API requests
- * @param {string} token - JWT token
+ * Request interceptor to add authentication token to requests
  */
-const setAuthToken = (token) => {
-  if (token) {
-    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  } else {
-    delete api.defaults.headers.common['Authorization'];
-  }
-};
-
-/**
- * Remove auth token from API requests
- */
-const removeAuthToken = () => {
-  delete api.defaults.headers.common['Authorization'];
-};
-
-/**
- * Extract error message from API error response
- * @param {Error} error - Axios error object
- * @returns {string} - Extracted error message
- */
-const extractErrorMessage = (error) => {
-  // Default error message
-  let errorMessage = 'An error occurred. Please try again.';
-  
-  if (error.response) {
-    // The request was made and the server responded with a status code
-    // that falls out of the range of 2xx
-    const { data, status } = error.response;
-    
-    // Try to extract message from various response formats
-    if (data) {
-      if (data.message) {
-        errorMessage = data.message;
-      } else if (data.error) {
-        errorMessage = data.error;
-      } else if (data.status === 'error' && data.message) {
-        errorMessage = data.message;
-      } else if (typeof data === 'string') {
-        errorMessage = data;
+api.interceptors.request.use(
+  (config) => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        if (user && user.token) {
+          config.headers['Authorization'] = `Bearer ${user.token}`;
+        }
+      } catch (error) {
+        console.error('Error parsing user data:', error);
       }
     }
-    
-    // Add status code for non-401 errors (401 handled separately)
-    if (status !== 401) {
-      errorMessage = `${errorMessage} (Status: ${status})`;
-    }
-  } else if (error.request) {
-    // The request was made but no response was received
-    errorMessage = 'No response from server. Please check your connection.';
-  } else {
-    // Something happened in setting up the request
-    errorMessage = error.message || errorMessage;
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-  
-  return errorMessage;
-};
+);
 
-// Add response interceptor for handling errors
+/**
+ * Response interceptor to handle errors and extract messages
+ */
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Extract error message
-    const errorMessage = extractErrorMessage(error);
-    
-    // Handle 401 Unauthorized errors (e.g., token expired)
-    if (error.response && error.response.status === 401) {
-      // Clear local storage and redirect to login
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+    if (error.response) {
+      // Extract error message from response
+      const errorMessage = error.response.data?.message || 'Unknown server error';
+      
+      // Handle authentication errors
+      if (error.response.status === 401) {
+        // If not a login request, clear local storage
+        if (!error.config.url.includes('/auth/login')) {
+          localStorage.removeItem('user');
+          
+          // Redirect to login page if not already there
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
+        }
+      }
+      
+      // Attach extracted message to the error for easy access
+      error.extractedMessage = errorMessage;
+    } else if (error.request) {
+      // Request was made but no response received
+      error.extractedMessage = 'No response from server. Please check your network connection.';
+    } else {
+      // Something happened in setting up the request
+      error.extractedMessage = 'Request configuration error: ' + error.message;
     }
-    
-    // Enhance error object with extracted message for easier handling
-    error.extractedMessage = errorMessage;
     
     return Promise.reject(error);
   }
 );
 
-export default {
-  api,
-  setAuthToken,
-  removeAuthToken,
-  extractErrorMessage,
-  get: api.get,
-  post: api.post,
-  put: api.put,
-  delete: api.delete
-};
+export default api;

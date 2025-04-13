@@ -7,7 +7,31 @@ class RoomController {
   /**
    * Get all rooms with pagination
    * @param {Object} req - Express request object
+   * @param {Object} req.query - Query parameters
+   * @param {number} [req.query.page=1] - Page number for pagination
+   * @param {number} [req.query.limit=10] - Number of rooms per page
+   * @param {string} [req.query.name] - Filter by room name (partial match)
+   * @param {number} [req.query.assigned_user_id] - Filter by assigned user ID
+   * @param {Object} req.user - Authenticated user object
+   * @param {string} req.user.role - User role ('admin' or 'user')
+   * @param {number} req.user.id - User ID
    * @param {Object} res - Express response object
+   * @returns {Object} JSON response with:
+   *   - status {string} - 'success' or 'error'
+   *   - data {Object} - Pagination result with:
+   *     - total {number} - Total number of rooms matching criteria
+   *     - currentPage {number} - Current page number
+   *     - totalPages {number} - Total number of pages
+   *     - rooms {Array<Object>} - Array of room objects:
+   *       - id {number} - Room ID
+   *       - name {string} - Room name
+   *       - description {string} - Room description
+   *       - layout {Object} - Room layout configuration
+   *         - columns {number} - Number of columns in the room grid
+   *         - rows {number} - Number of rows in the room grid
+   *       - created_at {Date} - When room was created
+   *       - updated_at {Date} - When room was last updated
+   *   - message {string} - Error message (only if status is 'error')
    */
   async getAllRooms(req, res) {
     try {
@@ -33,7 +57,35 @@ class RoomController {
   /**
    * Get room by ID with computers
    * @param {Object} req - Express request object
+   * @param {Object} req.params - Route parameters
+   * @param {string} req.params.id - Room ID to retrieve
    * @param {Object} res - Express response object
+   * @returns {Object} JSON response with:
+   *   - status {string} - 'success' or 'error'
+   *   - data {Object} - Room object with:
+   *     - id {number} - Room ID
+   *     - name {string} - Room name
+   *     - description {string} - Room description
+   *     - layout {Object} - Room layout configuration
+   *       - columns {number} - Number of columns in the room grid
+   *       - rows {number} - Number of rows in the room grid
+   *     - created_at {Date} - When room was created
+   *     - updated_at {Date} - When room was last updated
+   *     - computers {Array<Object>} - Array of computers in this room:
+   *       - id {number} - Computer ID
+   *       - name {string} - Computer name
+   *       - status {string} - Computer status ('online'/'offline') 
+   *       - has_active_errors {boolean} - Whether computer has active errors
+   *       - last_update {Date} - When computer was last updated
+   *       - room_id {number} - ID of the room this computer belongs to
+   *       - pos_x {number} - X position in room grid
+   *       - pos_y {number} - Y position in room grid
+   *       - os_info {Object} - Operating system information
+   *       - cpu_info {Object} - CPU information
+   *       - gpu_info {Object} - GPU information
+   *       - total_ram {number} - Total RAM in GB
+   *       - total_disk_space {number} - Total disk space in GB
+   *   - message {string} - Error message (only if status is 'error')
    */
   async getRoomById(req, res) {
     try {
@@ -63,7 +115,25 @@ class RoomController {
   /**
    * Create a new room
    * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.name - Name for the new room
+   * @param {string} [req.body.description] - Description for the new room
+   * @param {Object} [req.body.layout] - Layout configuration for the new room
+   * @param {number} [req.body.layout.columns] - Number of columns in the room grid
+   * @param {number} [req.body.layout.rows] - Number of rows in the room grid
    * @param {Object} res - Express response object
+   * @returns {Object} JSON response with:
+   *   - status {string} - 'success' or 'error'
+   *   - data {Object} - Created room object:
+   *     - id {number} - Room ID
+   *     - name {string} - Room name
+   *     - description {string} - Room description
+   *     - layout {Object} - Room layout configuration
+   *       - columns {number} - Number of columns in the room grid
+   *       - rows {number} - Number of rows in the room grid
+   *     - created_at {Date} - When room was created
+   *     - updated_at {Date} - When room was last updated
+   *   - message {string} - Success or error message
    */
   async createRoom(req, res) {
     try {
@@ -100,7 +170,27 @@ class RoomController {
   /**
    * Update a room
    * @param {Object} req - Express request object
+   * @param {Object} req.params - Route parameters
+   * @param {string} req.params.id - Room ID to update
+   * @param {Object} req.body - Request body
+   * @param {string} [req.body.name] - New name for the room
+   * @param {string} [req.body.description] - New description for the room
+   * @param {Object} [req.body.layout] - New layout configuration for the room
+   * @param {number} [req.body.layout.columns] - Number of columns in the room grid
+   * @param {number} [req.body.layout.rows] - Number of rows in the room grid
    * @param {Object} res - Express response object
+   * @returns {Object} JSON response with:
+   *   - status {string} - 'success' or 'error'
+   *   - data {Object} - Updated room object:
+   *     - id {number} - Room ID
+   *     - name {string} - Room name
+   *     - description {string} - Room description
+   *     - layout {Object} - Room layout configuration
+   *       - columns {number} - Number of columns in the room grid
+   *       - rows {number} - Number of rows in the room grid
+   *     - created_at {Date} - When room was created
+   *     - updated_at {Date} - When room was last updated
+   *   - message {string} - Success or error message
    */
   async updateRoom(req, res) {
     try {
@@ -138,7 +228,12 @@ class RoomController {
   /**
    * Delete a room
    * @param {Object} req - Express request object
+   * @param {Object} req.params - Route parameters
+   * @param {string} req.params.id - Room ID to delete
    * @param {Object} res - Express response object
+   * @returns {Object} JSON response with:
+   *   - status {string} - 'success' or 'error'
+   *   - message {string} - Success or error message
    */
   async deleteRoom(req, res) {
     try {
@@ -168,7 +263,16 @@ class RoomController {
   /**
    * Assign users to a room
    * @param {Object} req - Express request object
+   * @param {Object} req.params - Route parameters
+   * @param {string} req.params.roomId - Room ID to assign users to
+   * @param {Object} req.body - Request body
+   * @param {number[]} req.body.userIds - Array of user IDs to assign to the room
    * @param {Object} res - Express response object
+   * @returns {Object} JSON response with:
+   *   - status {string} - 'success' or 'error'
+   *   - data {Object} - Assignment result:
+   *     - count {number} - Number of users successfully assigned
+   *   - message {string} - Success or error message
    */
   async assignUsersToRoom(req, res) {
     try {
@@ -200,7 +304,16 @@ class RoomController {
   /**
    * Unassign users from a room
    * @param {Object} req - Express request object
+   * @param {Object} req.params - Route parameters
+   * @param {string} req.params.roomId - Room ID to unassign users from
+   * @param {Object} req.body - Request body
+   * @param {number[]} req.body.userIds - Array of user IDs to unassign from the room
    * @param {Object} res - Express response object
+   * @returns {Object} JSON response with:
+   *   - status {string} - 'success' or 'error'
+   *   - data {Object} - Unassignment result:
+   *     - count {number} - Number of users successfully unassigned
+   *   - message {string} - Success or error message
    */
   async unassignUsersFromRoom(req, res) {
     try {
@@ -232,7 +345,20 @@ class RoomController {
   /**
    * Get users assigned to a room
    * @param {Object} req - Express request object
+   * @param {Object} req.params - Route parameters
+   * @param {string} req.params.roomId - Room ID to get assigned users for
    * @param {Object} res - Express response object
+   * @returns {Object} JSON response with:
+   *   - status {string} - 'success' or 'error'
+   *   - data {Object} - Users result:
+   *     - users {Array<Object>} - Array of user objects:
+   *       - id {number} - User ID
+   *       - username {string} - Username
+   *       - role {string} - User role (admin/user)
+   *       - is_active {boolean} - Whether user is active
+   *       - created_at {Date} - When user was created
+   *       - updated_at {Date} - When user was last updated
+   *   - message {string} - Error message (only if status is 'error')
    */
   async getUsersInRoom(req, res) {
     try {

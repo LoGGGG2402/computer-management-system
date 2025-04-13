@@ -6,9 +6,16 @@ import api from './api';
 class AuthService {
   /**
    * Login user and get token
-   * @param {string} username - Username
-   * @param {string} password - Password
-   * @returns {Object} - User data with token
+   * @param {string} username - Username for authentication
+   * @param {string} password - Password for authentication
+   * @returns {Promise<Object>} User data with:
+   *   - id {number} - User ID
+   *   - username {string} - Username
+   *   - role {string} - User role ('admin' or 'user')
+   *   - is_active {boolean} - Whether the user account is active
+   *   - token {string} - JWT authentication token
+   *   - expires_at {string} - Token expiration timestamp
+   * @throws {Error} If login fails
    */
   async login(username, password) {
     try {
@@ -30,7 +37,7 @@ class AuthService {
   }
 
   /**
-   * Logout user
+   * Logout user by removing stored data
    */
   logout() {
     localStorage.removeItem('user');
@@ -38,7 +45,13 @@ class AuthService {
 
   /**
    * Get current user data from local storage
-   * @returns {Object|null} - User data or null
+   * @returns {Object|null} User data with:
+   *   - id {number} - User ID
+   *   - username {string} - Username
+   *   - role {string} - User role ('admin' or 'user')
+   *   - is_active {boolean} - Whether the user account is active
+   *   - token {string} - JWT authentication token
+   *   - expires_at {string} - Token expiration timestamp
    */
   getCurrentUser() {
     const userStr = localStorage.getItem('user');
@@ -53,8 +66,15 @@ class AuthService {
   }
 
   /**
-   * Get user profile
-   * @returns {Promise} - User profile data
+   * Get user profile from the server
+   * @returns {Promise<Object>} User profile data with:
+   *   - id {number} - User ID
+   *   - username {string} - Username
+   *   - role {string} - User role ('admin' or 'user')
+   *   - is_active {boolean} - Whether the user account is active
+   *   - created_at {Date} - When the user was created
+   *   - updated_at {Date} - When the user was last updated
+   * @throws {Error} If profile fetch fails
    */
   async getProfile() {
     try {
@@ -68,23 +88,8 @@ class AuthService {
   }
 
   /**
-   * Get rooms assigned to the current user
-   * @returns {Promise} - User's assigned rooms
-   */
-  async getUserRooms() {
-    try {
-      const response = await api.get('/rooms');
-      return response.data.data.rooms;
-    } catch (error) {
-      const errorMessage = error.extractedMessage || 'Failed to fetch user rooms';
-      console.error('Rooms error:', errorMessage);
-      throw new Error(errorMessage);
-    }
-  }
-
-  /**
    * Check if user is authenticated
-   * @returns {boolean} - Authentication status
+   * @returns {boolean} Authentication status
    */
   isAuthenticated() {
     return !!this.getCurrentUser()?.token;

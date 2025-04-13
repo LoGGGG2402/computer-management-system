@@ -10,18 +10,33 @@ class AgentController {
   /**
    * Handle agent identification request
    * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.unique_agent_id - Unique identifier for the agent
+   * @param {Object} req.body.positionInfo - Information about agent's physical position
+   * @param {string} req.body.positionInfo.roomName - Name of the room where the agent is located
+   * @param {number} req.body.positionInfo.posX - X position in the room grid
+   * @param {number} req.body.positionInfo.posY - Y position in the room grid
+   * @param {boolean} [req.body.forceRenewToken] - Whether to force token renewal
    * @param {Object} res - Express response object
    * @param {Function} next - Express next middleware function
+   * @returns {Object} JSON response with one of the following formats:
+   *   - If agent exists with token already assigned:
+   *     - status {string} - 'success'
+   *   - If position is valid and MFA is required:
+   *     - status {string} - 'mfa_required'
+   *   - If position is invalid:
+   *     - status {string} - 'position_error'
+   *     - message {string} - Detailed error message about position
+   *   - If token renewal is requested:
+   *     - status {string} - 'success'
+   *     - agentToken {string} - New plain text token for agent authentication
+   *   - If error occurs:
+   *     - status {string} - 'error'
+   *     - message {string} - Error message
    */
   async handleIdentifyRequest(req, res, next) {
     try {
       const { unique_agent_id, positionInfo, forceRenewToken } = req.body;
-
-      console.log("[AgentController] Received identify request:", {
-        unique_agent_id,
-        positionInfo,
-        forceRenewToken,
-      });
 
       if (!unique_agent_id) {
         return res.status(400).json({
@@ -30,28 +45,21 @@ class AgentController {
         });
       }
 
-      // Check if computer with this agent ID exists and has a token
       const computer = await computerService.findComputerByAgentId(
         unique_agent_id
       );
-      console.log("[AgentController] Found computer:", computer);
 
-      // Kiểm tra nếu client yêu cầu cấp mới token và computer đã tồn tại trong database
       if (forceRenewToken && computer) {
         if (computer.room.name === positionInfo.roomName,
           computer.pos_x === positionInfo.posX,
           computer.pos_y === positionInfo.posY)
           {
-
-        console.log("[AgentController] Client requested token renewal");
-        // Generate and assign a new token for the agent
         const { plainToken } =
           await computerService.generateAndAssignAgentToken(
             unique_agent_id,
             null,
             computer
           );
-
 
         return res.status(200).json({
           status: "success",
@@ -61,13 +69,11 @@ class AgentController {
       }
 
       if (computer && computer.agent_token_hash) {
-        console.log("[AgentController] Agent exists, token already assigned");
         return res.status(200).json({
           status: "success",
         });
       }
 
-      // Check if position is available
       let resulst = await roomService.isPositionAvailable(
         positionInfo.roomName,
         positionInfo.posX,
@@ -83,7 +89,6 @@ class AgentController {
           }
         );
         websocketService.notifyAdminsNewMfa(
-          unique_agent_id,
           mfacode,
           positionInfo
         );
@@ -97,7 +102,6 @@ class AgentController {
         });
       }
     } catch (error) {
-      console.error("[AgentController] Error in handleIdentifyRequest:", error);
       return res.status(500).json({
         status: "error",
         message: "Internal server error",
@@ -108,17 +112,22 @@ class AgentController {
   /**
    * Handle agent MFA verification
    * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.unique_agent_id - Unique identifier for the agent
+   * @param {string} req.body.mfaCode - MFA code to verify
    * @param {Object} res - Express response object
    * @param {Function} next - Express next middleware function
+   * @returns {Object} JSON response with one of the following formats:
+   *   - If MFA verification is successful:
+   *     - status {string} - 'success'
+   *     - agentToken {string} - Plain text token for agent authentication
+   *   - If MFA verification fails:
+   *     - status {string} - 'error'
+   *     - message {string} - Error message
    */
   async handleVerifyMfa(req, res, next) {
     try {
       const { unique_agent_id, mfaCode } = req.body;
-
-      console.log("[AgentController] Received verify MFA request:", {
-        unique_agent_id,
-        positionInfo,
-      });
 
       if (!unique_agent_id || !mfaCode) {
         return res.status(400).json({
@@ -127,21 +136,18 @@ class AgentController {
         });
       }
 
-      // Verify the MFA code with positionInfo for additional security
       const {isValid, positionInfo} = mfaService.verifyMfa(
         unique_agent_id,
         mfaCode
       );
 
       if (isValid) {
-        // Generate and assign a token for the agent, cùng với thông tin vị trí
         const { computer, plainToken } =
           await computerService.generateAndAssignAgentToken(
             unique_agent_id,
             positionInfo
           );
 
-        // Notify admins about successful registration
         websocketService.notifyAdminsAgentRegistered(
           computer.id,
           positionInfo
@@ -158,7 +164,6 @@ class AgentController {
         });
       }
     } catch (error) {
-      console.error("[AgentController] Error in handleVerifyMfa:", error);
       next(error);
     }
   }
@@ -166,21 +171,24 @@ class AgentController {
   /**
    * Handle hardware information update from agent
    * @param {Object} req - Express request object
+   * @param {Object} req.computer - Computer object from authentication middleware
+   * @param {number} req.computer.id - Computer ID in the database
+   * @param {Object} req.body - Request body with hardware information
+   * @param {number} [req.body.total_disk_space] - Total disk space in GB
+   * @param {Object} [req.body.gpu_info] - Information about GPU
+   * @param {Object} [req.body.cpu_info] - Information about CPU
+   * @param {number} [req.body.total_ram] - Total RAM in GB
+   * @param {Object} [req.body.os_info] - Information about operating system
    * @param {Object} res - Express response object
    * @param {Function} next - Express next middleware function
+   * @returns {Object} Empty response with 204 status code on success,
+   *                  or error response with message on failure
    */
   async handleHardwareInfo(req, res, next) {
     try {
-      // Get the computer ID from the authenticated request
       const computerId = req.computer.id;
 
-      // Get hardware information from request body
       const { total_disk_space, gpu_info, cpu_info, total_ram, os_info } = req.body;
-
-      console.log(
-        `[AgentController] Received hardware info from computer ${computerId}:`,
-        { total_disk_space, gpu_info, cpu_info, total_ram }
-      );
 
       if (!total_disk_space) {
         return res.status(400).json({
@@ -189,7 +197,6 @@ class AgentController {
         });
       }
 
-      // Update the computer record with new hardware information
       await computerService.updateComputer(computerId, {
         os_info: os_info || null,
         total_disk_space: total_disk_space || null,
@@ -198,10 +205,8 @@ class AgentController {
         total_ram: total_ram || null,
       });
 
-      // Return 204 No Content status
       return res.sendStatus(204);
     } catch (error) {
-      console.error(`[AgentController] Error handling hardware info:`, error);
       next(error);
     }
   }
