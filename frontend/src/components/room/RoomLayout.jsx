@@ -1,55 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tooltip, Button, Popconfirm, message, Empty, Badge } from 'antd';
-import { EditOutlined, DeleteOutlined, SettingOutlined, DesktopOutlined, GlobalOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import React from 'react';
+import { Row, Col, Card, Empty, Badge } from 'antd';
+import { DesktopOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import computerService from '../../services/computer.service';
-import roomService from '../../services/room.service';
-import { useAuth } from '../../contexts/AuthContext';
-import ComputerCard, { cardStyle } from '../computer/ComputerCard';
+import SimpleComputerCard, { cardStyle } from '../computer/SimpleComputerCard';
+import { LoadingComponent } from '../../components/common';
 
-const RoomLayout = ({ roomId, computers, onEditComputer, onViewComputer, onRefresh }) => {
-  const [layoutData, setLayoutData] = useState([]);
-  const [room, setRoom] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const { isAdmin, hasRoomAccess } = useAuth();
+const RoomLayout = ({ roomId, computers, room, onEditComputer, onViewComputer, onRefresh }) => {
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (computers && computers.length) {
-      setLayoutData(computers);
-    }
-    
-    // Fetch room data to get layout information
-    fetchRoomData();
-  }, [computers, roomId]);
-
-  const fetchRoomData = async () => {
-    try {
-      setLoading(true);
-      const response = await roomService.getRoomById(roomId);
-      const roomData = response.data;
-      setRoom(roomData);
-    } catch (error) {
-      console.error('Error loading room data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Handle navigation to ComputerDetailPage
   const handleViewComputer = (computerId) => {
-    // Navigate to the ComputerDetailPage using the navigate function
-    navigate(`/computers/${computerId}`);
+    // If onViewComputer prop is provided, use it
+    if (onViewComputer) {
+      onViewComputer(computerId);
+    } else {
+      // Otherwise navigate directly
+      navigate(`/computers/${computerId}`);
+    }
   };
 
-  // Check if user has access to this room
-  const canAccessRoom = isAdmin || hasRoomAccess(roomId);
-
-  if (loading) {
-    return <div>Loading room layout...</div>;
+  if (!computers || !room) {
+    return <LoadingComponent type="inline" tip="Đang tải giao diện phòng..." />;
   }
 
-  if (!room || !room.layout) {
+  if (!room.layout) {
     return (
       <Empty description="Room layout information is not available" />
     );
@@ -70,7 +44,7 @@ const RoomLayout = ({ roomId, computers, onEditComputer, onViewComputer, onRefre
       // For each column in this row
       for (let x = 0; x < columns; x++) {
         // Find a computer at this position
-        const computer = layoutData.find(comp => 
+        const computer = computers.find(comp => 
           comp.pos_x === x && comp.pos_y === y
         );
         
@@ -78,13 +52,12 @@ const RoomLayout = ({ roomId, computers, onEditComputer, onViewComputer, onRefre
           <Col span={24 / columns} key={`cell-${x}-${y}`} style={{ width: `${100/columns}%` }}>
             <div className="grid-cell" style={{ padding: '8px', width: '100%' }}>
               {computer ? (
-                // Use the ComputerCard component with simplified=true for consistent styling
-                <ComputerCard 
+                // Use the SimpleComputerCard component with simplified=true for consistent styling
+                <SimpleComputerCard 
                   computer={computer}
-                  onEdit={onEditComputer}
                   onView={handleViewComputer}
+                  onEdit={onEditComputer}
                   onRefresh={onRefresh}
-                  simplified={true}
                 />
               ) : (
                 <Card 

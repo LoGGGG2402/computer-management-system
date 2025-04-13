@@ -5,7 +5,6 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const routes = require('./routes');
-const logger = require('./utils/logger'); // Assuming a logger utility exists
 
 /**
  * Creates and configures the Express application instance.
@@ -26,17 +25,15 @@ function createApp() {
       const { method, originalUrl, ip } = req;
       const userAgent = req.get('User-Agent') || 'N/A';
 
-      logger.info(`--> ${method} ${originalUrl} - IP: ${ip} - Agent: ${userAgent}`);
+      // console.info(`<----- ${method} ${originalUrl} - IP: ${ip} - Agent: ${userAgent}`);
 
-      if (method !== 'GET' && Object.keys(req.body).length) {
-         // Avoid logging sensitive info in production logs if body logging is ever enabled there
-         // Consider redacting sensitive fields if necessary
-         // logger.debug(`Request Body:`, req.body); // Use debug level
+      if (method !== 'GET') {
+        console.info('Request Body:', req.body);
       }
 
       res.on('finish', () => {
         const duration = Date.now() - start;
-        logger.info(`<-- ${method} ${originalUrl} - Status: ${res.statusCode} - ${duration}ms`);
+        console.info(` ${method} ${originalUrl} - Status: ${res.statusCode} - ${duration}ms`);
       });
 
       next();
@@ -72,7 +69,7 @@ function createApp() {
    * Logs the error and sends a standardized JSON error response.
    */
   app.use((err, req, res, next) => {
-    logger.error('Unhandled Error:', err.stack || err.message || err);
+    console.error('Unhandled Error:', err.stack || err.message || err);
 
     // Avoid leaking stack trace in production
     const errorResponse = {

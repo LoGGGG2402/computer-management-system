@@ -94,6 +94,7 @@ class ComputerService {
         agent_token_hash: tokenHash,
         name: `Computer-${agentId.substring(0, 8)}`,
         status: "offline",
+        errors: [],
         has_active_errors: false,
         last_update: new Date(),
         room_id: positionInfo?.roomId,

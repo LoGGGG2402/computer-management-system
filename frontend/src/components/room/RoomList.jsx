@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Space, Popconfirm, message, Empty, Tooltip, Form, Input, Select, Row, Col, Card } from 'antd';
-import { EditOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ReloadOutlined, UserOutlined } from '@ant-design/icons';
+import { Table, Button, Space, message, Empty, Tooltip, Form, Input, Select, Row, Col, Card, Popconfirm } from 'antd';
+import { EyeOutlined, EditOutlined, DeleteOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import roomService from '../../services/room.service';
 import userService from '../../services/user.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { LoadingComponent } from '../common';
 
 const { Option } = Select;
 
-const RoomList = ({ onEdit, onView, onRefresh, refreshTrigger }) => {
+const RoomList = ({ onEdit, onView, onDelete, refreshTrigger }) => {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
-  const { isAdmin, hasRoomAccess } = useAuth();
+  const { isAdmin } = useAuth();
   
   // Filter states
   const [name, setName] = useState('');
@@ -29,19 +30,7 @@ const RoomList = ({ onEdit, onView, onRefresh, refreshTrigger }) => {
   const fetchUsers = async () => {
     try {
       const response = await userService.getAllUsers();
-      let userData = [];
-      
-      if (response?.data?.users && Array.isArray(response.data.users)) {
-        userData = response.data.users;
-      } else if (response?.data && Array.isArray(response.data)) {
-        userData = response.data;
-      } else if (response?.users && Array.isArray(response.users)) {
-        userData = response.users;
-      } else if (Array.isArray(response)) {
-        userData = response;
-      }
-      
-      setUsers(userData || []);
+      setUsers(response?.data?.users || response?.users || response?.data || response || []);
     } catch (error) {
       console.error('Error fetching users:', error);
     }
@@ -50,37 +39,26 @@ const RoomList = ({ onEdit, onView, onRefresh, refreshTrigger }) => {
   const fetchRooms = async () => {
     try {
       setLoading(true);
-      const response = await roomService.getAllRooms(
-        pagination.current,
-        pagination.pageSize,
-        name,
-        assignedUserId
-      );
+      // Create filters object according to the expected API
+      const filters = {
+        page: pagination.current,
+        limit: pagination.pageSize
+      };
+
+      if (name) filters.name = name;
+      if (assignedUserId) filters.assigned_user_id = assignedUserId;
+
+      const response = await roomService.getAllRooms(filters);
       
-      // Handle the API response format as specified in api.md
-      let roomsData = [];
-      let totalRooms = 0;
+      // Simplified response handling, expecting the room service to handle format conversions
+      const roomsData = Array.isArray(response) ? response : 
+                         response?.data?.rooms || response?.rooms || response?.data || [];
       
-      if (response?.data?.rooms && Array.isArray(response.data.rooms)) {
-        // Nested in data.rooms (per API.md spec)
-        roomsData = response.data.rooms;
-        totalRooms = response.data.total || roomsData.length;
-      } else if (response?.data && Array.isArray(response.data)) {
-        // Nested in data
-        roomsData = response.data;
-        totalRooms = response.total || roomsData.length;
-      } else if (response?.rooms && Array.isArray(response.rooms)) {
-        // Directly in rooms property
-        roomsData = response.rooms;
-        totalRooms = response.total || roomsData.length;
-      } else if (Array.isArray(response)) {
-        // Direct array response
-        roomsData = response;
-        totalRooms = roomsData.length;
-      }
+      const totalRooms = response?.total || response?.data?.total || roomsData.length;
+      
       console.log('Fetched rooms:', roomsData);
       
-      setRooms(roomsData || []);
+      setRooms(roomsData);
       setPagination(prev => ({ ...prev, total: totalRooms }));
     } catch (error) {
       message.error('Failed to fetch rooms');
@@ -108,18 +86,6 @@ const RoomList = ({ onEdit, onView, onRefresh, refreshTrigger }) => {
     setAssignedUserId(null);
     setPagination(prev => ({ ...prev, current: 1 }));
     fetchRooms();
-  };
-
-  const handleDelete = async (id) => {
-    try {
-      await roomService.deleteRoom(id);
-      message.success('Room deleted successfully');
-      fetchRooms();
-      if (onRefresh) onRefresh();
-    } catch (error) {
-      message.error('Failed to delete room');
-      console.error('Error deleting room:', error);
-    }
   };
 
   const columns = [
@@ -165,7 +131,6 @@ const RoomList = ({ onEdit, onView, onRefresh, refreshTrigger }) => {
       key: 'actions',
       render: (_, record) => (
         <Space size="middle">
-          {/* Show View button for everyone */}
           <Button 
             type="default" 
             icon={<EyeOutlined />}
@@ -173,6 +138,31 @@ const RoomList = ({ onEdit, onView, onRefresh, refreshTrigger }) => {
           >
             View
           </Button>
+          {isAdmin && (
+            <>
+              <Button
+                type="primary"
+                icon={<EditOutlined />}
+                onClick={() => onEdit(record)}
+              >
+                Edit
+              </Button>
+              <Popconfirm
+                title="Are you sure you want to delete this room?"
+                onConfirm={() => onDelete(record.id)}
+                okText="Yes"
+                cancelText="No"
+              >
+                <Button
+                  type="primary"
+                  danger
+                  icon={<DeleteOutlined />}
+                >
+                  Delete
+                </Button>
+              </Popconfirm>
+            </>
+          )}
         </Space>
       ),
     },
@@ -228,17 +218,21 @@ const RoomList = ({ onEdit, onView, onRefresh, refreshTrigger }) => {
         </Form>
       </Card>
 
-      <Table
-        columns={columns}
-        dataSource={Array.isArray(rooms) ? rooms.map(room => ({ ...room, key: room.id })) : []}
-        loading={loading}
-        pagination={pagination}
-        onChange={handleTableChange}
-        rowClassName="room-row"
-        locale={{
-          emptyText: <Empty description="No rooms found" />
-        }}
-      />
+      {loading ? (
+        <LoadingComponent type="section" tip="Loading room list..." />
+      ) : (
+        <Table
+          columns={columns}
+          dataSource={Array.isArray(rooms) ? rooms.map(room => ({ ...room, key: room.id })) : []}
+          loading={false}
+          pagination={pagination}
+          onChange={handleTableChange}
+          rowClassName="room-row"
+          locale={{
+            emptyText: <Empty description="No rooms found" />
+          }}
+        />
+      )}
     </div>
   );
 };

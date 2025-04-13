@@ -18,6 +18,23 @@ const api = axios.create({
 });
 
 /**
+ * Set auth token for API requests
+ * @param {string} token - JWT authentication token
+ */
+const setAuthToken = (token) => {
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  }
+};
+
+/**
+ * Remove auth token from API requests
+ */
+const removeAuthToken = () => {
+  delete api.defaults.headers.common['Authorization'];
+};
+
+/**
  * Request interceptor to add authentication token to requests
  */
 api.interceptors.request.use(
@@ -39,6 +56,10 @@ api.interceptors.request.use(
     return Promise.reject(error);
   }
 );
+
+// Export setAuthToken and removeAuthToken as part of the API
+api.setAuthToken = setAuthToken;
+api.removeAuthToken = removeAuthToken;
 
 /**
  * Response interceptor to handle errors and extract messages

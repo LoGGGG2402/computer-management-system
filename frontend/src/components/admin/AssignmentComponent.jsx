@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Transfer, Button, message, Spin } from 'antd';
+import { Transfer, Button, message } from 'antd';
 import roomService from '../../services/room.service';
 import userService from '../../services/user.service';
+import { LoadingComponent } from '../common';
 
 const AssignmentComponent = ({ type, id, onSuccess }) => {
   const [targetKeys, setTargetKeys] = useState([]);
@@ -143,27 +144,31 @@ const AssignmentComponent = ({ type, id, onSuccess }) => {
 
   return (
     <div className="assignment-component">
-      <Spin spinning={loading}>
-        <Transfer
-          dataSource={availableItems}
-          titles={[
-            type === 'room' ? 'Available Users' : 'Available Rooms',
-            type === 'room' ? 'Assigned Users' : 'Assigned Rooms'
-          ]}
-          targetKeys={targetKeys}
-          onChange={handleChange}
-          render={item => item.title}
-          listStyle={{
-            width: 350,
-            height: 300,
-          }}
-        />
-        <div style={{ marginTop: 16, textAlign: 'right' }}>
-          <Button type="primary" onClick={handleSave}>
-            Save Assignments
-          </Button>
-        </div>
-      </Spin>
+      {loading ? (
+        <LoadingComponent type="section" tip="Đang tải dữ liệu phân quyền..." />
+      ) : (
+        <>
+          <Transfer
+            dataSource={availableItems}
+            titles={[
+              type === 'room' ? 'Available Users' : 'Available Rooms',
+              type === 'room' ? 'Assigned Users' : 'Assigned Rooms'
+            ]}
+            targetKeys={targetKeys}
+            onChange={handleChange}
+            render={item => item.title}
+            listStyle={{
+              width: 350,
+              height: 300,
+            }}
+          />
+          <div style={{ marginTop: 16, textAlign: 'right' }}>
+            <Button type="primary" onClick={handleSave}>
+              Save Assignments
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 };

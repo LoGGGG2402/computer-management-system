@@ -45,14 +45,20 @@ module.exports = {
         type: Sequelize.STRING(255)
       },
       total_disk_space: {
-        type: Sequelize.BIGINT
+        type: Sequelize.BIGINT,
+        allowNull: true
       },
       gpu_info: {
-        type: Sequelize.STRING(255)
+        type: Sequelize.STRING(255),
+        allowNull: true
       },
       errors: {
         type: Sequelize.JSONB,
         defaultValue: '[]'
+      },
+      have_active_errors: {
+        type: Sequelize.BOOLEAN,
+        defaultValue: false
       },
       room_id: {
         type: Sequelize.INTEGER,

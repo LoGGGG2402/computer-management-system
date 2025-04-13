@@ -3,7 +3,6 @@
  * Standardized based on agent's communication patterns.
  * Uses Map for realtime status and removes status on final disconnect.
  */
-const logger = require('../utils/logger');
 
 // --- Constants ---
 const ROOM_PREFIXES = {
@@ -33,7 +32,7 @@ class WebSocketService {
     this.agentRealtimeStatus = new Map();
     this.pendingCommands = new Map();
 
-    logger.info('WebSocketService initialized (using Map for agent status)');
+    console.info('WebSocketService initialized (using Map for agent status)');
   }
 
   /**
@@ -42,25 +41,13 @@ class WebSocketService {
    */
   setIo(io) {
     if (!io) {
-      logger.error('Attempted to set null or undefined Socket.IO instance');
+      console.error('Attempted to set null or undefined Socket.IO instance');
       return;
     }
     this.io = io;
-    logger.info('Socket.IO instance has been set in WebSocketService');
+    console.info('Socket.IO instance has been set in WebSocketService');
   }
 
-  /**
-   * Ensures the Socket.IO instance is initialized.
-   * @private
-   * @throws {Error} If IO is not initialized.
-   */
-  _ensureIoInitialized() {
-    if (!this.io) {
-      const errorMsg = 'WebSocket IO not initialized. Call setIo() first.';
-      logger.error(errorMsg);
-      throw new Error(errorMsg);
-    }
-  }
 
   /**
    * Emits an event to a specific room.
@@ -73,13 +60,13 @@ class WebSocketService {
     try {
       if (!this.io) {
         const errorMsg = 'WebSocket IO not initialized. Call setIo() first.';
-        logger.error(errorMsg);
+        console.error(errorMsg);
         throw new Error(errorMsg);
       }
       this.io.to(room).emit(eventName, data);
-      logger.debug(`Emitted event '${eventName}' to room '${room}'`);
+      console.debug(`Emitted event '${eventName}' to room '${room}'`);
     } catch (error) {
-      logger.error(`Failed to emit event '${eventName}' to room '${room}': ${error.message}`);
+      console.error(`Failed to emit event '${eventName}' to room '${room}': ${error.message}`);
     }
   }
 
@@ -114,7 +101,7 @@ class WebSocketService {
       timestamp: new Date(),
     };
     this._emitToRoom(ROOM_PREFIXES.ADMIN, EVENTS.ADMIN_AGENT_REGISTERED, eventData);
-    logger.info(`Agent registration notification sent for agent ${agentId} (Computer ID: ${computerId})`);
+    console.info(`Agent registration notification sent for agent ${agentId} (Computer ID: ${computerId})`);
   }
 
   /**
@@ -130,7 +117,7 @@ class WebSocketService {
    */
   updateRealtimeCache(computerId, data) {
     if (!computerId || typeof computerId !== 'number') {
-        logger.warn('Invalid computerId provided for updateRealtimeCache');
+        console.warn('Invalid computerId provided for updateRealtimeCache');
         return;
     }
 
@@ -144,7 +131,7 @@ class WebSocketService {
 
     this.agentRealtimeStatus.set(computerId, newData);
 
-    logger.debug(`Realtime cache (Map) updated for computer ${computerId}`);
+    console.debug(`Realtime cache (Map) updated for computer ${computerId}`);
   }
 
   /**
@@ -157,7 +144,7 @@ class WebSocketService {
       const room = this.io.sockets.adapter.rooms.get(ROOM_PREFIXES.AGENT(computerId));
       return !!room && room.size > 0;
     } catch (error) {
-      logger.error(`Error checking online status for computer ${computerId}: ${error.message}`);
+      console.error(`Error checking online status for computer ${computerId}: ${error.message}`);
       return false;
     }
   }
@@ -191,16 +178,16 @@ class WebSocketService {
     const computerId = socket.data?.computerId;
 
     if (!computerId) {
-      logger.debug(`Socket ${socket.id} disconnected without associated computerId.`);
+      console.debug(`Socket ${socket.id} disconnected without associated computerId.`);
       return;
     }
 
-    logger.info(`Handling disconnect for agent socket ${socket.id} (Computer ID: ${computerId})`);
+    console.info(`Handling disconnect for agent socket ${socket.id} (Computer ID: ${computerId})`);
 
     try {
       setTimeout(async () => {
         if (!this.isAgentConnected(computerId)) {
-          logger.info(`Computer ${computerId} confirmed offline after delay.`);
+          console.info(`Computer ${computerId} confirmed offline after delay.`);
 
           const offlineStatusData = {
               computerId,
@@ -216,22 +203,22 @@ class WebSocketService {
               EVENTS.COMPUTER_STATUS_UPDATED,
               offlineStatusData
           );
-          logger.info(`Broadcasted final 'offline' status for computer ${computerId}.`);
+          console.info(`Broadcasted final 'offline' status for computer ${computerId}.`);
 
           const deleted = this.agentRealtimeStatus.delete(computerId);
           if (deleted) {
-            logger.info(`Removed realtime status for computer ${computerId} from Map.`);
+            console.info(`Removed realtime status for computer ${computerId} from Map.`);
           } else {
-            logger.warn(`Attempted to remove status for computer ${computerId}, but it was not found in the Map.`);
+            console.warn(`Attempted to remove status for computer ${computerId}, but it was not found in the Map.`);
           }
 
         } else {
-           logger.info(`Computer ${computerId} still has other connections active. Not marking as offline or removing status yet.`);
+           console.info(`Computer ${computerId} still has other connections active. Not marking as offline or removing status yet.`);
         }
       }, AGENT_OFFLINE_CHECK_DELAY_MS);
 
     } catch (error) {
-      logger.error(`Error handling agent disconnect for computer ${computerId} (Socket ID: ${socket.id}): ${error.message}`, error.stack);
+      console.error(`Error handling agent disconnect for computer ${computerId} (Socket ID: ${socket.id}): ${error.message}`, error.stack);
     }
   }
 
@@ -241,14 +228,14 @@ class WebSocketService {
    */
   async broadcastStatusUpdate(computerId) {
      if (!computerId) {
-        logger.warn('broadcastStatusUpdate called with invalid computerId');
+        console.warn('broadcastStatusUpdate called with invalid computerId');
         return;
     }
     try {
       const statusData = this.getAgentRealtimeStatus(computerId);
 
       if (!statusData) {
-          logger.warn(`No status data found in Map for computer ${computerId}. Skipping broadcast.`);
+          console.warn(`No status data found in Map for computer ${computerId}. Skipping broadcast.`);
           return;
       }
 
@@ -264,7 +251,7 @@ class WebSocketService {
       this._emitToRoom(ROOM_PREFIXES.COMPUTER_SUBSCRIBERS(computerId), EVENTS.COMPUTER_STATUS_UPDATED, eventData);
 
     } catch (error) {
-      logger.error(`Failed during status broadcast preparation for computer ${computerId}: ${error.message}`, error.stack);
+      console.error(`Failed during status broadcast preparation for computer ${computerId}: ${error.message}`, error.stack);
     }
   }
 
@@ -276,19 +263,19 @@ class WebSocketService {
    */
   storePendingCommand(commandId, userId, computerId) {
      if (!commandId || !userId || !computerId) {
-        logger.warn('storePendingCommand called with invalid parameters', { commandId, userId, computerId });
+        console.warn('storePendingCommand called with invalid parameters', { commandId, userId, computerId });
         return;
     }
 
     if (this.pendingCommands.has(commandId)) {
         const existingCommand = this.pendingCommands.get(commandId);
         clearTimeout(existingCommand.timeoutId);
-        logger.warn(`Command ${commandId} already existed in pending commands. Overwriting and clearing old timeout.`);
+        console.warn(`Command ${commandId} already existed in pending commands. Overwriting and clearing old timeout.`);
     }
 
     const timeoutId = setTimeout(() => {
       if (this.pendingCommands.has(commandId)) {
-        logger.warn(`Command ${commandId} timed out and removed from pending commands.`);
+        console.warn(`Command ${commandId} timed out and removed from pending commands.`);
         this.pendingCommands.delete(commandId);
       }
     }, PENDING_COMMAND_TIMEOUT_MS);
@@ -300,7 +287,7 @@ class WebSocketService {
       timeoutId,
     });
 
-    logger.debug(`Command ${commandId} stored as pending for computer ${computerId} by user ${userId}`);
+    console.debug(`Command ${commandId} stored as pending for computer ${computerId} by user ${userId}`);
   }
 
   /**
@@ -312,7 +299,7 @@ class WebSocketService {
    */
   sendCommandToAgent(computerId, command, commandId) {
     if (!computerId || !command || !commandId) {
-        logger.warn('sendCommandToAgent called with invalid parameters', { computerId, commandId });
+        console.warn('sendCommandToAgent called with invalid parameters', { computerId, commandId });
         return false;
     }
     try {
@@ -320,16 +307,16 @@ class WebSocketService {
       const agentRoom = ROOM_PREFIXES.AGENT(computerId);
 
       if (!this.isAgentConnected(computerId)) {
-        logger.warn(`Cannot send command ${commandId} to computer ${computerId}: Agent is not connected.`);
+        console.warn(`Cannot send command ${commandId} to computer ${computerId}: Agent is not connected.`);
         return false;
       }
 
       this.io.to(agentRoom).emit(EVENTS.COMMAND_EXECUTE, { commandId, command });
 
-      logger.info(`Command ${commandId} sent to agent room ${agentRoom} for computer ${computerId}`);
+      console.info(`Command ${commandId} sent to agent room ${agentRoom} for computer ${computerId}`);
       return true;
     } catch (error) {
-      logger.error(`Error sending command ${commandId} to computer ${computerId}: ${error.message}`, error.stack);
+      console.error(`Error sending command ${commandId} to computer ${computerId}: ${error.message}`, error.stack);
       return false;
     }
   }
@@ -344,14 +331,14 @@ class WebSocketService {
    */
   notifyCommandCompletion(commandId, result) {
      if (!commandId || !result) {
-        logger.warn('notifyCommandCompletion called with invalid parameters', { commandId });
+        console.warn('notifyCommandCompletion called with invalid parameters', { commandId });
         return;
     }
     try {
       const pendingCommand = this.pendingCommands.get(commandId);
 
       if (!pendingCommand) {
-        logger.warn(`Received completion for unknown or already processed command ${commandId}. Ignoring.`);
+        console.warn(`Received completion for unknown or already processed command ${commandId}. Ignoring.`);
         return;
       }
 
@@ -372,9 +359,9 @@ class WebSocketService {
 
       this._emitToRoom(ROOM_PREFIXES.USER(userId), EVENTS.COMMAND_COMPLETED, formattedResult);
 
-      logger.debug(`Command ${commandId} completion notified to user ${userId}`);
+      console.debug(`Command ${commandId} completion notified to user ${userId}`);
     } catch (error) {
-      logger.error(`Error processing command completion notification for ${commandId}: ${error.message}`, error.stack);
+      console.error(`Error processing command completion notification for ${commandId}: ${error.message}`, error.stack);
     }
   }
 

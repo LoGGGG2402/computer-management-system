@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Table, Button, Space, Popconfirm, message, Tag, Empty, Form, Input, Select, Row, Col, Card } from 'antd';
 import { EditOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import userService from '../../services/user.service';
+import { LoadingComponent } from '../common';
 
 const { Option } = Select;
 
@@ -220,17 +221,21 @@ const UserList = ({ onEdit, onView, onRefresh, refreshTrigger }) => {
         </Form>
       </Card>
 
-      <Table
-        columns={columns}
-        dataSource={Array.isArray(users) ? users.map(user => ({ ...user, key: user.id })) : []}
-        loading={loading}
-        pagination={pagination}
-        onChange={handleTableChange}
-        rowClassName="user-row"
-        locale={{
-          emptyText: <Empty description="No users found" />
-        }}
-      />
+      {loading ? (
+        <LoadingComponent type="section" tip="Đang tải danh sách người dùng..." />
+      ) : (
+        <Table
+          columns={columns}
+          dataSource={Array.isArray(users) ? users.map(user => ({ ...user, key: user.id })) : []}
+          loading={false}
+          pagination={pagination}
+          onChange={handleTableChange}
+          rowClassName="user-row"
+          locale={{
+            emptyText: <Empty description="No users found" />
+          }}
+        />
+      )}
     </div>
   );
 };

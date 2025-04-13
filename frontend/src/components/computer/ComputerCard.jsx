@@ -16,17 +16,15 @@ import { useAuth } from '../../contexts/AuthContext';
 import computerService from '../../services/computer.service'; 
 
 const { Text, Title } = Typography;
-
-const cardStyle = {
+export const cardStyle = {
+  height: '180px',
   width: '100%', 
   overflow: 'hidden',
-  borderRadius: '10px', 
-  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)', 
+  borderRadius: '8px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
   display: 'flex',
-  flexDirection: 'column',
-  transition: 'all 0.3s ease' 
+  flexDirection: 'column'
 };
-
 const ComputerCard = React.memo(({ 
   computer, 
   isOnline, 

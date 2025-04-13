@@ -3,7 +3,6 @@
  */
 const computerService = require('../../services/computer.service');
 const websocketService = require('../../services/websocket.service');
-const logger = require('../../utils/logger');
 
 // --- Handler Functions ---
 
@@ -17,7 +16,7 @@ async function handleAgentAuthentication(socket, data) {
     const { agentId, token } = data || {};
 
     if (!agentId || !token) {
-      logger.warn(`Authentication attempt with missing credentials from ${socket.id}`);
+      console.warn(`Authentication attempt with missing credentials from ${socket.id}`);
       socket.emit('agent:ws_auth_failed', { status: 'error', message: 'Missing agent ID or token' });
       return;
     }
@@ -25,7 +24,7 @@ async function handleAgentAuthentication(socket, data) {
     const computerId = await computerService.verifyAgentToken(agentId, token);
 
     if (!computerId) {
-      logger.warn(`Failed authentication attempt for agent ${agentId} from ${socket.id}`);
+      console.warn(`Failed authentication attempt for agent ${agentId} from ${socket.id}`);
       socket.emit('agent:ws_auth_failed', { status: 'error', message: 'Authentication failed (Invalid ID or token)' });
       return;
     }
@@ -42,12 +41,12 @@ async function handleAgentAuthentication(socket, data) {
       computerId
     });
 
-    logger.info(`Agent authenticated: Agent ID ${agentId}, Computer ID ${computerId}, Socket ID ${socket.id}, Joined Room ${roomName}`);
+    console.info(`Agent authenticated: Agent ID ${agentId}, Computer ID ${computerId}, Socket ID ${socket.id}, Joined Room ${roomName}`);
 
     await websocketService.updateAndBroadcastOnlineStatus(computerId);
 
   } catch (error) {
-    logger.error(`Agent authentication error for agent ${data?.agentId}, socket ${socket.id}: ${error.message}`, error.stack);
+    console.error(`Agent authentication error for agent ${data?.agentId}, socket ${socket.id}: ${error.message}`, error.stack);
     socket.emit('agent:ws_auth_failed', { status: 'error', message: 'Internal server error during authentication' });
   }
 }
@@ -61,12 +60,12 @@ async function handleAgentStatusUpdate(socket, data) {
   const computerId = socket.data.computerId;
 
   if (!computerId) {
-    logger.warn(`Unauthenticated status update attempt from ${socket.id}. Ignoring.`);
+    console.warn(`Unauthenticated status update attempt from ${socket.id}. Ignoring.`);
     return;
   }
 
   if (!data) {
-      logger.warn(`Received empty status update from computer ${computerId} (Socket ${socket.id})`);
+      console.warn(`Received empty status update from computer ${computerId} (Socket ${socket.id})`);
       return;
   }
 
@@ -80,7 +79,7 @@ async function handleAgentStatusUpdate(socket, data) {
 
     await websocketService.broadcastStatusUpdate(computerId);
   } catch (error) {
-    logger.error(`Status update processing error for computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+    console.error(`Status update processing error for computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
   }
 }
 
@@ -93,18 +92,18 @@ function handleAgentCommandResult(socket, data) {
   const computerId = socket.data.computerId;
 
   if (!computerId) {
-    logger.warn(`Unauthenticated command result received from ${socket.id}. Ignoring.`);
+    console.warn(`Unauthenticated command result received from ${socket.id}. Ignoring.`);
     return;
   }
 
   const { commandId, stdout, stderr, exitCode } = data || {};
 
   if (!commandId) {
-    logger.warn(`Command result missing commandId from computer ${computerId} (Socket ${socket.id}). Ignoring.`);
+    console.warn(`Command result missing commandId from computer ${computerId} (Socket ${socket.id}). Ignoring.`);
     return;
   }
 
-  logger.debug(`Command result for ID ${commandId} received from computer ${computerId} (Socket ${socket.id})`);
+  console.debug(`Command result for ID ${commandId} received from computer ${computerId} (Socket ${socket.id})`);
 
   try {
     websocketService.notifyCommandCompletion(commandId, {
@@ -114,7 +113,7 @@ function handleAgentCommandResult(socket, data) {
     });
 
   } catch (error) {
-    logger.error(`Command result handling error for command ${commandId}, computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+    console.error(`Command result handling error for command ${commandId}, computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
   }
 }
 
@@ -127,16 +126,16 @@ async function handleAgentHardwareInfo(socket, data) {
   const computerId = socket.data.computerId;
 
   if (!computerId) {
-    logger.warn(`Unauthenticated hardware info update received from ${socket.id}. Ignoring.`);
+    console.warn(`Unauthenticated hardware info update received from ${socket.id}. Ignoring.`);
     return;
   }
 
    if (!data) {
-      logger.warn(`Received empty hardware info update from computer ${computerId} (Socket ${socket.id})`);
+      console.warn(`Received empty hardware info update from computer ${computerId} (Socket ${socket.id})`);
       return;
   }
 
-  logger.debug(`Hardware info update received from computer ${computerId} (Socket ${socket.id})`);
+  console.debug(`Hardware info update received from computer ${computerId} (Socket ${socket.id})`);
 
   try {
     const updateData = {
@@ -151,13 +150,13 @@ async function handleAgentHardwareInfo(socket, data) {
 
     if (Object.keys(updateData).length > 0) {
         await computerService.updateComputer(computerId, updateData);
-        logger.info(`Hardware info updated in DB for computer ${computerId}`);
+        console.info(`Hardware info updated in DB for computer ${computerId}`);
     } else {
-         logger.debug(`No valid hardware fields found in update from computer ${computerId}`);
+         console.debug(`No valid hardware fields found in update from computer ${computerId}`);
     }
 
   } catch (error) {
-    logger.error(`Hardware info update error for computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+    console.error(`Hardware info update error for computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
   }
 }
 
@@ -174,18 +173,18 @@ const setupAgentHandlers = (io, socket) => {
   const tokenFromData = socket.data.authToken;
 
   if (agentIdFromData && tokenFromData) {
-    logger.info(`Attempting auto-authentication for agent via headers: Agent ID ${agentIdFromData}, Socket ID ${socket.id}`);
+    console.info(`Attempting auto-authentication for agent via headers: Agent ID ${agentIdFromData}, Socket ID ${socket.id}`);
     handleAgentAuthentication(socket, {
       agentId: agentIdFromData,
       token: tokenFromData
     });
   } else {
-    logger.info(`Agent ${socket.id} connected without pre-authentication headers. Waiting for 'agent:authenticate' event.`);
+    console.info(`Agent ${socket.id} connected without pre-authentication headers. Waiting for 'agent:authenticate' event.`);
   }
 
   socket.on('agent:authenticate', (data) => {
     if (socket.data.computerId) {
-        logger.warn(`Agent ${socket.data.agentId} (Socket ${socket.id}) sent 'agent:authenticate' but is already authenticated. Ignoring.`);
+        console.warn(`Agent ${socket.data.agentId} (Socket ${socket.id}) sent 'agent:authenticate' but is already authenticated. Ignoring.`);
         return;
     }
     handleAgentAuthentication(socket, data);

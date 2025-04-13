@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Tabs, Button, Space, Skeleton, message, Typography, Modal, Row, Col, Popconfirm, Input, Divider } from 'antd';
-import { LayoutOutlined, UnorderedListOutlined, ArrowLeftOutlined, EditOutlined, DeleteOutlined, UserAddOutlined, SendOutlined, CodeOutlined } from '@ant-design/icons';
+import { Card, Button, Space, message, Typography, Modal, Row, Col, Popconfirm, Input, Divider } from 'antd';
+import { LayoutOutlined, ArrowLeftOutlined, EditOutlined, DeleteOutlined, UserAddOutlined, SendOutlined, CodeOutlined } from '@ant-design/icons';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import RoomLayout from '../../components/room/RoomLayout';
 import RoomForm from '../../components/room/RoomForm';
-import ComputerList from '../../components/computer/ComputerList';
 import AssignmentComponent from '../../components/admin/AssignmentComponent';
 import roomService from '../../services/room.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCommandHandle } from '../../contexts/CommandHandleContext';
+import { LoadingComponent } from '../../components/common';
 
 const { Title } = Typography;
 
@@ -16,13 +16,12 @@ const RoomDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAdmin, hasRoomAccess } = useAuth();
+  const { isAdmin } = useAuth();
   const { sendCommandToRoom } = useCommandHandle();
   
   const [room, setRoom] = useState(null);
   const [computers, setComputers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('layout');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   // Command input state
@@ -34,6 +33,8 @@ const RoomDetailPage = () => {
   
   // For the user assignment modal
   const [isAssignModalVisible, setIsAssignModalVisible] = useState(false);
+  // For users assigned to this room
+  const [assignedUsers, setAssignedUsers] = useState([]);
 
   // Load room details and computers when component mounts or ID changes
   useEffect(() => {
@@ -45,16 +46,23 @@ const RoomDetailPage = () => {
   const fetchRoomData = async () => {
     try {
       setLoading(true);
-      // Get room details
-      const roomResponse = await roomService.getRoomById(id);
-      const roomData = roomResponse.data;
+      
+      // Use the getRoomById method from roomService
+      const roomData = await roomService.getRoomById(id);
+      
+      // Set the room data
       setRoom(roomData);
-
-      // Use computers already included in the room data
+      
+      // Set computers from the room response
       if (roomData && roomData.computers) {
         setComputers(roomData.computers);
       } else {
         setComputers([]);
+      }
+
+      // If admin, fetch assigned users for this room
+      if (isAdmin) {
+        fetchRoomUsers();
       }
     } catch (error) {
       message.error('Failed to load room data');
@@ -64,8 +72,13 @@ const RoomDetailPage = () => {
     }
   };
 
-  const handleTabChange = (key) => {
-    setActiveTab(key);
+  const fetchRoomUsers = async () => {
+    try {
+      const users = await roomService.getUsersInRoom(id);
+      setAssignedUsers(users);
+    } catch (error) {
+      console.error('Error fetching room users:', error);
+    }
   };
 
   const handleEditComputer = (computer) => {
@@ -111,6 +124,8 @@ const RoomDetailPage = () => {
   const handleAssignmentSuccess = () => {
     message.success('User assignments updated successfully');
     setIsAssignModalVisible(false);
+    fetchRoomUsers(); // Refresh the room users list after assignment changes
+    handleRefresh(); // Also refresh the entire room data
   };
   
   const handleAssignmentCancel = () => {
@@ -138,7 +153,7 @@ const RoomDetailPage = () => {
     try {
       setSendingCommand(true);
       
-      // Sử dụng WebSocket thay vì HTTP API
+      // Use WebSocket instead of HTTP API
       const result = await sendCommandToRoom(id, command.trim());
       
       // Show success message with count of computers receiving the command
@@ -159,15 +174,8 @@ const RoomDetailPage = () => {
     }
   };
 
-  // Check if user has access to this room
-  const canAccessRoom = isAdmin || (room && hasRoomAccess(id));
-
   if (loading) {
-    return (
-      <Card className="room-detail-page">
-        <Skeleton active/>
-      </Card>
-    );
+    return <LoadingComponent type="section" tip="Loading room information..." />;
   }
 
   if (!room) {
@@ -212,15 +220,13 @@ const RoomDetailPage = () => {
                 Manage Users
               </Button>
             )}
-            {canAccessRoom && (
-              <Button 
-                type="primary" 
-                icon={<EditOutlined />}
-                onClick={handleEditRoom}
-              >
-                Edit Room
-              </Button>
-            )}
+            <Button 
+              type="primary" 
+              icon={<EditOutlined />}
+              onClick={handleEditRoom}
+            >
+              Edit Room
+            </Button>
             {isAdmin && (
               <Popconfirm
                 title="Are you sure you want to delete this room?"
@@ -258,88 +264,68 @@ const RoomDetailPage = () => {
               <p><strong>Created:</strong> {new Date(room.created_at).toLocaleString()}</p>
             </Col>
           </Row>
-        </div>
-        
-        {/* Command section */}
-        {canAccessRoom && (
-          <div className="command-section mb-6">
-            <Divider>
-              <Space>
-                <CodeOutlined />
-                <span>Room Command</span>
-              </Space>
-            </Divider>
-            <Row gutter={[16, 16]} align="middle">
-              <Col span={18}>
-                <Input 
-                  placeholder="Enter command to send to all computers in this room..." 
-                  value={command}
-                  onChange={(e) => setCommand(e.target.value)}
-                  onPressEnter={handleSendCommand}
-                  disabled={sendingCommand}
-                  prefix={<CodeOutlined />}
-                  allowClear
-                />
-              </Col>
-              <Col span={6}>
-                <Button 
-                  type="primary" 
-                  icon={<SendOutlined />} 
-                  onClick={handleSendCommand}
-                  loading={sendingCommand}
-                  disabled={!command.trim()}
-                  block
-                >
-                  Send to Room
-                </Button>
+
+          {assignedUsers.length > 0 && (
+            <Row gutter={[16, 16]}>
+              <Col span={24}>
+                <p><strong>Assigned Users:</strong> {assignedUsers.map(user => user.username).join(', ')}</p>
               </Col>
             </Row>
-          </div>
-        )}
+          )}
+        </div>
+        
+        {/* Command section - Show for all authenticated users, backend will validate access */}
+        <div className="command-section mb-6">
+          <Divider>
+            <Space>
+              <CodeOutlined />
+              <span>Room Command</span>
+            </Space>
+          </Divider>
+          <Row gutter={[16, 16]} align="middle">
+            <Col span={18}>
+              <Input 
+                placeholder="Enter command to send to all computers in this room..." 
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                onPressEnter={handleSendCommand}
+                disabled={sendingCommand}
+                prefix={<CodeOutlined />}
+                allowClear
+              />
+            </Col>
+            <Col span={6}>
+              <Button 
+                type="primary" 
+                icon={<SendOutlined />} 
+                onClick={handleSendCommand}
+                loading={sendingCommand}
+                disabled={!command.trim()}
+                block
+              >
+                Send to Room
+              </Button>
+            </Col>
+          </Row>
+        </div>
         
         <div className="mt-6">
-          <Tabs 
-            activeKey={activeTab} 
-            onChange={handleTabChange}
-            type="card"
-            tabBarStyle={{ marginBottom: 16 }}
-            items={[
-              {
-                key: 'layout',
-                label: (
-                  <span>
-                    <LayoutOutlined /> Room Layout
-                  </span>
-                ),
-                children: (
-                  <RoomLayout 
-                    roomId={id}
-                    computers={computers}
-                    onEditComputer={handleEditComputer}
-                    onViewComputer={handleViewComputer}
-                    onRefresh={handleRefresh}
-                  />
-                )
-              },
-              {
-                key: 'list',
-                label: (
-                  <span>
-                    <UnorderedListOutlined /> Computer List
-                  </span>
-                ),
-                children: (
-                  <ComputerList 
-                    computers={computers}
-                    onEdit={handleEditComputer}
-                    onView={handleViewComputer}
-                    hideRoomColumn={true}
-                    onRefresh={handleRefresh}
-                  />
-                )
-              }
-            ]}
-          />
+          <div className="room-layout-section">
+            <div className="section-header mb-4">
+              <Space>
+                <LayoutOutlined />
+                <Typography.Title level={4} style={{ margin: 0 }}>Room Layout</Typography.Title>
+              </Space>
+            </div>
+            <RoomLayout 
+              roomId={id}
+              room={room}
+              computers={computers}
+              onEditComputer={handleEditComputer}
+              onViewComputer={handleViewComputer}
+              onRefresh={handleRefresh}
+            />
+          </div>
         </div>
       </Card>
       

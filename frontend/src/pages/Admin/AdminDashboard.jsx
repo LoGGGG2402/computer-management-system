@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Tabs, Typography, Row, Col, Statistic, Spin } from 'antd';
+import { Card, Tabs, Typography, Row, Col, Statistic } from 'antd';
 import { 
   DesktopOutlined, 
   UserOutlined, 
@@ -12,6 +12,7 @@ import ComputersListPage from '../computer/ComputersListPage';
 import userService from '../../services/user.service';
 import roomService from '../../services/room.service';
 import computerService from '../../services/computer.service';
+import { LoadingComponent } from '../../components/common';
 
 const { Title } = Typography;
 
@@ -89,7 +90,7 @@ const AdminDashboard = () => {
               <Card className="shadow-md hover:shadow-lg transition-shadow">
                 <Statistic
                   title="Total Users"
-                  value={stats.users.loading ? <Spin size="small" /> : stats.users.total}
+                  value={stats.users.loading ? <LoadingComponent type="inline" size="small" tip="" /> : stats.users.total}
                   prefix={<TeamOutlined />}
                 />
               </Card>
@@ -99,7 +100,7 @@ const AdminDashboard = () => {
               <Card className="shadow-md hover:shadow-lg transition-shadow">
                 <Statistic
                   title="Total Rooms"
-                  value={stats.rooms.loading ? <Spin size="small" /> : stats.rooms.total}
+                  value={stats.rooms.loading ? <LoadingComponent type="inline" size="small" tip="" /> : stats.rooms.total}
                   prefix={<BankOutlined />}
                 />
               </Card>
@@ -109,7 +110,7 @@ const AdminDashboard = () => {
               <Card className="shadow-md hover:shadow-lg transition-shadow">
                 <Statistic
                   title="Total Computers"
-                  value={stats.computers.loading ? <Spin size="small" /> : stats.computers.total}
+                  value={stats.computers.loading ? <LoadingComponent type="inline" size="small" tip="" /> : stats.computers.total}
                   prefix={<DesktopOutlined />}
                 />
               </Card>
@@ -135,7 +136,7 @@ const AdminDashboard = () => {
                       </div>
                       <span className="text-sm font-medium">
                         {stats.computers.loading ? 
-                          <Spin size="small" /> : 
+                          <LoadingComponent type="inline" size="small" tip="" /> : 
                           `${stats.computers.online}/${stats.computers.total}`
                         }
                       </span>

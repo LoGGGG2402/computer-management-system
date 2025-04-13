@@ -72,17 +72,6 @@ const router = createBrowserRouter([
             path: '/admin',
             element: <AdminDashboard />,
           },
-          // Use the same RoomsListPage component, but in admin context
-          {
-            path: '/admin/rooms',
-            element: <RoomsListPage />,
-          },
-          // Computer detail page for admin
-          {
-            path: '/admin/computers/:id',
-            element: <ComputerDetailPage />,
-          },
-          // Computer and User management are now handled within AdminDashboard
         ]
       }
     ]

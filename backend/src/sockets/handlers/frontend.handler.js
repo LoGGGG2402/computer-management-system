@@ -7,7 +7,6 @@ const { v4: uuidv4 } = require('uuid');
 const websocketService = require('../../services/websocket.service');
 const computerService = require('../../services/computer.service');
 const config = require('../../config/auth.config');
-const logger = require('../../utils/logger');
 
 /**
  * Sets up WebSocket event handlers for a connected frontend socket.
@@ -29,20 +28,21 @@ const setupFrontendHandlers = (socket) => {
       const token = data?.token;
 
       if (!token) {
-        logger.warn(`Frontend authentication attempt with no token from ${socket.id}`);
+        console.warn(`Frontend authentication attempt with no token from ${socket.id}`);
         socket.emit('auth_response', { status: 'error', message: 'Authentication token is required' });
         return;
       }
 
       jwt.verify(token, config.secret, (err, decoded) => {
         if (err) {
-          logger.warn(`Invalid token authentication attempt from ${socket.id}: ${err.message}`);
+          console.warn(`Invalid token authentication attempt from ${socket.id}: ${err.message}`);
           socket.emit('auth_response', { status: 'error', message: 'Invalid or expired token' });
           return;
         }
 
         socket.data.userId = decoded.id;
         socket.data.role = decoded.role;
+        console.log(decoded)
 
         socket.join(`user_${decoded.id}`);
 
@@ -57,10 +57,10 @@ const setupFrontendHandlers = (socket) => {
           role: decoded.role
         });
 
-        logger.info(`Frontend user authenticated: User ID ${decoded.id} (Role: ${decoded.role}), Socket ID ${socket.id}`);
+        console.info(`Frontend user authenticated: User ID ${decoded.id} (Role: ${decoded.role}), Socket ID ${socket.id}`);
       });
     } catch (error) {
-      logger.error(`Frontend authentication error for socket ${socket.id}: ${error.message}`, error.stack);
+      console.error(`Frontend authentication error for socket ${socket.id}: ${error.message}`, error.stack);
       socket.emit('auth_response', { status: 'error', message: 'Internal server error during authentication' });
     }
   });
@@ -78,13 +78,13 @@ const setupFrontendHandlers = (socket) => {
     const userId = socket.data.userId;
 
     if (!userId) {
-      logger.warn(`Unauthenticated subscription attempt from ${socket.id}`);
+      console.warn(`Unauthenticated subscription attempt from ${socket.id}`);
       socket.emit('subscribe_response', { status: 'error', message: 'Not authenticated' });
       return;
     }
 
     if (!computerId || typeof computerId !== 'number') {
-      logger.warn(`Invalid subscription attempt from ${socket.id}: Invalid or missing computerId`);
+      console.warn(`Invalid subscription attempt from ${socket.id}: Invalid or missing computerId`);
       socket.emit('subscribe_response', { status: 'error', message: 'Valid Computer ID is required' });
       return;
     }
@@ -101,7 +101,7 @@ const setupFrontendHandlers = (socket) => {
         const roomName = websocketService.ROOM_PREFIXES.COMPUTER_SUBSCRIBERS(computerId);
         socket.join(roomName);
         socket.emit('subscribe_response', { status: 'success', computerId });
-        logger.info(`User ${userId} (Socket ${socket.id}) subscribed to computer ${computerId} (Room: ${roomName})`);
+        console.info(`User ${userId} (Socket ${socket.id}) subscribed to computer ${computerId} (Room: ${roomName})`);
 
         const currentStatus = websocketService.getAgentRealtimeStatus(computerId);
         if (currentStatus) {
@@ -116,10 +116,10 @@ const setupFrontendHandlers = (socket) => {
 
       } else {
         socket.emit('subscribe_response', { status: 'error', message: 'Access denied to this computer', computerId });
-        logger.warn(`User ${userId} (Socket ${socket.id}) denied subscription to computer ${computerId}`);
+        console.warn(`User ${userId} (Socket ${socket.id}) denied subscription to computer ${computerId}`);
       }
     } catch (error) {
-      logger.error(`Subscription error for user ${userId}, computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+      console.error(`Subscription error for user ${userId}, computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
       socket.emit('subscribe_response', { status: 'error', message: 'Subscription failed due to server error', computerId });
     }
   });
@@ -135,7 +135,7 @@ const setupFrontendHandlers = (socket) => {
     const computerId = payload?.computerId;
 
      if (!computerId || typeof computerId !== 'number') {
-      logger.warn(`Invalid unsubscribe attempt from ${socket.id}: Invalid or missing computerId`);
+      console.warn(`Invalid unsubscribe attempt from ${socket.id}: Invalid or missing computerId`);
       socket.emit('unsubscribe_response', { status: 'error', message: 'Valid Computer ID is required' });
       return;
     }
@@ -144,9 +144,9 @@ const setupFrontendHandlers = (socket) => {
       const roomName = websocketService.ROOM_PREFIXES.COMPUTER_SUBSCRIBERS(computerId);
       socket.leave(roomName);
       socket.emit('unsubscribe_response', { status: 'success', computerId });
-      logger.info(`Client ${socket.id} unsubscribed from computer ${computerId} (Room: ${roomName})`);
+      console.info(`Client ${socket.id} unsubscribed from computer ${computerId} (Room: ${roomName})`);
     } catch (error) {
-      logger.error(`Unsubscription error for computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+      console.error(`Unsubscription error for computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
       socket.emit('unsubscribe_response', { status: 'error', message: 'Unsubscription failed', computerId });
     }
   });
@@ -163,19 +163,19 @@ const setupFrontendHandlers = (socket) => {
     const userId = socket.data.userId;
 
     if (!userId) {
-      logger.warn(`Unauthenticated command attempt from ${socket.id}`);
+      console.warn(`Unauthenticated command attempt from ${socket.id}`);
       socket.emit('command_sent', { status: 'error', message: 'Not authenticated' });
       return;
     }
 
     if (!computerId || typeof computerId !== 'number') {
-      logger.warn(`Invalid command attempt from user ${userId} (Socket ${socket.id}): Invalid or missing computerId`);
+      console.warn(`Invalid command attempt from user ${userId} (Socket ${socket.id}): Invalid or missing computerId`);
       socket.emit('command_sent', { status: 'error', message: 'Valid Computer ID is required' });
       return;
     }
 
     if (!command || typeof command !== 'string' || command.trim() === '') {
-      logger.warn(`Invalid command attempt from user ${userId} (Socket ${socket.id}): Missing or empty command`);
+      console.warn(`Invalid command attempt from user ${userId} (Socket ${socket.id}): Missing or empty command`);
       socket.emit('command_sent', { status: 'error', message: 'Command content is required', computerId });
       return;
     }
@@ -189,7 +189,7 @@ const setupFrontendHandlers = (socket) => {
       }
 
       if (!hasAccess) {
-        logger.warn(`Command access denied for user ${userId} to computer ${computerId} (Socket ${socket.id})`);
+        console.warn(`Command access denied for user ${userId} to computer ${computerId} (Socket ${socket.id})`);
         socket.emit('command_sent', { status: 'error', message: 'Access denied to send commands to this computer', computerId });
         return;
       }
@@ -201,15 +201,15 @@ const setupFrontendHandlers = (socket) => {
       const sent = websocketService.sendCommandToAgent(computerId, command, commandId);
 
       if (sent) {
-        logger.info(`Command ${commandId} initiated by user ${userId} sent towards computer ${computerId} (Socket ${socket.id})`);
+        console.info(`Command ${commandId} initiated by user ${userId} sent towards computer ${computerId} (Socket ${socket.id})`);
         socket.emit('command_sent', { status: 'success', computerId, commandId });
       } else {
-        logger.warn(`Failed to send command ${commandId} from user ${userId} to computer ${computerId}: Agent not connected (Socket ${socket.id})`);
+        console.warn(`Failed to send command ${commandId} from user ${userId} to computer ${computerId}: Agent not connected (Socket ${socket.id})`);
         websocketService.pendingCommands.delete(commandId);
         socket.emit('command_sent', { status: 'error', message: 'Agent is not connected', computerId, commandId });
       }
     } catch (error) {
-      logger.error(`Send command error for user ${userId}, computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+      console.error(`Send command error for user ${userId}, computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
       socket.emit('command_sent', { status: 'error', message: 'Failed to send command due to server error', computerId });
     }
   });
@@ -222,7 +222,7 @@ const setupFrontendHandlers = (socket) => {
  * @param {import("socket.io").Socket} socket - The disconnected socket instance
  */
 const handleFrontendDisconnect = (socket) => {
-  logger.info(`Frontend client disconnected: User ID ${socket.data.userId || 'N/A'}, Socket ID ${socket.id}`);
+  console.info(`Frontend client disconnected: User ID ${socket.data.userId || 'N/A'}, Socket ID ${socket.id}`);
 };
 
 module.exports = {
