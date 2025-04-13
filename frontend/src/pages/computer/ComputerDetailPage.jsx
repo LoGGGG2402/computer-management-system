@@ -166,7 +166,7 @@ const ComputerDetailPage = () => {
               </Col>
               <Col span={12}>
                 <Text strong>OS: </Text>
-                <Text>{computer?.windows_version || 'Unknown'}</Text>
+                <Text>{computer?.os_info || 'Unknown'}</Text>
               </Col>
               <Col span={12}>
                 <Text strong>IP Address: </Text>

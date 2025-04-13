@@ -1,5 +1,8 @@
-requests
-websocket-client
-python-socketio
-psutil
-keyring
+# Core dependencies
+requests>=2.25.1,<3.0.0
+websocket-client>=1.0.0,<2.0.0
+python-socketio[client]>=5.0.0,<6.0.0 # Specify client extra for clarity
+psutil>=5.8.0,<6.0.0
+
+# Optional dependency for secure token storage
+keyring>=23.0.0,<24.0.0

@@ -1,178 +1,101 @@
+# -*- coding: utf-8 -*-
 """
-Utility functions for the Computer Management System Agent.
+General utility functions for the Computer Management System Agent.
 """
 import json
-import logging
 import os
-import subprocess
-from typing import Dict, Any, Optional, List, Tuple
+import logging
+from typing import Dict, Any, Optional
 
-logger = logging.getLogger(__name__)
-
-def run_command(command: List[str]) -> Tuple[bool, str, str]:
-    """
-    Run a system command and return the result.
-    
-    Args:
-        command (List[str]): Command as a list of arguments
-        
-    Returns:
-        Tuple of (success, stdout, stderr)
-    """
-    try:
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True
-        )
-        stdout, stderr = process.communicate()
-        success = process.returncode == 0
-        
-        if not success:
-            logger.error(f"Command {' '.join(command)} failed with code {process.returncode}")
-            logger.error(f"Error: {stderr}")
-        
-        return success, stdout, stderr
-    except Exception as e:
-        logger.exception(f"Error running command {' '.join(command)}")
-        return False, "", str(e)
+# Use get_logger to ensure logger exists even if setup isn't called first elsewhere
+# Use logger name consistent with the module hierarchy
+logger = logging.getLogger("agent.utils.utils")
 
 def save_json(data: Dict[str, Any], filepath: str) -> bool:
     """
-    Save data to a JSON file.
-    
+    Saves dictionary data to a JSON file with UTF-8 encoding.
+    Creates the directory if it doesn't exist.
+
     Args:
-        data (Dict): Data to save
-        filepath (str): Path to save the file
-        
+        data (Dict[str, Any]): The dictionary data to save.
+        filepath (str): The full path to the output JSON file.
+
     Returns:
-        bool: Success or failure
+        bool: True if saving was successful, False otherwise.
     """
     try:
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        
-        with open(filepath, 'w') as f:
-            json.dump(data, f, indent=4)
-            
+        # Ensure the directory exists
+        dirpath = os.path.dirname(filepath)
+        if dirpath: # Only create if there's a directory part
+            os.makedirs(dirpath, exist_ok=True)
+
+        # Write the JSON data
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+        logger.debug(f"Successfully saved JSON data to: {filepath}")
         return True
-    except Exception as e:
-        logger.error(f"Error saving JSON to {filepath}: {e}")
+    except PermissionError as e:
+         logger.error(f"Permission denied saving JSON to {filepath}: {e}")
+         return False
+    except (IOError, OSError, TypeError) as e:
+        logger.error(f"Error saving JSON to {filepath}: {e}", exc_info=True)
+        return False
+    except Exception as e: # Catch any other unexpected errors
+        logger.error(f"Unexpected error saving JSON to {filepath}: {e}", exc_info=True)
         return False
 
 def load_json(filepath: str) -> Optional[Dict[str, Any]]:
     """
-    Load data from a JSON file.
-    
+    Loads dictionary data from a JSON file with UTF-8 encoding.
+
     Args:
-        filepath (str): Path to the JSON file
-        
+        filepath (str): The full path to the JSON file.
+
     Returns:
-        Dict or None if file doesn't exist or is invalid
+        Optional[Dict[str, Any]]: The loaded dictionary, or None if the file
+                                   doesn't exist, is empty, has permission issues,
+                                   or contains invalid JSON.
     """
     if not os.path.exists(filepath):
-        logger.debug(f"File {filepath} does not exist")
+        # This is not an error, just the file doesn't exist yet.
+        logger.debug(f"JSON file not found (this is okay if it's the first run): {filepath}")
+        # Return {} instead of None when file not found, so the caller can easily add data.
+        return {}
+    # Check if it's actually a file
+    if not os.path.isfile(filepath):
+        logger.error(f"Path exists but is not a file: {filepath}")
         return None
-        
+
+    # Check file size *after* confirming it exists and is a file
     try:
-        with open(filepath, 'r') as f:
+        if os.path.getsize(filepath) == 0:
+            logger.warning(f"JSON file is empty: {filepath}")
+            # Return an empty dict for an empty file.
+            return {}
+    except OSError as e:
+        logger.error(f"Could not get size of file {filepath}: {e}")
+        return None # Can't proceed if we can't check size
+
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
+        if not isinstance(data, dict):
+             logger.warning(f"JSON file does not contain a dictionary object: {filepath}")
+             return None # Or raise TypeError depending on desired strictness
+        logger.debug(f"Successfully loaded JSON data from: {filepath}")
         return data
-    except Exception as e:
-        logger.error(f"Error loading JSON from {filepath}: {e}")
+    except json.JSONDecodeError as e:
+        # Log the specific decoding error
+        logger.error(f"Error decoding JSON from {filepath}: {e}", exc_info=False) # exc_info=False usually sufficient
         return None
-
-def format_bytes(bytes: int, decimals: int = 2) -> str:
-    """
-    Format bytes to a human-readable string.
-    
-    Args:
-        bytes (int): Bytes to format
-        decimals (int): Number of decimal places
-        
-    Returns:
-        str: Formatted string
-    """
-    if bytes == 0:
-        return "0B"
-        
-    size_names = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
-    i = 0
-    
-    while bytes >= 1024 and i < len(size_names) - 1:
-        bytes /= 1024
-        i += 1
-        
-    return f"{bytes:.{decimals}f} {size_names[i]}"
-
-def get_room_config(storage_path: str) -> Optional[Dict[str, Any]]:
-    """
-    Get the room configuration from storage.
-    
-    Args:
-        storage_path (str): Path to the storage directory
-        
-    Returns:
-        Optional[Dict[str, Any]]: Room configuration if exists, None otherwise
-    """
-    config_path = os.path.join(storage_path, 'room_config.json')
-    return load_json(config_path)
-
-def save_room_config(storage_path: str, room: str, pos_x: int, pos_y: int) -> bool:
-    """
-    Save room configuration to storage.
-    
-    Args:
-        storage_path (str): Path to the storage directory
-        room (str): Room identifier
-        pos_x (int): X position in the room
-        pos_y (int): Y position in the room
-        
-    Returns:
-        bool: True if saved successfully
-    """
-    config = {
-        'room': room,
-        'position': {
-            'x': pos_x,
-            'y': pos_y
-        }
-    }
-    config_path = os.path.join(storage_path, 'room_config.json')
-    return save_json(config, config_path)
-
-def prompt_room_config() -> Tuple[str, int, int]:
-    """
-    Prompt user for room configuration.
-    
-    Returns:
-        Tuple[str, int, int]: Room identifier, X position, Y position
-    """
-    print("\n" + "="*50)
-    print("COMPUTER MANAGEMENT SYSTEM - ROOM CONFIGURATION")
-    print("="*50)
-    print("\nPlease enter the room configuration for this computer.\n")
-    
-    while True:
-        try:
-            room = input("Enter room identifier: ").strip()
-            if not room:
-                print("Room identifier cannot be empty. Please try again.")
-                continue
-            
-            pos_x = input("Enter X position in the room: ").strip()
-            if not pos_x.isdigit():
-                print("X position must be a number. Please try again.")
-                continue
-                
-            pos_y = input("Enter Y position in the room: ").strip()
-            if not pos_y.isdigit():
-                print("Y position must be a number. Please try again.")
-                continue
-                
-            return room, int(pos_x), int(pos_y)
-            
-        except KeyboardInterrupt:
-            raise
-        except Exception as e:
-            print("An error occurred. Please try again.")
+    except PermissionError as e:
+         # Log permission error specifically
+         logger.error(f"Permission denied reading JSON file {filepath}: {e}")
+         return None
+    except (IOError, OSError) as e:
+        # Log other I/O errors
+        logger.error(f"I/O error reading JSON file {filepath}: {e}", exc_info=True)
+        return None
+    except Exception as e: # Catch any other unexpected errors
+        logger.error(f"Unexpected error loading JSON from {filepath}: {e}", exc_info=True)
+        return None

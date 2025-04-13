@@ -27,12 +27,12 @@ module.exports = (sequelize, DataTypes) => {
     },
     agent_token_hash: {
       type: DataTypes.STRING(255),
-      allowNull: true // NULL until successful registration
+      allowNull: true 
     },
     last_seen: {
       type: DataTypes.DATE
     },
-    windows_version: {
+    os_info: {
       type: DataTypes.STRING(255)
     },
     total_ram: {

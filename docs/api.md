@@ -482,7 +482,7 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
         "ip_address": "string",
         "unique_agent_id": "string",
         "last_seen": "timestamp",
-        "windows_version": "string",
+        "os_info": "string",
         "total_ram": "integer",
         "cpu_info": "string",
         "errors": [

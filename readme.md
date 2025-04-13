@@ -56,7 +56,7 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
     * `unique_agent_id`: VARCHAR(255) UNIQUE NOT NULL
     * `agent_token_hash`: VARCHAR(255) (NULL cho đến khi đăng ký thành công)
     * `last_seen`: TIMESTAMPTZ
-    * `windows_version`: VARCHAR(255)
+    * `os_info`: VARCHAR(255)
     * `total_ram`: BIGINT
     * `cpu_info`: VARCHAR(255)
     * `errors`: JSONB DEFAULT '[]'::jsonb (Lưu một mảng các đối tượng lỗi. Ví dụ cấu trúc một đối tượng lỗi: `{ "id": "uuid", "type": "string", "description": "text", "reported_by": "integer (user_id)", "reported_at": "timestamp", "status": "string ('active'|'resolved')", "resolved_by": "integer (user_id, optional)", "resolved_at": "timestamp (optional)" }`)

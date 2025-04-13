@@ -68,53 +68,6 @@ class ComputerController {
   }
 
   /**
-   * Update a computer
-   * @param {Object} req - Express request object
-   * @param {Object} res - Express response object
-   */
-  async updateComputer(req, res) {
-    try {
-      const id = parseInt(req.params.id);
-      const { name, room_id, pos_x, pos_y } = req.body;
-      
-      if (!id) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'Computer ID is required'
-        });
-      }
-      
-      // Prevent updating ip_address
-      if (req.body.ip_address !== undefined) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'IP address cannot be updated via this endpoint'
-        });
-      }
-      
-      const computerData = {};
-      
-      if (name !== undefined) computerData.name = name;
-      if (room_id !== undefined) computerData.room_id = parseInt(room_id);
-      if (pos_x !== undefined) computerData.pos_x = parseInt(pos_x);
-      if (pos_y !== undefined) computerData.pos_y = parseInt(pos_y);
-      
-      const computer = await computerService.updateComputer(id, computerData);
-      
-      return res.status(200).json({
-        status: 'success',
-        data: computer,
-        message: 'Computer updated successfully'
-      });
-    } catch (error) {
-      return res.status(400).json({
-        status: 'error',
-        message: error.message || 'Failed to update computer'
-      });
-    }
-  }
-
-  /**
    * Delete a computer
    * @param {Object} req - Express request object
    * @param {Object} res - Express response object

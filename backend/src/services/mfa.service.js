@@ -58,40 +58,34 @@ class MfaService {
    * Verify an MFA code for an agent
    * @param {string} agentId - The unique agent ID to verify MFA for
    * @param {string} code - The MFA code to verify
-   * @param {Object} positionInfo - The room information to verify against stored positionInfo
-   * @returns {boolean} True if the code is valid, false otherwise
+   * @returns {boolean, Object} True if the code is valid, false otherwise
+   * and the positionInfo object
    */
-  verifyMfa(agentId, code, positionInfo) {
+  verifyMfa(agentId, code) {
     // Get the stored MFA info for this agent
     const storedMfaInfo = this.mfaCache.get(agentId);
 
     // If there's no stored code, verification fails
     if (!storedMfaInfo) {
       console.log(`[MfaService] No MFA code found for agent: ${agentId}`);
-      return false;
+      return { valid: false, positionInfo: null };
     }
 
     // Ensure that this MFA code was generated specifically for this agent
     if (storedMfaInfo.generatedFor !== agentId) {
       console.log(`[MfaService] MFA code was not generated for this agent: ${agentId}`);
-      return false;
-    }
-
-    // Verify the room information
-    if (storedMfaInfo.positionInfo !== positionInfo) {
-      console.log(`[MfaService] Room information mismatch for agent: ${agentId}`);
-      return false;
+      return { valid: false, positionInfo: null };
     }
 
     // If the code matches, delete it from cache and return true
     if (storedMfaInfo.code === code) {
       this.mfaCache.del(agentId);
       console.log(`[MfaService] MFA code verified and removed for agent: ${agentId}`);
-      return true;
+      return { valid: true, positionInfo: storedMfaInfo.positionInfo };
     }
 
     console.log(`[MfaService] Invalid MFA code attempt for agent: ${agentId}`);
-    return false;
+    return { valid: false, positionInfo: null };
   }
 }
 

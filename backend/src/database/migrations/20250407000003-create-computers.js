@@ -35,7 +35,7 @@ module.exports = {
       last_seen: {
         type: Sequelize.DATE
       },
-      windows_version: {
+      os_info: {
         type: Sequelize.STRING(255)
       },
       total_ram: {

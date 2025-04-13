@@ -1,8 +1,15 @@
+# -*- coding: utf-8 -*-
 """
-Configuration module for the Computer Management System Agent.
-This module provides centralized configuration management.
-"""
-from src.config.config_manager import config_manager
+Configuration and State Management modules.
 
-# Export the global config manager instance
-__all__ = ['config_manager']
+Handles loading agent configuration from files and managing
+persistent agent state (like device ID, room config, tokens).
+"""
+# Expose key classes for easier import from this package
+from .config_manager import ConfigManager
+from .state_manager import StateManager
+
+__all__ = [
+    'ConfigManager',
+    'StateManager'
+]

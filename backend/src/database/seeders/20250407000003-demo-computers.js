@@ -15,7 +15,7 @@ module.exports = {
         unique_agent_id: uuidv4(),
         agent_token_hash: await bcrypt.hash('token1', salt),
         last_seen: new Date(),
-        windows_version: 'Windows 10 Pro, 21H2',
+        os_info: 'Windows 10 Pro, 21H2',
         total_ram: 16 * 1024 * 1024 * 1024, // 16GB in bytes
         cpu_info: 'Intel Core i5-10400 @ 2.90GHz',
         errors: JSON.stringify([]),
@@ -31,7 +31,7 @@ module.exports = {
         unique_agent_id: uuidv4(),
         agent_token_hash: await bcrypt.hash('token2', salt),
         last_seen: new Date(),
-        windows_version: 'Windows 10 Pro, 21H2',
+        os_info: 'Windows 10 Pro, 21H2',
         total_ram: 16 * 1024 * 1024 * 1024,
         cpu_info: 'Intel Core i5-10400 @ 2.90GHz',
         errors: JSON.stringify([]),
@@ -47,7 +47,7 @@ module.exports = {
         unique_agent_id: uuidv4(),
         agent_token_hash: await bcrypt.hash('token3', salt),
         last_seen: new Date(),
-        windows_version: 'Windows 11 Pro, 22H2',
+        os_info: 'Windows 11 Pro, 22H2',
         total_ram: 32 * 1024 * 1024 * 1024, // 32GB in bytes
         cpu_info: 'Intel Core i7-12700K @ 3.60GHz',
         errors: JSON.stringify([]),
@@ -63,27 +63,11 @@ module.exports = {
         unique_agent_id: uuidv4(),
         agent_token_hash: await bcrypt.hash('token4', salt),
         last_seen: new Date(),
-        windows_version: 'Windows 10 Enterprise, 21H2',
+        os_info: 'Windows 10 Enterprise, 21H2',
         total_ram: 32 * 1024 * 1024 * 1024,
         cpu_info: 'AMD Ryzen 7 5800X @ 3.80GHz',
         errors: JSON.stringify([]),
         room_id: 3,
-        created_at: new Date(),
-        updated_at: new Date()
-      },
-      {
-        name: null, // Unassigned computer
-        pos_x: 0,
-        pos_y: 0,
-        ip_address: '192.168.1.200',
-        unique_agent_id: uuidv4(),
-        agent_token_hash: null, // Not yet registered
-        last_seen: null,
-        windows_version: null,
-        total_ram: null,
-        cpu_info: null,
-        errors: JSON.stringify([]),
-        room_id: null, // No room assigned
         created_at: new Date(),
         updated_at: new Date()
       }

@@ -580,7 +580,7 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
           <Col span={12}>
             <Space align="center">
               <LaptopOutlined />
-              <Text>{computer.windows_version || 'OS unknown'}</Text>
+              <Text>{computer.os_info || 'OS unknown'}</Text>
             </Space>
           </Col>
           <Col span={12}>

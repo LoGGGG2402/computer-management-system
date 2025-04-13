@@ -37,11 +37,12 @@ class AgentController {
       console.log("[AgentController] Found computer:", computer);
 
       // Kiểm tra nếu client yêu cầu cấp mới token và computer đã tồn tại trong database
-      if (
-        (forceRenewToken && computer && computer.room_id === positionInfo.roomId,
-        computer.pos_x === positionInfo.posX,
-        computer.pos_y === positionInfo.posY)
-      ) {
+      if (forceRenewToken && computer) {
+        if (computer.room.name === positionInfo.roomName,
+          computer.pos_x === positionInfo.posX,
+          computer.pos_y === positionInfo.posY)
+          {
+
         console.log("[AgentController] Client requested token renewal");
         // Generate and assign a new token for the agent
         const { plainToken } =
@@ -51,16 +52,12 @@ class AgentController {
             computer
           );
 
-        // Notify admins about token renewal
-        websocketService.notifyAdminsAgentRegistered(
-          unique_agent_id,
-          computer.id
-        );
 
         return res.status(200).json({
           status: "success",
           agentToken: plainToken,
         });
+          }
       }
 
       if (computer && computer.agent_token_hash) {
@@ -72,19 +69,24 @@ class AgentController {
 
       // Check if position is available
       let resulst = await roomService.isPositionAvailable(
-        positionInfo.room,
+        positionInfo.roomName,
         positionInfo.posX,
         positionInfo.posY
       );
       if (resulst.valid) {
-        let mfacode = mfaService.generateAndStoreMfa(unique_agent_id, positionInfo);
-        console.log("[AgentController] Generated MFA code:", {
+        let mfacode = mfaService.generateAndStoreMfa(
+          unique_agent_id,
+          {
+            roomId: resulst.room.id,
+            posX: positionInfo.posX,
+            posY: positionInfo.posY,
+          }
+        );
+        websocketService.notifyAdminsNewMfa(
           unique_agent_id,
           mfacode,
-          positionInfo,
-        });
-        // Notify admins about the new MFA request with room info
-        websocketService.notifyAdminsNewMfa(unique_agent_id, mfacode, positionInfo);
+          positionInfo
+        );
         return res.status(200).json({
           status: "mfa_required",
         });
@@ -111,7 +113,7 @@ class AgentController {
    */
   async handleVerifyMfa(req, res, next) {
     try {
-      const { unique_agent_id, mfaCode, positionInfo } = req.body;
+      const { unique_agent_id, mfaCode } = req.body;
 
       console.log("[AgentController] Received verify MFA request:", {
         unique_agent_id,
@@ -126,7 +128,10 @@ class AgentController {
       }
 
       // Verify the MFA code with positionInfo for additional security
-      const isValid = mfaService.verifyMfa(unique_agent_id, mfaCode, positionInfo);
+      const {isValid, positionInfo} = mfaService.verifyMfa(
+        unique_agent_id,
+        mfaCode
+      );
 
       if (isValid) {
         // Generate and assign a token for the agent, cùng với thông tin vị trí
@@ -138,8 +143,8 @@ class AgentController {
 
         // Notify admins about successful registration
         websocketService.notifyAdminsAgentRegistered(
-          unique_agent_id,
-          computer.id
+          computer.id,
+          positionInfo
         );
 
         return res.status(200).json({
@@ -159,48 +164,6 @@ class AgentController {
   }
 
   /**
-   * Handle agent status update - DEPRECATED: Now handled via WebSocket
-   * @param {Object} req - Express request object
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   * @deprecated Use WebSocket communication instead
-   */
-  async handleStatusUpdate(req, res, next) {
-    console.warn("[AgentController] Deprecated HTTP route called: handleStatusUpdate");
-    try {
-      // Get the computer ID from the authenticated request
-      const computerId = req.computer.id;
-
-      // Get system metrics from request body
-      const { cpu, ram, disk } = req.body;
-
-      console.log(
-        `[AgentController] Received status update from computer ${computerId}:`,
-        { cpu, ram, disk }
-      );
-
-      // Update the realtime cache with new system metrics
-      websocketService.updateRealtimeCache(computerId, {
-        cpuUsage: cpu,
-        ramUsage: ram,
-        diskUsage: disk
-      });
-
-      // Update the computer's last seen timestamp in the database
-      await computerService.updateLastSeen(computerId);
-
-      // Broadcast the status update to clients
-      await websocketService.broadcastStatusUpdate(computerId);
-
-      // Return 204 No Content status
-      return res.sendStatus(204);
-    } catch (error) {
-      console.error(`[AgentController] Error handling status update:`, error);
-      next(error);
-    }
-  }
-
-  /**
    * Handle hardware information update from agent
    * @param {Object} req - Express request object
    * @param {Object} res - Express response object
@@ -212,7 +175,7 @@ class AgentController {
       const computerId = req.computer.id;
 
       // Get hardware information from request body
-      const { total_disk_space, gpu_info, cpu_info, total_ram } = req.body;
+      const { total_disk_space, gpu_info, cpu_info, total_ram, os_info } = req.body;
 
       console.log(
         `[AgentController] Received hardware info from computer ${computerId}:`,
@@ -222,16 +185,17 @@ class AgentController {
       if (!total_disk_space) {
         return res.status(400).json({
           status: "error",
-          message: "Total disk space is required"
+          message: "Total disk space is required",
         });
       }
 
       // Update the computer record with new hardware information
       await computerService.updateComputer(computerId, {
-        total_disk_space,
+        os_info: os_info || null,
+        total_disk_space: total_disk_space || null,
         gpu_info: gpu_info || null,
         cpu_info: cpu_info || null,
-        total_ram: total_ram || null
+        total_ram: total_ram || null,
       });
 
       // Return 204 No Content status

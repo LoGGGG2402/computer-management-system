@@ -18,6 +18,13 @@ class ComputerService {
   async findComputerByAgentId(agentId) {
     return Computer.findOne({
       where: { unique_agent_id: agentId },
+      include: [
+        {
+          model: Room,
+          as: "room",
+          attributes: ["id", "name"],
+        },
+      ],
     });
   }
 

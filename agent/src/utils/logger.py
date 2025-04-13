@@ -1,104 +1,146 @@
+# -*- coding: utf-8 -*-
 """
-Logger module for the Computer Management System Agent.
-This module provides centralized logging functionality for the entire application.
+Logger setup module for the Computer Management System Agent.
+Provides functions to configure logging based on external settings.
 """
 import os
+import sys
 import logging
 import logging.handlers
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 
-# Default log levels
-DEFAULT_CONSOLE_LEVEL = logging.INFO
-DEFAULT_FILE_LEVEL = logging.DEBUG
-
-# Default log format
+# Default log levels and format (can be overridden by config)
+DEFAULT_CONSOLE_LEVEL_NAME = 'INFO'
+DEFAULT_FILE_LEVEL_NAME = 'DEBUG'
 DEFAULT_LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
-# Global logger dictionary to maintain references
-loggers = {}
+# Global logger dictionary to prevent duplicate handlers if called multiple times for the same name
+_loggers: Dict[str, logging.Logger] = {}
 
-LOG_FILE = None
-LOG_LEVEL = logging.DEBUG
+def _get_log_level(level_name: str, default_level: int = logging.INFO) -> int:
+    """Convert log level string (e.g., 'DEBUG') to logging level constant."""
+    level_name_upper = str(level_name).upper() # Ensure it's a string and uppercase
+    level = logging.getLevelName(level_name_upper)
+    if isinstance(level, int):
+        return level
+    else:
+        # Log a warning if the level name is invalid and return default
+        logging.warning(f"Invalid log level name '{level_name}'. Using default level {logging.getLevelName(default_level)}.")
+        return default_level
 
 
 def setup_logger(
-    name: str = "agent", 
-    log_file: Optional[str] = None,
-    console_level: int = DEFAULT_CONSOLE_LEVEL,
-    file_level: int = DEFAULT_FILE_LEVEL,
-    log_format: str = DEFAULT_LOG_FORMAT
+    name: str = "agent",
+    log_format: str = DEFAULT_LOG_FORMAT,
+    console_level_name: str = DEFAULT_CONSOLE_LEVEL_NAME,
+    file_level_name: str = DEFAULT_FILE_LEVEL_NAME,
+    log_file_path: Optional[str] = None,
+    max_bytes: int = 10 * 1024 * 1024, # 10 MB
+    backup_count: int = 5
 ) -> logging.Logger:
     """
-    Set up and configure a logger with the specified parameters.
-    
+    Sets up and configures a logger instance.
+
+    If a logger with the same name already exists, it returns the existing one
+    to avoid adding duplicate handlers.
+
     Args:
-        name: Logger name
-        log_file: Path to log file (None for no file logging)
-        console_level: Logging level for console output
-        file_level: Logging level for file output
-        log_format: Format string for log messages
-        
+        name (str): The name for the logger (e.g., 'agent', 'agent.core').
+        log_format (str): The format string for log messages.
+        console_level_name (str): Logging level for console output (e.g., 'INFO', 'DEBUG').
+        file_level_name (str): Logging level for file output (e.g., 'DEBUG').
+        log_file_path (Optional[str]): Path to the log file. If None, file logging is disabled.
+        max_bytes (int): Maximum size of the log file before rotation.
+        backup_count (int): Number of backup log files to keep.
+
     Returns:
-        Configured logger instance
+        logging.Logger: The configured logger instance.
     """
-    # Check if logger already exists
-    if name in loggers:
-        return loggers[name]
-    
+    # Check if logger already configured
+    if name in _loggers:
+        # Optionally check if configuration needs update (e.g., level change)
+        # For simplicity, we return the existing one here.
+        # If dynamic level changes are needed, this logic would need adjustment.
+        return _loggers[name]
+
     # Create logger
     logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)  # Set to lowest level, handlers will filter
-    
+    # Set logger level to the lowest level among handlers to capture all messages
+    console_level = _get_log_level(console_level_name, logging.INFO)
+    file_level = _get_log_level(file_level_name, logging.DEBUG)
+    lowest_level = min(console_level, file_level) if log_file_path else console_level
+    logger.setLevel(lowest_level)
+
+    # Prevent messages from propagating to the root logger if it has handlers
+    # logger.propagate = False # Only set if root logger configuration is complex
+
+    # Clear existing handlers for this logger name, in case of re-configuration attempts
+    if logger.hasHandlers():
+        # print(f"Logger '{name}' already had handlers. Clearing them before re-configuring.")
+        logger.handlers.clear()
+
+
     # Create formatter
     formatter = logging.Formatter(log_format)
-    
-    # Create console handler
+
+    # --- Console Handler ---
     console_handler = logging.StreamHandler()
     console_handler.setLevel(console_level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-    
-    # Create file handler if log_file is specified
-    if log_file:
-        # Ensure log directory exists
-        os.makedirs(os.path.dirname(log_file), exist_ok=True)
-        
-        # Create rotating file handler (10 MB max size, keep 5 backup files)
-        file_handler = logging.handlers.RotatingFileHandler(
-            log_file,
-            maxBytes=10*1024*1024,  # 10 MB
-            backupCount=5,
-            encoding='utf-8'
-        )
-        file_handler.setLevel(file_level)
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-    
-    # Store logger in dictionary
-    loggers[name] = logger
-    
+    # print(f"Logger '{name}' Console Handler Level: {logging.getLevelName(console_level)}") # Debug print
+
+    # --- File Handler (Optional) ---
+    if log_file_path:
+        try:
+            # Ensure log directory exists
+            log_dir = os.path.dirname(log_file_path)
+            if log_dir: # Create directory only if path includes one
+                os.makedirs(log_dir, exist_ok=True)
+
+            # Create rotating file handler
+            file_handler = logging.handlers.RotatingFileHandler(
+                log_file_path,
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding='utf-8'
+            )
+            file_handler.setLevel(file_level)
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+            # print(f"Logging to file: {log_file_path} (Level: {logging.getLevelName(file_level)})") # Inform user
+        except PermissionError as e:
+             # Log permission error specifically
+             logger.error(f"Permission denied creating log file/directory {log_file_path}: {e}")
+             print(f"Lỗi quyền truy cập: Không thể tạo file log tại {log_file_path}. File logging bị vô hiệu hóa.", file=sys.stderr)
+        except Exception as e:
+            # Log other errors to console if file logging setup fails
+            logger.error(f"Failed to set up file logging to {log_file_path}: {e}", exc_info=True)
+            print(f"Lỗi: Không thể thiết lập file log tại {log_file_path}. File logging bị vô hiệu hóa.", file=sys.stderr)
+
+
+    # Store the configured logger
+    _loggers[name] = logger
+    # print(f"Logger '{name}' configured. Overall Level: {logging.getLevelName(logger.level)}") # Inform user
     return logger
 
 def get_logger(name: str = "agent") -> logging.Logger:
     """
-    Get an existing logger or create a new one with default settings.
-    
+    Retrieves a logger instance by name.
+
+    If the logger hasn't been set up via `setup_logger` yet, it returns
+    a basic logger instance associated with the name. It's recommended to
+    call `setup_logger` first in the main application entry point.
+
     Args:
-        name: Logger name
-        
+        name (str): The name of the logger.
+
     Returns:
-        Logger instance
+        logging.Logger: The logger instance.
     """
+    # Ensure a basic configuration exists if setup_logger hasn't been called
+    # This prevents "No handlers could be found for logger '...'" messages
+    # if logging.getLogger(name).level == logging.NOTSET and not logging.getLogger(name).handlers:
+    #     logging.basicConfig() # Sets up a default handler to stderr for the root logger
 
-    global LOG_FILE
-    if LOG_FILE is None:
-        LOG_FILE = os.path.join(os.path.dirname(__file__), 'logs', 'agent.log')
-    
-    if name in loggers:
-        return loggers[name]
-    else:
-        # Return a new logger with default settings (no file logging)
-        return setup_logger(name=name, log_file=LOG_FILE,
-                            console_level=LOG_LEVEL,
-                            file_level=LOG_LEVEL)
-
+    return logging.getLogger(name)

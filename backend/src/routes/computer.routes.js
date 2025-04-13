@@ -16,9 +16,6 @@ router.get('/', isAdmin, computerController.getAllComputers);
 // Get specific computer by ID
 router.get('/:id', hasComputerAccess, computerController.getComputerById);
 
-// Routes that require computer access
-router.put('/:id', hasComputerAccess, computerController.updateComputer);
-
 // Admin-only routes below
 router.delete('/:id', isAdmin, computerController.deleteComputer);
 

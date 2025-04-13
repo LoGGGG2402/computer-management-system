@@ -62,21 +62,6 @@ const computerService = {
   },
 
   /**
-   * Update a computer
-   * @param {string} id - Computer ID
-   * @param {object} computerData - Updated computer data
-   * @returns {Promise} Promise with updated computer
-   */
-  updateComputer: async (id, computerData) => {
-    try {
-      const response = await api.put(`/computers/${id}`, computerData);
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  /**
    * Delete a computer
    * @param {string} id - Computer ID
    * @returns {Promise} Promise with deletion status
@@ -89,21 +74,6 @@ const computerService = {
       throw error;
     }
   },
-
-  /**
-   * Send command to a computer
-   * @param {string} id - Computer ID
-   * @param {string} command - Command to execute
-   * @returns {Promise} Promise with command ID
-   */
-  sendCommand: async (id, command) => {
-    try {
-      const response = await api.post(`/computers/${id}/command`, { command });
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
-  }
 };
 
 export default computerService;
