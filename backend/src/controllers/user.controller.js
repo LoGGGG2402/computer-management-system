@@ -175,6 +175,37 @@ class UserController {
       });
     }
   }
+
+  /**
+   * Reactivate an inactive user
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+  async reactivateUser(req, res) {
+    try {
+      const id = parseInt(req.params.id);
+      
+      if (!id) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'User ID is required'
+        });
+      }
+      
+      const user = await userService.reactivateUser(id);
+      
+      return res.status(200).json({
+        status: 'success',
+        data: user,
+        message: 'User reactivated successfully'
+      });
+    } catch (error) {
+      return res.status(404).json({
+        status: 'error',
+        message: error.message || 'User not found'
+      });
+    }
+  }
 }
 
 module.exports = new UserController();

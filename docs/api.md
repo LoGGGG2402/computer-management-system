@@ -481,7 +481,7 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
         "pos_y": "integer",
         "ip_address": "string",
         "unique_agent_id": "string",
-        "last_seen": "timestamp",
+        "last_update": "timestamp",
         "os_info": "string",
         "total_ram": "integer",
         "cpu_info": "string",

@@ -1,279 +1,228 @@
 /**
- * Handler for frontend WebSocket connections
+ * WebSocket event handlers for frontend clients (admins/users).
+ * Manages authentication, computer status subscriptions and command execution.
  */
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const websocketService = require('../../services/websocket.service');
-const roomService = require('../../services/room.service');
+const computerService = require('../../services/computer.service');
 const config = require('../../config/auth.config');
+const logger = require('../../utils/logger');
 
 /**
- * Set up frontend WebSocket event handlers
- * @param {Object} io - Socket.IO server instance
- * @param {Object} socket - Socket instance
+ * Sets up WebSocket event handlers for a connected frontend socket.
+ * Initializes authentication, subscription, and command handling.
+ * 
+ * @param {import("socket.io").Socket} socket - The socket instance for the frontend client
  */
-const setupFrontendHandlers = (io, socket) => {
-  // Authentication for frontend users (admin/user)
+const setupFrontendHandlers = (socket) => {
+
+  /**
+   * Handles authentication requests from frontend clients using JWT.
+   * Verifies token validity and assigns appropriate rooms based on user role.
+   * 
+   * @listens frontend:authenticate
+   * @emits auth_response - Authentication result with status and user data
+   */
   socket.on('frontend:authenticate', async (data) => {
     try {
-      const { token } = data;
-      
+      const token = data?.token;
+
       if (!token) {
-        socket.emit('auth_response', { 
-          status: 'error', 
-          message: 'No token provided' 
-        });
+        logger.warn(`Frontend authentication attempt with no token from ${socket.id}`);
+        socket.emit('auth_response', { status: 'error', message: 'Authentication token is required' });
         return;
       }
-      
-      // Verify the JWT token
+
       jwt.verify(token, config.secret, (err, decoded) => {
         if (err) {
-          socket.emit('auth_response', { 
-            status: 'error', 
-            message: 'Invalid token' 
-          });
+          logger.warn(`Invalid token authentication attempt from ${socket.id}: ${err.message}`);
+          socket.emit('auth_response', { status: 'error', message: 'Invalid or expired token' });
           return;
         }
-        
-        // Store user info in socket data
+
         socket.data.userId = decoded.id;
         socket.data.role = decoded.role;
-        socket.data.type = 'frontend';
-        
-        // If admin, register the admin socket
-        if (decoded.role === 'admin') {
-          websocketService.registerAdminSocket(socket.id);
-          socket.join('admin');
-        }
-        
+
         socket.join(`user_${decoded.id}`);
-        
-        socket.emit('auth_response', { 
-          status: 'success', 
+
+        if (decoded.role === 'admin') {
+          socket.join(websocketService.ROOM_PREFIXES.ADMIN);
+        }
+
+        socket.emit('auth_response', {
+          status: 'success',
           message: 'Authentication successful',
           userId: decoded.id,
           role: decoded.role
         });
-        
-        console.log(`Frontend user authenticated: ${decoded.id} (${decoded.role})`);
+
+        logger.info(`Frontend user authenticated: User ID ${decoded.id} (Role: ${decoded.role}), Socket ID ${socket.id}`);
       });
     } catch (error) {
-      console.error('Frontend authentication error:', error);
-      socket.emit('auth_response', { 
-        status: 'error', 
-        message: 'Authentication failed' 
-      });
-    }
-  });
-  
-  // Frontend subscription to rooms
-  socket.on('frontend:subscribe', async (payload) => {
-    try {
-      await handleFrontendSubscribe(socket, payload);
-    } catch (error) {
-      console.error('Subscription error:', error);
-      socket.emit('subscribe_response', { 
-        status: 'error', 
-        message: 'Subscription failed' 
-      });
-    }
-  });
-  
-  // Frontend unsubscription from rooms
-  socket.on('frontend:unsubscribe', (payload) => {
-    try {
-      const { roomIds } = payload;
-      
-      if (Array.isArray(roomIds)) {
-        roomIds.forEach(roomId => {
-          socket.leave(`room_${roomId}`);
-          console.log(`Client ${socket.id} unsubscribed from room ${roomId}`);
-        });
-      }
-      
-      socket.emit('unsubscribe_response', { 
-        status: 'success' 
-      });
-    } catch (error) {
-      console.error('Unsubscription error:', error);
-    }
-  });
-  
-  // Frontend send command to agent
-  socket.on('frontend:send_command', async (payload) => {
-    try {
-      const { computerId, command } = payload;
-      const userId = socket.data.userId;
-      
-      if (!userId) {
-        socket.emit('command_sent', { 
-          status: 'error', 
-          message: 'Not authenticated' 
-        });
-        return;
-      }
-      
-      // Generate command ID
-      const commandId = uuidv4();
-      
-      // Store the pending command
-      websocketService.storePendingCommand(commandId, userId, computerId);
-      
-      // Send command to agent
-      const sent = websocketService.sendCommandToAgent(computerId, command, commandId);
-      
-      if (sent) {
-        socket.emit('command_sent', { 
-          status: 'success', 
-          computerId, 
-          commandId 
-        });
-      } else {
-        socket.emit('command_sent', { 
-          status: 'error', 
-          message: 'Agent not connected', 
-          computerId 
-        });
-      }
-    } catch (error) {
-      console.error('Send command error:', error);
-      socket.emit('command_sent', { 
-        status: 'error', 
-        message: 'Failed to send command' 
-      });
+      logger.error(`Frontend authentication error for socket ${socket.id}: ${error.message}`, error.stack);
+      socket.emit('auth_response', { status: 'error', message: 'Internal server error during authentication' });
     }
   });
 
-  // Frontend send command to all computers in a room
-  socket.on('frontend:send_room_command', async (payload) => {
+  /**
+   * Handles requests from frontend clients to subscribe to computer status updates.
+   * Verifies user has access to the computer and sends current status.
+   * 
+   * @listens frontend:subscribe
+   * @emits subscribe_response - Subscription result with status and computer ID
+   * @emits computer:status_updated - Initial computer status data
+   */
+  socket.on('frontend:subscribe', async (payload) => {
+    const computerId = payload?.computerId;
+    const userId = socket.data.userId;
+
+    if (!userId) {
+      logger.warn(`Unauthenticated subscription attempt from ${socket.id}`);
+      socket.emit('subscribe_response', { status: 'error', message: 'Not authenticated' });
+      return;
+    }
+
+    if (!computerId || typeof computerId !== 'number') {
+      logger.warn(`Invalid subscription attempt from ${socket.id}: Invalid or missing computerId`);
+      socket.emit('subscribe_response', { status: 'error', message: 'Valid Computer ID is required' });
+      return;
+    }
+
     try {
-      const { roomId, command } = payload;
-      const userId = socket.data.userId;
-      
-      if (!userId) {
-        socket.emit('room_command_sent', { 
-          status: 'error', 
-          message: 'Not authenticated',
-          roomId
-        });
-        return;
-      }
-      
-      // Check room access
       const isAdmin = socket.data.role === 'admin';
       let hasAccess = isAdmin;
-      
+
       if (!hasAccess) {
-        hasAccess = await roomService.checkUserRoomAccess(userId, roomId);
+        hasAccess = await computerService.checkUserComputerAccess(userId, computerId);
       }
-      
-      if (!hasAccess) {
-        socket.emit('room_command_sent', { 
-          status: 'error', 
-          message: 'No access to this room',
-          roomId 
-        });
-        return;
-      }
-      
-      try {
-        // Send command to all online computers in the room
-        const computerIds = await websocketService.sendCommandToRoomComputers(roomId, command, userId);
-        
-        socket.emit('room_command_sent', { 
-          status: 'success', 
-          roomId,
-          computerIds,
-          commandCount: computerIds.length
-        });
-        
-        console.log(`User ${userId} sent command to ${computerIds.length} computers in room ${roomId}`);
-      } catch (error) {
-        console.error(`Error sending command to room ${roomId}:`, error);
-        socket.emit('room_command_sent', { 
-          status: 'error', 
-          message: error.message || 'Failed to send command to room',
-          roomId 
-        });
+
+      if (hasAccess) {
+        const roomName = websocketService.ROOM_PREFIXES.COMPUTER_SUBSCRIBERS(computerId);
+        socket.join(roomName);
+        socket.emit('subscribe_response', { status: 'success', computerId });
+        logger.info(`User ${userId} (Socket ${socket.id}) subscribed to computer ${computerId} (Room: ${roomName})`);
+
+        const currentStatus = websocketService.getAgentRealtimeStatus(computerId);
+        if (currentStatus) {
+             socket.emit(websocketService.EVENTS.COMPUTER_STATUS_UPDATED, {
+                computerId,
+                ...currentStatus,
+                // Ensure sensitive fields aren't included
+                unique_agent_id: undefined,
+                agent_token_hash: undefined
+             });
+        }
+
+      } else {
+        socket.emit('subscribe_response', { status: 'error', message: 'Access denied to this computer', computerId });
+        logger.warn(`User ${userId} (Socket ${socket.id}) denied subscription to computer ${computerId}`);
       }
     } catch (error) {
-      console.error('Send room command error:', error);
-      socket.emit('room_command_sent', { 
-        status: 'error', 
-        message: 'Failed to process room command',
-        roomId: payload?.roomId
-      });
+      logger.error(`Subscription error for user ${userId}, computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+      socket.emit('subscribe_response', { status: 'error', message: 'Subscription failed due to server error', computerId });
+    }
+  });
+
+  /**
+   * Handles requests from frontend clients to unsubscribe from computer status updates.
+   * Removes client from the computer's subscriber room.
+   * 
+   * @listens frontend:unsubscribe
+   * @emits unsubscribe_response - Unsubscription result
+   */
+  socket.on('frontend:unsubscribe', (payload) => {
+    const computerId = payload?.computerId;
+
+     if (!computerId || typeof computerId !== 'number') {
+      logger.warn(`Invalid unsubscribe attempt from ${socket.id}: Invalid or missing computerId`);
+      socket.emit('unsubscribe_response', { status: 'error', message: 'Valid Computer ID is required' });
+      return;
+    }
+
+    try {
+      const roomName = websocketService.ROOM_PREFIXES.COMPUTER_SUBSCRIBERS(computerId);
+      socket.leave(roomName);
+      socket.emit('unsubscribe_response', { status: 'success', computerId });
+      logger.info(`Client ${socket.id} unsubscribed from computer ${computerId} (Room: ${roomName})`);
+    } catch (error) {
+      logger.error(`Unsubscription error for computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+      socket.emit('unsubscribe_response', { status: 'error', message: 'Unsubscription failed', computerId });
+    }
+  });
+
+  /**
+   * Handles requests from frontend clients to send a command to a specific agent.
+   * Verifies user has access to the computer and forwards command to the agent.
+   * 
+   * @listens frontend:send_command
+   * @emits command_sent - Command sending result with status and details
+   */
+  socket.on('frontend:send_command', async (payload) => {
+    const { computerId, command } = payload || {};
+    const userId = socket.data.userId;
+
+    if (!userId) {
+      logger.warn(`Unauthenticated command attempt from ${socket.id}`);
+      socket.emit('command_sent', { status: 'error', message: 'Not authenticated' });
+      return;
+    }
+
+    if (!computerId || typeof computerId !== 'number') {
+      logger.warn(`Invalid command attempt from user ${userId} (Socket ${socket.id}): Invalid or missing computerId`);
+      socket.emit('command_sent', { status: 'error', message: 'Valid Computer ID is required' });
+      return;
+    }
+
+    if (!command || typeof command !== 'string' || command.trim() === '') {
+      logger.warn(`Invalid command attempt from user ${userId} (Socket ${socket.id}): Missing or empty command`);
+      socket.emit('command_sent', { status: 'error', message: 'Command content is required', computerId });
+      return;
+    }
+
+    try {
+      const isAdmin = socket.data.role === 'admin';
+      let hasAccess = isAdmin;
+
+      if (!hasAccess) {
+        hasAccess = await computerService.checkUserComputerAccess(userId, computerId);
+      }
+
+      if (!hasAccess) {
+        logger.warn(`Command access denied for user ${userId} to computer ${computerId} (Socket ${socket.id})`);
+        socket.emit('command_sent', { status: 'error', message: 'Access denied to send commands to this computer', computerId });
+        return;
+      }
+
+      const commandId = uuidv4();
+
+      websocketService.storePendingCommand(commandId, userId, computerId);
+
+      const sent = websocketService.sendCommandToAgent(computerId, command, commandId);
+
+      if (sent) {
+        logger.info(`Command ${commandId} initiated by user ${userId} sent towards computer ${computerId} (Socket ${socket.id})`);
+        socket.emit('command_sent', { status: 'success', computerId, commandId });
+      } else {
+        logger.warn(`Failed to send command ${commandId} from user ${userId} to computer ${computerId}: Agent not connected (Socket ${socket.id})`);
+        websocketService.pendingCommands.delete(commandId);
+        socket.emit('command_sent', { status: 'error', message: 'Agent is not connected', computerId, commandId });
+      }
+    } catch (error) {
+      logger.error(`Send command error for user ${userId}, computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+      socket.emit('command_sent', { status: 'error', message: 'Failed to send command due to server error', computerId });
     }
   });
 };
 
 /**
- * Handle frontend subscription to rooms
- * @param {Object} socket - Socket instance
- * @param {Object} payload - Subscription payload
- */
-const handleFrontendSubscribe = async (socket, payload) => {
-  const { roomIds } = payload;
-  const userId = socket.data.userId;
-  const isAdmin = socket.data.role === 'admin';
-  
-  if (!userId) {
-    socket.emit('subscribe_response', { 
-      status: 'error', 
-      message: 'Not authenticated' 
-    });
-    return;
-  }
-  
-  if (!Array.isArray(roomIds) || roomIds.length === 0) {
-    socket.emit('subscribe_response', { 
-      status: 'error', 
-      message: 'Room IDs must be a non-empty array' 
-    });
-    return;
-  }
-  
-  const subscribedRooms = [];
-  const failedRooms = [];
-  
-  for (const roomId of roomIds) {
-    // Check if user has access to this room
-    let hasAccess = isAdmin;
-    
-    if (!hasAccess) {
-      // For regular users, check room access
-      hasAccess = await roomService.checkUserRoomAccess(userId, roomId);
-    }
-    
-    if (hasAccess) {
-      socket.join(`room_${roomId}`);
-      subscribedRooms.push(roomId);
-    } else {
-      failedRooms.push(roomId);
-    }
-  }
-  
-  socket.emit('subscribe_response', { 
-    status: 'success', 
-    subscribedRooms, 
-    failedRooms 
-  });
-  
-  console.log(`Client ${socket.id} subscribed to rooms: ${subscribedRooms.join(', ')}`);
-};
-
-/**
- * Handle frontend disconnection
- * @param {Object} socket - Socket instance
+ * Handles disconnection logic for frontend clients.
+ * Logs disconnection events for audit and troubleshooting.
+ * 
+ * @param {import("socket.io").Socket} socket - The disconnected socket instance
  */
 const handleFrontendDisconnect = (socket) => {
-  console.log('Frontend client disconnected:', socket.id);
-  
-  // If admin socket
-  if (socket.data.role === 'admin') {
-    websocketService.unregisterAdminSocket(socket.id);
-  }
+  logger.info(`Frontend client disconnected: User ID ${socket.data.userId || 'N/A'}, Socket ID ${socket.id}`);
 };
 
 module.exports = {

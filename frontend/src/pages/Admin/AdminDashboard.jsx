@@ -7,8 +7,8 @@ import {
   TeamOutlined,
   BankOutlined
 } from '@ant-design/icons';
-import UserManagementPage from '../Admin/UserManagementPage';
-import ComputerManagementPage from '../Admin/ComputerManagementPage';
+import UsersListPage from '../user/UsersListPage';
+import ComputersListPage from '../computer/ComputersListPage';
 import userService from '../../services/user.service';
 import roomService from '../../services/room.service';
 import computerService from '../../services/computer.service';
@@ -171,7 +171,7 @@ const AdminDashboard = () => {
           Computer Management
         </span>
       ),
-      children: <ComputerManagementPage />,
+      children: <ComputersListPage />,
     },
     {
       key: 'users',
@@ -181,7 +181,7 @@ const AdminDashboard = () => {
           User Management
         </span>
       ),
-      children: <UserManagementPage />,
+      children: <UsersListPage />,
     },
   ];
 

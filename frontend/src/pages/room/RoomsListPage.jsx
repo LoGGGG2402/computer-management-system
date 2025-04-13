@@ -8,7 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const { Title } = Typography;
 
-const RoomPage = () => {
+const RoomsListPage = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [modalAction, setModalAction] = useState('create'); // 'create' or 'edit'
@@ -92,4 +92,4 @@ const RoomPage = () => {
   );
 };
 
-export default RoomPage;
+export default RoomsListPage;

@@ -29,7 +29,7 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(255),
       allowNull: true 
     },
-    last_seen: {
+    last_update: {
       type: DataTypes.DATE
     },
     os_info: {
@@ -52,7 +52,11 @@ module.exports = (sequelize, DataTypes) => {
     errors: {
       type: DataTypes.JSONB,
       defaultValue: '[]'
-    }
+    },
+    have_active_errors: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
   }, {
     tableName: 'computers',
     timestamps: true,

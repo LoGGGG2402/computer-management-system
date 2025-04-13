@@ -55,7 +55,7 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
     * `ip_address`: VARCHAR(50)
     * `unique_agent_id`: VARCHAR(255) UNIQUE NOT NULL
     * `agent_token_hash`: VARCHAR(255) (NULL cho đến khi đăng ký thành công)
-    * `last_seen`: TIMESTAMPTZ
+    * `last_update`: TIMESTAMPTZ
     * `os_info`: VARCHAR(255)
     * `total_ram`: BIGINT
     * `cpu_info`: VARCHAR(255)
@@ -183,7 +183,7 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
     * Middleware `authAgentToken` xác thực thành công, `req.computerId` đã có.
     * Lấy `cpu`, `ram` từ `req.body`.
     * Cập nhật cache: `agentRealtimeStatus[req.computerId] = { ...agentRealtimeStatus[req.computerId], cpu: cpu, ram: ram }`.
-    * Cập nhật DB: `UPDATE computers SET last_seen = NOW() WHERE id = req.computerId`.
+    * Cập nhật DB: `UPDATE computers SET last_update = NOW() WHERE id = req.computerId`.
     * Trả về HTTP Response (204 No Content).
 4.  **Backend (Logic sau HTTP Response hoặc dùng event emitter):**
     * Lấy trạng thái online hiện tại: `isOnline = !!agentCommandSockets[req.computerId]`.

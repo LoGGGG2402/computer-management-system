@@ -177,6 +177,29 @@ class UserService {
       throw error;
     }
   }
+
+  /**
+   * Reactivate an inactive user
+   * @param {number} id - User ID to reactivate
+   * @returns {Promise<Object>} The reactivated user
+   */
+  async reactivateUser(id) {
+    const user = await User.findByPk(id);
+    
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    if (user.is_active) {
+      throw new Error('User is already active');
+    }
+    
+    await user.update({ is_active: true });
+    
+    // Return user without sensitive information
+    const { password, ...userData } = user.toJSON();
+    return userData;
+  }
 }
 
 module.exports = new UserService();

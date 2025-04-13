@@ -1,5 +1,5 @@
 import { Outlet, useNavigate } from 'react-router-dom';
-import { notification } from 'antd';
+import { Toaster, toast } from 'react-hot-toast'; // Replace notification with toast
 import Header from './Header';
 import { useSocket } from '../contexts/SocketContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -32,29 +32,74 @@ const NotificationHandler = () => {
         `\nVị trí: (${data.positionInfo.posX || 0}, ${data.positionInfo.posY || 0})` +
         `\nRoom ID: ${data.positionInfo.roomId || 'N/A'}` : '';
       
-      // Display alert for easy visibility of MFA code
-      alert(`MFA Code: ${data.mfaCode}\nAgent ID: ${data.unique_agent_id}${positionInfoText}`);
-      
-      notification.info({
-        message: 'New Agent MFA',
-        description: `Agent ID: ${data.unique_agent_id} requires MFA verification with code: ${data.mfaCode}${positionInfoText}`,
-        duration: 10,
-        onClick: () => {
-          navigate('/admin/agents');
-        },
-      });
+      // Show toast with MFA code
+      toast(
+        (t) => (
+          <div 
+            onClick={() => {
+              // Copy MFA code to clipboard
+              navigator.clipboard.writeText(data.mfaCode)
+                .then(() => {
+                  toast.success('MFA code copied to clipboard!', { id: 'copy-success' });
+                })
+                .catch(err => {
+                  console.error('Failed to copy:', err);
+                  toast.error('Failed to copy code', { id: 'copy-error' });
+                });
+            }}
+            className="cursor-pointer p-1"
+          >
+            <div className="font-bold text-blue-600">New Agent MFA</div>
+            <div>Agent requires MFA verification with code:</div>
+            <div className="bg-gray-100 px-2 py-1 rounded my-1 font-mono">{data.mfaCode}</div>
+            {positionInfoText && (
+              <div className="text-sm text-gray-600 mt-1">
+                {positionInfoText.split('\n').map((line, i) => (
+                  <div key={i}>{line}</div>
+                ))}
+              </div>
+            )}
+            <div className="text-xs text-gray-500 mt-1">Click to copy code</div>
+          </div>
+        ),
+        {
+          duration: 10000,
+          style: {
+            padding: '16px',
+            borderRadius: '8px',
+            background: '#fff',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            border: '1px solid #e2e8f0'
+          }
+        }
+      );
     });
 
     // Listen for new agent registrations
     socket.on('admin:agent_registered', (data) => {
-      notification.success({
-        message: 'New Agent Registered',
-        description: `A new agent (ID: ${data.unique_agent_id}) has been registered. Computer ID: ${data.computerId}`,
-        duration: 8,
-        onClick: () => {
-          navigate('/admin/computers');
-        },
-      });
+      toast.success(
+        (t) => (
+          <div 
+            onClick={() => {
+              toast.dismiss(t.id);
+              navigate(`/computers/${data.computerId}`);
+            }}
+            className="cursor-pointer"
+          >
+            <div className="font-bold">New Agent Registered</div>
+            <div>A new agent has been registered.</div>
+            <div>Computer ID: {data.computerId}</div>
+            <div className="text-xs text-gray-500 mt-1">Click to view computer details</div>
+          </div>
+        ),
+        {
+          duration: 8000,
+          style: {
+            padding: '16px',
+            cursor: 'pointer'
+          }
+        }
+      );
     });
 
     return () => {
@@ -89,6 +134,7 @@ const MainLayout = () => {
         </div>
       </footer>
       <NotificationHandler />
+      <Toaster position="top-right" /> {/* Add Toaster component for rendering toast notifications */}
     </div>
   );
 };

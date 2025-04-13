@@ -121,7 +121,7 @@ Tài liệu này mô tả chi tiết các bước thực hiện, file liên quan
   * `src/services/websocket.service.js` (`updateRealtimeCache`, `getAgentOnlineStatus`, `getComputerRoomId`, `broadcastStatusUpdate`)
   * `src/services/computer.service.js` (`updateLastSeen`).
 * **Action (Service `updateRealtimeCache`):** Cập nhật giá trị `cpu`, `ram`, `processes` trong `agentRealtimeStatus[computerId]`.
-* **Action (Service `updateLastSeen`):** Cập nhật trường `last_seen` trong DB.
+* **Action (Service `updateLastSeen`):** Cập nhật trường `last_update` trong DB.
 * **Action (Controller/Service):** Sau khi cập nhật cache/DB, gọi `websocketService.broadcastStatusUpdate(computerId)` (hàm này sẽ lấy status online, cpu, ram, processes từ cache/map, lấy roomId, rồi `io.to(room).emit(...)`).
 * **API/Event:** Xử lý `PUT /api/agent/status`. Gửi WS Event `computer:status_update` tới Frontend.
 * **Response HTTP:** 204 No Content.

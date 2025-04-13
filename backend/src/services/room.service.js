@@ -127,19 +127,27 @@ class RoomService {
           {
             model: Computer,
             as: "computers",
+            attributes: {
+              exclude: [
+                "unique_agent_id",
+                "agent_token_hash",
+                "error",
+              ],
+            },
           },
         ],
       });
-
+  
       if (!room) {
         throw new Error("Room not found");
       }
-
+  
       return room;
     } catch (error) {
       throw error;
     }
   }
+  
 
   /**
    * Create a new room

@@ -16,6 +16,11 @@ router.get('/', isAdmin, computerController.getAllComputers);
 // Get specific computer by ID
 router.get('/:id', hasComputerAccess, computerController.getComputerById);
 
+// Computer error management routes
+router.get('/:id/errors', hasComputerAccess, computerController.getComputerErrors);
+router.post('/:id/errors', hasComputerAccess, computerController.reportComputerError);
+router.put('/:id/errors/:errorId/resolve', hasComputerAccess, computerController.resolveComputerError);
+
 // Admin-only routes below
 router.delete('/:id', isAdmin, computerController.deleteComputer);
 

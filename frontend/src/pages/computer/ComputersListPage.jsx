@@ -8,7 +8,7 @@ import roomService from '../../services/room.service';
 
 const { Title } = Typography;
 
-const ComputerManagementPage = () => {
+const ComputersListPage = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedComputer, setSelectedComputer] = useState(null);
   const [modalAction, setModalAction] = useState('create'); // 'create', 'edit', 'view'
@@ -242,4 +242,4 @@ const ComputerManagementPage = () => {
   );
 };
 
-export default ComputerManagementPage;
+export default ComputersListPage;

@@ -1,240 +1,247 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSocket } from './SocketContext';
 
-// Create context
+// Tạo context
 const CommandHandleContext = createContext(null);
 
 /**
- * Provider component for managing command execution and results across the application
- * Handles sending commands and tracking the latest command result for each computer
+ * Provider component để quản lý việc thực thi lệnh và kết quả trên toàn ứng dụng
+ * Xử lý gửi lệnh và theo dõi kết quả lệnh mới nhất cho mỗi máy tính
  */
 export const CommandHandleProvider = ({ children }) => {
-  // Store results by computerId: { computerId: { stdout, stderr, exitCode, timestamp } }
+  // Lưu trữ kết quả theo computerId: { computerId: { stdout, stderr, exitCode, timestamp, commandId } }
   const [commandResults, setCommandResults] = useState({});
-  // Track command promises to resolve them when responses come back
-  const [commandPromises, setCommandPromises] = useState({});
-  // Track command status
+  // Theo dõi các promise của lệnh để giải quyết chúng khi có phản hồi
+  // Sử dụng Ref để tránh việc thay đổi state này gây render lại không cần thiết
+  const commandPromisesRef = useRef({});
+  // Theo dõi trạng thái gửi lệnh (đã gửi thành công hay thất bại từ server)
   const [commandStatus, setCommandStatus] = useState({});
-  
-  const { socket, connected } = useSocket();
 
-  // Listen for command completion events from socket
+  // Lấy socket từ SocketContext
+  const { socket } = useSocket(); // Chỉ cần socket instance
+
+  // Lắng nghe các sự kiện hoàn thành lệnh và trạng thái gửi lệnh từ socket
   useEffect(() => {
-    if (!socket || !connected) return;
+    // Chỉ thực hiện nếu socket tồn tại
+    if (!socket) return;
 
+    // Xử lý khi lệnh hoàn thành trên agent
     const handleCommandCompleted = (data) => {
-      console.log('[CommandHandleContext] Received command result:', data);
-      
-      // Store the result by computerId
-      setCommandResults(prevResults => ({
-        ...prevResults,
-        [data.computerId]: {
-          stdout: data.stdout,
-          stderr: data.stderr,
-          exitCode: data.exitCode,
-          timestamp: Date.now(),
-          commandId: data.commandId
-        }
-      }));
+      console.log('[CommandHandleContext] Nhận kết quả lệnh:', data);
+      if (data && data.computerId && data.commandId) {
+          // Lưu trữ kết quả theo computerId
+          setCommandResults(prevResults => ({
+            ...prevResults,
+            [data.computerId]: {
+              stdout: data.stdout,
+              stderr: data.stderr,
+              exitCode: data.exitCode,
+              timestamp: Date.now(),
+              commandId: data.commandId // Lưu cả commandId để tham chiếu
+            }
+          }));
+      } else {
+           console.warn("Nhận dữ liệu command:completed không hợp lệ:", data);
+      }
     };
 
-    // Register event listener for command completion
+    // Xử lý phản hồi xác nhận lệnh đã được gửi tới agent (hoặc lỗi)
+    const handleCommandSentStatus = (data) => {
+      console.log('Trạng thái gửi lệnh:', data);
+       if (data && data.commandId) {
+           // Cập nhật trạng thái gửi lệnh
+           setCommandStatus(prev => ({
+             ...prev,
+             [data.commandId]: {
+               status: data.status, // 'success' hoặc 'error'
+               message: data.message, // Thông báo lỗi nếu có
+               timestamp: Date.now()
+             }
+           }));
+
+           // Tìm và giải quyết/từ chối promise tương ứng
+           const promiseCallbacks = commandPromisesRef.current[data.commandId];
+           if (promiseCallbacks) {
+             if (data.status === 'success') {
+               promiseCallbacks.resolve(data); // Giải quyết với thông tin trạng thái
+             } else {
+               promiseCallbacks.reject(new Error(data.message || 'Không thể gửi lệnh đến agent')); // Từ chối với lỗi
+             }
+             // Xóa promise đã xử lý khỏi ref
+             delete commandPromisesRef.current[data.commandId];
+           }
+       } else {
+            console.warn("Nhận dữ liệu command_sent không hợp lệ:", data);
+       }
+    };
+
+    // Đăng ký listeners
     socket.on('command:completed', handleCommandCompleted);
-    
-    // Handle command sent confirmation
-    socket.on('command_sent', (data) => {
-      console.log('Command sent status:', data);
-      
-      // Update command status
-      setCommandStatus(prev => ({
-        ...prev,
-        [data.commandId]: {
-          ...data,
-          timestamp: Date.now()
-        }
-      }));
-      
-      // Resolve the corresponding promise
-      if (commandPromises[data.commandId]) {
-        if (data.status === 'success') {
-          commandPromises[data.commandId].resolve(data);
-        } else {
-          commandPromises[data.commandId].reject(new Error(data.message || 'Failed to send command'));
-        }
-        
-        // Remove the promise from the tracking object
-        setCommandPromises(prev => {
-          const newPromises = { ...prev };
-          delete newPromises[data.commandId];
-          return newPromises;
-        });
-      }
-    });
-    
-    // Handle room command response
-    socket.on('room_command_sent', (data) => {
-      console.log('Room command sent status:', data);
-      
-      // Update command status for room commands
-      setCommandStatus(prev => ({
-        ...prev,
-        [`room_${data.roomId}`]: {
-          ...data,
-          timestamp: Date.now()
-        }
-      }));
-      
-      // Resolve the corresponding promise for room commands
-      if (commandPromises[`room_${data.roomId}`]) {
-        if (data.status === 'success') {
-          commandPromises[`room_${data.roomId}`].resolve(data);
-        } else {
-          commandPromises[`room_${data.roomId}`].reject(new Error(data.message || 'Failed to send command to room'));
-        }
-        
-        // Remove the promise from the tracking object
-        setCommandPromises(prev => {
-          const newPromises = { ...prev };
-          delete newPromises[`room_${data.roomId}`];
-          return newPromises;
-        });
-      }
-    });
+    socket.on('command_sent', handleCommandSentStatus);
 
-    // Cleanup
+    // Cleanup: Hủy đăng ký listeners khi component unmount hoặc socket thay đổi
     return () => {
-      socket.off('command:completed', handleCommandCompleted);
-      socket.off('command_sent');
-      socket.off('room_command_sent');
+      if (socket) {
+        socket.off('command:completed', handleCommandCompleted);
+        socket.off('command_sent', handleCommandSentStatus);
+      }
+      // Không cần xóa promises ở đây vì chúng sẽ tự bị xóa khi được giải quyết/từ chối hoặc timeout
     };
-  }, [socket, connected, commandPromises]);
+  }, [socket]); // Phụ thuộc vào socket instance
 
-  // Core functionality - send a command to an agent
+  // Chức năng cốt lõi - gửi lệnh đến một agent - sử dụng useCallback
   const sendCommand = useCallback((computerId, command) => {
-    if (!socket || !connected) {
-      return Promise.reject(new Error('Not connected to the server'));
+     // Kiểm tra socket tồn tại và đã kết nối
+    if (!socket || !socket.connected) {
+      console.error('Không thể gửi lệnh: Socket chưa kết nối.');
+      return Promise.reject(new Error('Chưa kết nối với máy chủ qua socket'));
     }
-    
-    console.log(`Sending command to computer ${computerId}: ${command}`);
-    
-    // Generate a new promise for this command
-    return new Promise((resolve, reject) => {
-      // Let the backend generate the commandId
-      socket.emit('frontend:send_command', { 
-        computerId, 
-        command 
-      });
-      
-      // Store the promise callbacks for resolution when we get the response
-      const tempCommandId = `temp_${Date.now()}`;
-      setCommandPromises(prev => ({
-        ...prev,
-        [tempCommandId]: { resolve, reject }
-      }));
-      
-      // Set a timeout to reject the promise if no response is received
-      setTimeout(() => {
-        setCommandPromises(prev => {
-          if (prev[tempCommandId]) {
-            prev[tempCommandId].reject(new Error('Command timed out'));
-            const newPromises = { ...prev };
-            delete newPromises[tempCommandId];
-            return newPromises;
-          }
-          return prev;
-        });
-      }, 10000); // 10 second timeout
-    });
-  }, [socket, connected]);
-  
-  // Send command to all computers in a room
-  const sendCommandToRoom = useCallback((roomId, command) => {
-    if (!socket || !connected) {
-      return Promise.reject(new Error('Not connected to the server'));
-    }
-    
-    console.log(`Sending command to room ${roomId}: ${command}`);
-    
-    // Generate a new promise for this command
-    return new Promise((resolve, reject) => {
-      // Emit the room command event to server
-      socket.emit('frontend:send_room_command', { 
-        roomId, 
-        command 
-      });
-      
-      // Store the promise callbacks for resolution when we get the response
-      const promiseId = `room_${roomId}`;
-      setCommandPromises(prev => ({
-        ...prev,
-        [promiseId]: { resolve, reject }
-      }));
-      
-      // Set a timeout to reject the promise if no response is received
-      setTimeout(() => {
-        setCommandPromises(prev => {
-          if (prev[promiseId]) {
-            prev[promiseId].reject(new Error('Room command timed out'));
-            const newPromises = { ...prev };
-            delete newPromises[promiseId];
-            return newPromises;
-          }
-          return prev;
-        });
-      }, 15000); // 15 second timeout for room commands
-    });
-  }, [socket, connected]);
 
-  // Clear result for a specific computer
-  const clearResult = (computerId) => {
+    if (!computerId || !command) {
+        console.error('Không thể gửi lệnh: computerId hoặc command không hợp lệ.');
+        return Promise.reject(new Error('Computer ID và command là bắt buộc'));
+    }
+
+    console.log(`Gửi lệnh đến computer ${computerId}: ${command}`);
+
+    // Tạo một promise mới cho lệnh này
+    return new Promise((resolve, reject) => {
+      // Backend sẽ tạo commandId và gửi lại trong sự kiện 'command_sent'
+      const payload = { computerId, command };
+      const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`; // ID tạm thời duy nhất
+
+      // Lưu trữ callbacks của promise vào ref, sử dụng tempId làm key tạm thời
+      // Backend sẽ trả về commandId thật sự trong event 'command_sent'
+      // Chúng ta cần một cách để liên kết tempId với commandId thật sự sau này
+      // -> Cách đơn giản hơn: Backend trả về commandId ngay khi emit 'command_sent'
+      // -> Chúng ta sẽ dùng commandId đó để lưu và giải quyết promise.
+
+      // Gửi lệnh qua socket
+      socket.emit('frontend:send_command', payload, (ack) => {
+          // Callback này (acknowledgement) từ emit thường được dùng để xác nhận server đã nhận
+          // nhưng không đảm bảo lệnh đã được gửi tới agent.
+          // Chúng ta sẽ dựa vào sự kiện 'command_sent' để biết trạng thái thực sự.
+          if (ack && ack.commandId) {
+              const commandId = ack.commandId;
+              console.log(`Lệnh đã được server nhận, commandId: ${commandId}`);
+
+              // Lưu promise callbacks với commandId thật sự
+              commandPromisesRef.current[commandId] = { resolve, reject };
+
+              // Đặt timeout để từ chối promise nếu không nhận được phản hồi 'command_sent'
+              const timeoutId = setTimeout(() => {
+                if (commandPromisesRef.current[commandId]) {
+                  console.warn(`Command ${commandId} timed out chờ phản hồi 'command_sent'.`);
+                  commandPromisesRef.current[commandId].reject(new Error('Lệnh gửi đi bị timeout (không có phản hồi từ server)'));
+                  delete commandPromisesRef.current[commandId]; // Xóa promise khỏi ref
+                }
+              }, 15000); // Timeout 15 giây chờ server xác nhận gửi
+
+              // Lưu timeoutId để có thể xóa nếu nhận được phản hồi sớm
+               commandPromisesRef.current[commandId].timeoutId = timeoutId;
+
+          } else {
+              // Nếu server không trả về commandId trong acknowledgement
+              console.error('Server không trả về commandId trong acknowledgement.');
+              reject(new Error('Lỗi giao tiếp với server khi gửi lệnh.'));
+          }
+      });
+
+
+      // Xóa timeout khi promise được giải quyết hoặc từ chối trong handleCommandSentStatus
+       const originalResolve = resolve;
+       const originalReject = reject;
+       resolve = (value) => {
+           const promiseData = commandPromisesRef.current[ack?.commandId];
+           if (promiseData?.timeoutId) clearTimeout(promiseData.timeoutId);
+           delete commandPromisesRef.current[ack?.commandId];
+           originalResolve(value);
+       };
+       reject = (reason) => {
+           const promiseData = commandPromisesRef.current[ack?.commandId];
+           if (promiseData?.timeoutId) clearTimeout(promiseData.timeoutId);
+           delete commandPromisesRef.current[ack?.commandId];
+           originalReject(reason);
+       };
+        // Cập nhật lại promise callbacks trong ref với phiên bản đã thêm clearTimeout
+       if (ack?.commandId) {
+           commandPromisesRef.current[ack.commandId] = { resolve, reject, timeoutId: commandPromisesRef.current[ack.commandId]?.timeoutId };
+       }
+
+
+    });
+  }, [socket]); // Phụ thuộc vào socket instance
+
+  // Xóa kết quả cho một máy tính cụ thể - sử dụng useCallback
+  const clearResult = useCallback((computerId) => {
     setCommandResults(prevResults => {
-      const newResults = { ...prevResults };
-      delete newResults[computerId];
-      return newResults;
+      // Chỉ tạo object mới nếu key tồn tại
+      if (prevResults[computerId]) {
+          const newResults = { ...prevResults };
+          delete newResults[computerId];
+          return newResults;
+      }
+      return prevResults; // Không thay đổi nếu key không tồn tại
     });
-  };
+    // Cũng nên xóa trạng thái gửi lệnh liên quan nếu cần
+    // setCommandStatus(...)
+  }, []); // Không có dependencies
 
-  // Clear all results
-  const clearAllResults = () => {
+  // Xóa tất cả kết quả - sử dụng useCallback
+  const clearAllResults = useCallback(() => {
     setCommandResults({});
-  };
+    setCommandStatus({}); // Xóa cả trạng thái gửi lệnh
+  }, []); // Không có dependencies
 
-  // Auto-expire results after 10 minutes
+  // Tự động hết hạn kết quả sau một khoảng thời gian (ví dụ: 30 phút)
   useEffect(() => {
-    const EXPIRY_TIME = 10 * 60 * 1000; // 10 minutes in milliseconds
-    
+    const EXPIRY_TIME = 30 * 60 * 1000; // 30 phút tính bằng mili giây
+
     const interval = setInterval(() => {
       const now = Date.now();
-      
-      setCommandResults(prevResults => {
-        const newResults = { ...prevResults };
-        let changed = false;
-        
-        // Check each result for expiry
-        Object.entries(newResults).forEach(([computerId, result]) => {
-          if (now - result.timestamp > EXPIRY_TIME) {
-            delete newResults[computerId];
-            changed = true;
-          }
-        });
-        
-        // Only update state if something changed
-        return changed ? newResults : prevResults;
-      });
-    }, 60000); // Check every minute
-    
-    return () => clearInterval(interval);
-  }, []);
+      let changed = false;
 
-  // Context value
-  const contextValue = {
-    commandResults,
-    commandStatus,
+      // Lọc ra các kết quả chưa hết hạn
+      const newResults = Object.entries(commandResults).reduce((acc, [computerId, result]) => {
+        if (now - result.timestamp <= EXPIRY_TIME) {
+          acc[computerId] = result; // Giữ lại kết quả chưa hết hạn
+        } else {
+          changed = true; // Đánh dấu có thay đổi
+          console.log(`Kết quả lệnh cho computer ${computerId} đã hết hạn.`);
+        }
+        return acc;
+      }, {});
+
+       // Lọc tương tự cho commandStatus
+      const newStatus = Object.entries(commandStatus).reduce((acc, [commandId, status]) => {
+           if(now - status.timestamp <= EXPIRY_TIME) {
+               acc[commandId] = status;
+           } else {
+               changed = true;
+           }
+           return acc;
+       }, {});
+
+
+      // Chỉ cập nhật state nếu có thay đổi
+      if (changed) {
+        setCommandResults(newResults);
+        setCommandStatus(newStatus);
+      }
+    }, 5 * 60 * 1000); // Kiểm tra mỗi 5 phút
+
+    // Cleanup interval khi unmount
+    return () => clearInterval(interval);
+  }, [commandResults, commandStatus]); // Chạy lại nếu commandResults hoặc commandStatus thay đổi từ bên ngoài (ít khả năng)
+
+  // Giá trị context được memoized - sử dụng useMemo
+  const contextValue = useMemo(() => ({
+    commandResults, // Kết quả lệnh { computerId: { stdout, stderr, ... } }
+    commandStatus,  // Trạng thái gửi lệnh { commandId: { status, message, ... } }
     clearResult,
     clearAllResults,
-    sendCommand,
-    sendCommandToRoom
-  };
+    sendCommand
+  }), [commandResults, commandStatus, clearResult, clearAllResults, sendCommand]); // Dependencies đầy đủ
 
   return (
     <CommandHandleContext.Provider value={contextValue}>
@@ -243,13 +250,13 @@ export const CommandHandleProvider = ({ children }) => {
   );
 };
 
-// Custom hook to use the context
+// Custom hook để sử dụng context
 export const useCommandHandle = () => {
   const context = useContext(CommandHandleContext);
   if (!context) {
-    throw new Error('useCommandHandle must be used within a CommandHandleProvider');
+    throw new Error('useCommandHandle phải được sử dụng bên trong CommandHandleProvider');
   }
   return context;
 };
 
-export default CommandHandleContext;
+// export default CommandHandleContext;

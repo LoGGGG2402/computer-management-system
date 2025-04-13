@@ -142,7 +142,7 @@ Kế hoạch này mô tả chi tiết các bước để xây dựng hệ thốn
 * Tạo `services/room.service.js`. Gọi API Room CRUD.
 
 **Bước 3.5: Frontend - User Management (Admin)**
-* Tạo `pages/Admin/UserManagementPage.jsx`.
+* Tạo `pages/Admin/UsersListPage.jsx`.
 * Tạo `components/admin/UserList.jsx`, `components/admin/UserForm.jsx`.
 * Tạo `services/user.service.js`. Gọi API User CRUD.
 
@@ -272,7 +272,7 @@ Kế hoạch này mô tả chi tiết các bước để xây dựng hệ thốn
 * Trong `ErrorList`, thêm nút "Resolve" cho Admin. Gọi `computerService.resolveError`. Cập nhật UI sau khi thành công.
 
 **Bước 6.7: Frontend - Filter UI**
-* Thêm các input/select vào `UserManagementPage`, `RoomListPage`, `ComputerListPage`.
+* Thêm các input/select vào `UsersListPage`, `RoomListPage`, `ComputerListPage`.
 * Quản lý state cho các filter. Khi state thay đổi, gọi lại hàm lấy danh sách từ service với các tham số filter mới.
 
 ## Giai đoạn 7: Hoàn thiện UI/UX, Kiểm thử & Triển khai

@@ -105,10 +105,10 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
 
   // Calculate time since last seen
   const getTimeSinceLastSeen = () => {
-    if (!computer.last_seen) return 'Never';
+    if (!computer.last_update) return 'Never';
     
     const now = new Date();
-    const lastSeen = new Date(computer.last_seen);
+    const lastSeen = new Date(computer.last_update);
     const diffMs = now - lastSeen;
     
     const diffMins = Math.floor(diffMs / 60000);
@@ -121,10 +121,10 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
     return `${diffDays}d ago`;
   };
 
-  // Determine online status based on real-time data or fallback to last_seen
+  // Determine online status based on real-time data or fallback to last_update
   const isOnline = statusData?.status === 'online' || 
     (computer.status === 'online') || 
-    (computer.last_seen && (new Date() - new Date(computer.last_seen) < 5 * 60 * 1000)); // 5 minutes threshold
+    (computer.last_update && (new Date() - new Date(computer.last_update) < 5 * 60 * 1000)); // 5 minutes threshold
 
   // Get real-time CPU and RAM usage or use defaults
   const cpuUsage = statusData?.cpuUsage ?? 0;
@@ -586,7 +586,7 @@ const ComputerCard = ({ computer, onEdit, onView, onRefresh, simplified = false 
           <Col span={12}>
             <Space align="center">
               <ClockCircleOutlined />
-              <Tooltip title={formatTimestamp(computer.last_seen)}>
+              <Tooltip title={formatTimestamp(computer.last_update)}>
                 <Text>{getTimeSinceLastSeen()}</Text>
               </Tooltip>
             </Space>

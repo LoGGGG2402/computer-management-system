@@ -1,133 +1,216 @@
 /**
- * Handler for agent WebSocket connections
+ * WebSocket event handlers for agent clients.
  */
-const websocketService = require('../../services/websocket.service');
 const computerService = require('../../services/computer.service');
+const websocketService = require('../../services/websocket.service');
+const logger = require('../../utils/logger');
+
+// --- Handler Functions ---
 
 /**
- * Set up agent WebSocket event handlers
- * @param {Object} io - Socket.IO server instance
- * @param {Object} socket - Socket instance
+ * Handles agent authentication requests. Verifies agent ID and token.
+ * @param {import("socket.io").Socket} socket - The socket instance for the agent client.
+ * @param {object} data - Authentication data containing { agentId, token }.
  */
-const setupAgentHandlers = (io, socket) => {
-  // Agent WebSocket authentication
-  socket.on('agent:authenticate_ws', async (payload) => {
-    try {
-      await handleAgentAuthenticate(socket, payload);
-    } catch (error) {
-      console.error('Agent authentication error:', error);
-      socket.emit('agent:ws_auth_failed', { 
-        message: 'Authentication failed due to server error' 
-      });
-      socket.disconnect(true);
-    }
-  });
+async function handleAgentAuthentication(socket, data) {
+  try {
+    const { agentId, token } = data || {};
 
-  // Agent command result
-  socket.on('agent:command_result', (payload) => {
-    try {
-      const { commandId, stdout, stderr, exitCode } = payload;
-      
-      // Notify command completion
-      websocketService.notifyCommandCompletion(commandId, {
-        stdout,
-        stderr,
-        exitCode
-      });
-    } catch (error) {
-      console.error('Command result error:', error);
+    if (!agentId || !token) {
+      logger.warn(`Authentication attempt with missing credentials from ${socket.id}`);
+      socket.emit('agent:ws_auth_failed', { status: 'error', message: 'Missing agent ID or token' });
+      return;
     }
-  });
-  
-  // Agent status update - now fully handled via WebSocket
-  socket.on('agent:status_update', async (payload) => {
-    try {
-      const computerId = socket.data.computerId;
-      
-      if (!computerId) {
-        return;
-      }
-      
-      const { cpuUsage, ramUsage, diskUsage } = payload;
-      
-      // Update the last seen timestamp in database
-      await computerService.updateLastSeen(computerId);
-      
-      // Update realtime cache
-      websocketService.updateRealtimeCache(computerId, {
-        cpuUsage,
-        ramUsage,
-        diskUsage,
-        lastSeen: new Date()
-      });
-      
-      // Broadcast status update
-      await websocketService.broadcastStatusUpdate(computerId);
-      
-      console.log(`Received status update from computer ${computerId}: CPU: ${cpuUsage}%, RAM: ${ramUsage}%`);
-    } catch (error) {
-      console.error('Status update error:', error);
-    }
-  });
-};
 
-/**
- * Handle agent authentication
- * @param {Object} socket - Socket instance
- * @param {Object} payload - Authentication payload
- */
-const handleAgentAuthenticate = async (socket, payload) => {
-  const { agentId, token } = payload;
-  
-  if (!agentId || !token) {
-    socket.emit('agent:ws_auth_failed', { 
-      message: 'Agent ID and token are required' 
-    });
-    socket.disconnect(true);
-    return;
-  }
-  
-  // Verify the agent token
-  const computerId = await computerService.verifyAgentToken(agentId, token);
-  
-  if (computerId) {
-    // Store computer ID in socket data
+    const computerId = await computerService.verifyAgentToken(agentId, token);
+
+    if (!computerId) {
+      logger.warn(`Failed authentication attempt for agent ${agentId} from ${socket.id}`);
+      socket.emit('agent:ws_auth_failed', { status: 'error', message: 'Authentication failed (Invalid ID or token)' });
+      return;
+    }
+
     socket.data.computerId = computerId;
     socket.data.agentId = agentId;
-    socket.data.type = 'agent';
-    
-    // Register the agent socket
-    websocketService.registerAgentSocket(computerId, socket.id);
-    
-    // Join computer-specific room
-    socket.join(`computer_${computerId}`);
-    
-    // Send success response
-    socket.emit('agent:ws_auth_success', { 
-      computerId 
+
+    const roomName = websocketService.ROOM_PREFIXES.AGENT(computerId);
+    socket.join(roomName);
+
+    socket.emit('agent:ws_auth_success', {
+      status: 'success',
+      message: 'Authentication successful',
+      computerId
     });
-    
-    // Update and broadcast online status
+
+    logger.info(`Agent authenticated: Agent ID ${agentId}, Computer ID ${computerId}, Socket ID ${socket.id}, Joined Room ${roomName}`);
+
     await websocketService.updateAndBroadcastOnlineStatus(computerId);
-    
-    console.log(`Agent authenticated: ${agentId} (Computer ID: ${computerId})`);
-  } else {
-    socket.emit('agent:ws_auth_failed', { 
-      message: 'Invalid agent token' 
-    });
-    socket.disconnect(true);
+
+  } catch (error) {
+    logger.error(`Agent authentication error for agent ${data?.agentId}, socket ${socket.id}: ${error.message}`, error.stack);
+    socket.emit('agent:ws_auth_failed', { status: 'error', message: 'Internal server error during authentication' });
   }
+}
+
+/**
+ * Handles status updates (CPU, RAM, Disk usage) received from an authenticated agent.
+ * @param {import("socket.io").Socket} socket - The socket instance for the agent client.
+ * @param {object} data - Status update data containing { cpuUsage, ramUsage, diskUsage }.
+ */
+async function handleAgentStatusUpdate(socket, data) {
+  const computerId = socket.data.computerId;
+
+  if (!computerId) {
+    logger.warn(`Unauthenticated status update attempt from ${socket.id}. Ignoring.`);
+    return;
+  }
+
+  if (!data) {
+      logger.warn(`Received empty status update from computer ${computerId} (Socket ${socket.id})`);
+      return;
+  }
+
+  try {
+    websocketService.updateRealtimeCache(computerId, {
+      status: 'online',
+      cpuUsage: data.cpuUsage,
+      ramUsage: data.ramUsage,
+      diskUsage: data.diskUsage,
+    });
+
+    await websocketService.broadcastStatusUpdate(computerId);
+  } catch (error) {
+    logger.error(`Status update processing error for computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+  }
+}
+
+/**
+ * Handles command execution results received from an authenticated agent.
+ * @param {import("socket.io").Socket} socket - The socket instance for the agent client.
+ * @param {object} data - Command result data containing { commandId, stdout, stderr, exitCode }.
+ */
+function handleAgentCommandResult(socket, data) {
+  const computerId = socket.data.computerId;
+
+  if (!computerId) {
+    logger.warn(`Unauthenticated command result received from ${socket.id}. Ignoring.`);
+    return;
+  }
+
+  const { commandId, stdout, stderr, exitCode } = data || {};
+
+  if (!commandId) {
+    logger.warn(`Command result missing commandId from computer ${computerId} (Socket ${socket.id}). Ignoring.`);
+    return;
+  }
+
+  logger.debug(`Command result for ID ${commandId} received from computer ${computerId} (Socket ${socket.id})`);
+
+  try {
+    websocketService.notifyCommandCompletion(commandId, {
+      stdout,
+      stderr,
+      exitCode
+    });
+
+  } catch (error) {
+    logger.error(`Command result handling error for command ${commandId}, computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+  }
+}
+
+/**
+ * Handles hardware information updates received from an authenticated agent.
+ * @param {import("socket.io").Socket} socket - The socket instance for the agent client.
+ * @param {object} data - Hardware info data (e.g., { cpu, ram, disk, os, hostname, ipAddress, macAddress }).
+ */
+async function handleAgentHardwareInfo(socket, data) {
+  const computerId = socket.data.computerId;
+
+  if (!computerId) {
+    logger.warn(`Unauthenticated hardware info update received from ${socket.id}. Ignoring.`);
+    return;
+  }
+
+   if (!data) {
+      logger.warn(`Received empty hardware info update from computer ${computerId} (Socket ${socket.id})`);
+      return;
+  }
+
+  logger.debug(`Hardware info update received from computer ${computerId} (Socket ${socket.id})`);
+
+  try {
+    const updateData = {
+        ...(data.cpu && { cpu: data.cpu }),
+        ...(data.ram && { ram: data.ram }),
+        ...(data.disk && { disk: data.disk }),
+        ...(data.os && { os: data.os }),
+        ...(data.hostname && { hostname: data.hostname }),
+        ...(data.ipAddress && { ip_address: data.ipAddress }),
+        ...(data.macAddress && { mac_address: data.macAddress }),
+    };
+
+    if (Object.keys(updateData).length > 0) {
+        await computerService.updateComputer(computerId, updateData);
+        logger.info(`Hardware info updated in DB for computer ${computerId}`);
+    } else {
+         logger.debug(`No valid hardware fields found in update from computer ${computerId}`);
+    }
+
+  } catch (error) {
+    logger.error(`Hardware info update error for computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+  }
+}
+
+
+// --- Setup and Disconnect ---
+
+/**
+ * Sets up WebSocket event handlers for a connected agent socket.
+ * @param {import("socket.io").Server} io - The Socket.IO server instance (passed but not used directly here).
+ * @param {import("socket.io").Socket} socket - The socket instance for the agent client.
+ */
+const setupAgentHandlers = (io, socket) => {
+  const agentIdFromData = socket.data.agentId;
+  const tokenFromData = socket.data.authToken;
+
+  if (agentIdFromData && tokenFromData) {
+    logger.info(`Attempting auto-authentication for agent via headers: Agent ID ${agentIdFromData}, Socket ID ${socket.id}`);
+    handleAgentAuthentication(socket, {
+      agentId: agentIdFromData,
+      token: tokenFromData
+    });
+  } else {
+    logger.info(`Agent ${socket.id} connected without pre-authentication headers. Waiting for 'agent:authenticate' event.`);
+  }
+
+  socket.on('agent:authenticate', (data) => {
+    if (socket.data.computerId) {
+        logger.warn(`Agent ${socket.data.agentId} (Socket ${socket.id}) sent 'agent:authenticate' but is already authenticated. Ignoring.`);
+        return;
+    }
+    handleAgentAuthentication(socket, data);
+  });
+
+  socket.on('agent:status_update', (data) => {
+    handleAgentStatusUpdate(socket, data);
+  });
+
+  socket.on('agent:command_result', (data) => {
+    handleAgentCommandResult(socket, data);
+  });
+
+  socket.on('agent:hardware_info', (data) => {
+    handleAgentHardwareInfo(socket, data);
+  });
+
 };
 
 /**
- * Handle agent disconnection
- * @param {Object} socket - Socket instance
+ * Handles disconnection logic for agent clients. Delegates to the WebSocket service.
+ * @param {import("socket.io").Socket} socket - The disconnected socket instance.
  */
 const handleAgentDisconnect = (socket) => {
-  console.log('Agent client disconnected:', socket.id);
-  
-  // Update agent status to offline and notify
-  websocketService.handleAgentDisconnect(socket.id);
+  websocketService.handleAgentDisconnect(socket);
 };
 
 module.exports = {

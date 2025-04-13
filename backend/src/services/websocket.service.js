@@ -1,409 +1,379 @@
 /**
- * Service for WebSocket operations
+ * Service for WebSocket operations, optimized for clarity and maintainability.
+ * Standardized based on agent's communication patterns.
+ * Uses Map for realtime status and removes status on final disconnect.
  */
+const logger = require('../utils/logger');
+
+// --- Constants ---
+const ROOM_PREFIXES = {
+  ADMIN: 'admin_room',
+  AGENT: (id) => `agent_${id}`,
+  COMPUTER_SUBSCRIBERS: (id) => `computer_${id}`,
+  USER: (id) => `user_${id}`,
+};
+
+const EVENTS = {
+  // Admin specific
+  ADMIN_NEW_AGENT_MFA: 'admin:new_agent_mfa',
+  ADMIN_AGENT_REGISTERED: 'admin:agent_registered',
+  // Agent -> Server / Server -> Agent
+  COMMAND_EXECUTE: 'command:execute', // Server -> Agent
+  // Server -> Frontend/Subscribers
+  COMPUTER_STATUS_UPDATED: 'computer:status_updated',
+  COMMAND_COMPLETED: 'command:completed', // Server -> User
+};
+
+const PENDING_COMMAND_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const AGENT_OFFLINE_CHECK_DELAY_MS = 1500; // 1.5 seconds
+
 class WebSocketService {
+
+  // --- Initialization ---
+
   constructor() {
     this.io = null;
-    // Map to store agent socket connections (computerId -> socketId)
-    this.agentCommandSockets = new Map();
-    // Set to store admin socket IDs
-    this.adminSockets = new Set();
-    // Object to store agent realtime status
-    this.agentRealtimeStatus = {};
-    // Map to store pending commands (commandId -> {userId, computerId, timestamp})
+    this.computerService = null; // To inject computerService
+    // Use Map to store agent realtime status
+    this.agentRealtimeStatus = new Map(); // Map<computerId, { status, cpuUsage, ..., lastUpdated }>
+    // Map to store pending commands (commandId -> { userId, computerId, timestamp, timeoutId })
     this.pendingCommands = new Map();
+
+    logger.info('WebSocketService initialized (using Map for agent status)');
   }
 
   /**
-   * Set the Socket.IO instance
-   * @param {Object} io - The Socket.IO instance
+   * Sets the Socket.IO server instance.
+   * @param {import("socket.io").Server} io - The Socket.IO Server instance.
    */
   setIo(io) {
-    this.io = io;
-  }
-
-  /**
-   * Register an agent socket
-   * @param {number} computerId - The computer ID
-   * @param {string} socketId - The socket ID
-   */
-  registerAgentSocket(computerId, socketId) {
-    this.agentCommandSockets.set(computerId, socketId);
-    console.log(`Agent socket registered for computer ${computerId}: ${socketId}`);
-  }
-
-  /**
-   * Unregister an agent socket
-   * @param {number} computerId - The computer ID
-   */
-  unregisterAgentSocket(computerId) {
-    this.agentCommandSockets.delete(computerId);
-    console.log(`Agent socket unregistered for computer ${computerId}`);
-  }
-
-  /**
-   * Find a computer ID by its socket ID
-   * @param {string} socketId - The socket ID
-   * @returns {number|null} The computer ID or null if not found
-   */
-  findComputerIdBySocketId(socketId) {
-    for (const [computerId, sid] of this.agentCommandSockets.entries()) {
-      if (sid === socketId) {
-        return computerId;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Get the socket ID for a computer
-   * @param {number} computerId - The computer ID
-   * @returns {string|undefined} The socket ID or undefined if not found
-   */
-  getAgentSocketId(computerId) {
-    return this.agentCommandSockets.get(computerId);
-  }
-
-  /**
-   * Register an admin socket
-   * @param {string} socketId - The socket ID
-   */
-  registerAdminSocket(socketId) {
-    this.adminSockets.add(socketId);
-    console.log(`Admin socket registered: ${socketId}`);
-  }
-
-  /**
-   * Unregister an admin socket
-   * @param {string} socketId - The socket ID
-   */
-  unregisterAdminSocket(socketId) {
-    this.adminSockets.delete(socketId);
-    console.log(`Admin socket unregistered: ${socketId}`);
-  }
-
-  /**
-   * Notify admin users about a new MFA code for an agent
-   * @param {string} agentId - The unique agent ID
-   * @param {string} mfaCode - The generated MFA code
-   * @param {Object} positionInfo - Additional room information
-   */
-  notifyAdminsNewMfa(agentId, mfaCode, positionInfo = {}) {
-    if (!this.io) {
-      console.log('WebSocket IO not initialized');
+    if (!io) {
+      logger.error('Attempted to set null or undefined Socket.IO instance');
       return;
     }
+    this.io = io;
+    logger.info('Socket.IO instance has been set in WebSocketService');
+  }
 
-    console.log(`[WebSocket] Sending MFA notification to admins:`, {
-      agentId,
+    // --- Internal Helpers ---
+
+  /**
+   * Ensures the Socket.IO instance is initialized.
+   * @private
+   * @throws {Error} If IO is not initialized.
+   */
+  _ensureIoInitialized() {
+    if (!this.io) {
+      const errorMsg = 'WebSocket IO not initialized. Call setIo() first.';
+      logger.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+  }
+
+  /**
+   * Emits an event to a specific room.
+   * @private
+   * @param {string} room - The room name.
+   * @param {string} eventName - The event name.
+   * @param {object} data - The data to emit.
+   */
+  _emitToRoom(room, eventName, data) {
+    try {
+      if (!this.io) {
+        const errorMsg = 'WebSocket IO not initialized. Call setIo() first.';
+        logger.error(errorMsg);
+        throw new Error(errorMsg);
+      }
+      this.io.to(room).emit(eventName, data);
+      logger.debug(`Emitted event '${eventName}' to room '${room}'`);
+    } catch (error) {
+      logger.error(`Failed to emit event '${eventName}' to room '${room}': ${error.message}`);
+    }
+  }
+
+  // --- Admin Notifications ---
+
+  /**
+   * Notifies admin users about a new MFA code for an agent.
+   * @param {string} agentId - The unique agent ID.
+   * @param {string} mfaCode - The generated MFA code.
+   * @param {Object} [positionInfo={}] - Additional information (e.g., computer lab).
+   */
+  notifyAdminsNewMfa(agentId, mfaCode, positionInfo = {}) {
+    const eventData = {
+      unique_agent_id: agentId,
       mfaCode,
       positionInfo,
-      adminSockets: Array.from(this.adminSockets)
-    });
-
-    // Emit to each admin socket individually
-    this.adminSockets.forEach(socketId => {
-      console.log(`[WebSocket] Emitting MFA to socket ${socketId}`);
-      this.io.to(socketId).emit('admin:new_agent_mfa', {
-        unique_agent_id: agentId,
-        mfaCode,
-        positionInfo,
-        timestamp: new Date()
-      });
-    });
+      timestamp: new Date(),
+    };
+    this._emitToRoom(ROOM_PREFIXES.ADMIN, EVENTS.ADMIN_NEW_AGENT_MFA, eventData);
   }
 
   /**
-   * Notify admin users when an agent has been successfully registered
-   * @param {string} agentId - The unique agent ID
-   * @param {number} computerId - The computer ID in the database
+   * Notifies admin users when an agent has been successfully registered.
+   * @param {string} agentId - The unique agent ID.
+   * @param {number} computerId - The computer ID in the database.
    */
   notifyAdminsAgentRegistered(agentId, computerId) {
-    if (!this.io) return;
-
-    // Emit to each admin socket individually
-    this.adminSockets.forEach(socketId => {
-      this.io.to(socketId).emit('admin:agent_registered', {
-        unique_agent_id: agentId,
-        computerId,
-        timestamp: new Date()
-      });
-    });
+     const eventData = {
+      unique_agent_id: agentId,
+      computerId,
+      timestamp: new Date(),
+    };
+    this._emitToRoom(ROOM_PREFIXES.ADMIN, EVENTS.ADMIN_AGENT_REGISTERED, eventData);
+    logger.info(`Agent registration notification sent for agent ${agentId} (Computer ID: ${computerId})`);
   }
 
+  // --- Agent Status Management ---
+
   /**
-   * Update the realtime cache for a computer
-   * @param {number} computerId - The computer ID
-   * @param {Object} data - The status data to update
+   * Updates the realtime cache for a computer (uses Map).
+   * @param {number} computerId - The computer ID.
+   * @param {object} data - The status data to update.
    */
   updateRealtimeCache(computerId, data) {
-    if (!this.agentRealtimeStatus[computerId]) {
-      this.agentRealtimeStatus[computerId] = {};
+    if (!computerId || typeof computerId !== 'number') {
+        logger.warn('Invalid computerId provided for updateRealtimeCache');
+        return;
     }
-    
-    // Update cache with new data
-    this.agentRealtimeStatus[computerId] = {
-      ...this.agentRealtimeStatus[computerId],
+
+    const existingData = this.agentRealtimeStatus.get(computerId) || {};
+
+    const newData = {
+      ...existingData,
       ...data,
-      lastUpdated: new Date()
+      lastUpdated: new Date(),
     };
+
+    this.agentRealtimeStatus.set(computerId, newData);
+
+    logger.debug(`Realtime cache (Map) updated for computer ${computerId}`);
   }
 
   /**
-   * Check if an agent is currently online
-   * @param {number} computerId - The computer ID
-   * @returns {boolean} True if the agent is online
+   * Checks if an agent is currently connected (based on socket presence in room).
+   * @param {number} computerId - The computer ID.
+   * @returns {boolean} True if the agent is connected.
    */
-  getAgentOnlineStatus(computerId) {
-    return this.agentCommandSockets.has(computerId);
-  }
-
-  /**
-   * Update the agent's online status and broadcast to room
-   * @param {number} computerId - The computer ID
-   */
-  async updateAndBroadcastOnlineStatus(computerId) {
+  isAgentConnected(computerId) {
     try {
-      // Import computerService to avoid circular dependencies
-      const computerService = require('./computer.service');
-      
-      // Update the last seen timestamp in database
-      await computerService.updateLastSeen(computerId);
-      
-      // Update cache with online status
-      this.updateRealtimeCache(computerId, { 
-        status: 'online',
-        lastSeen: new Date()
-      });
-      
-      // Get the latest status from cache
-      await this.broadcastStatusUpdate(computerId);
-      
-      console.log(`Updated online status for computer ${computerId}`);
+      const room = this.io.sockets.adapter.rooms.get(ROOM_PREFIXES.AGENT(computerId));
+      return !!room && room.size > 0;
     } catch (error) {
-      console.error(`Error updating online status for computer ${computerId}:`, error);
-    }
-  }
-
-  /**
-   * Handle agent disconnection
-   * @param {string} socketId - The socket ID
-   */
-  async handleAgentDisconnect(socketId) {
-    try {
-      const computerId = this.findComputerIdBySocketId(socketId);
-      
-      if (computerId) {
-        console.log(`Handling disconnect for agent with computer ID ${computerId}`);
-        
-        // Unregister the socket
-        this.unregisterAgentSocket(computerId);
-        
-        // Update cache with offline status
-        this.updateRealtimeCache(computerId, { 
-          status: 'offline',
-          lastDisconnected: new Date()
-        });
-        
-        // Broadcast the status update to the room
-        await this.broadcastStatusUpdate(computerId);
-        
-        console.log(`Agent for computer ${computerId} is now marked as offline`);
-      }
-    } catch (error) {
-      console.error(`Error handling agent disconnect for socket ${socketId}:`, error);
-    }
-  }
-
-  /**
-   * Broadcast a computer status update to the appropriate room
-   * @param {number} computerId - The computer ID
-   */
-  async broadcastStatusUpdate(computerId) {
-    try {
-      if (!this.io) return;
-      
-      // Get the status data from cache
-      const statusData = this.agentRealtimeStatus[computerId] || { status: 'offline' };
-      
-      // Get the room ID for this computer (implement this method or inject through a service)
-      const roomId = await this.getComputerRoomId(computerId);
-      
-      if (roomId) {
-        // Broadcast to the room
-        this.io.to(`room_${roomId}`).emit('computer:status_updated', {
-          computerId,
-          status: statusData.status,
-          cpuUsage: statusData.cpuUsage,
-          ramUsage: statusData.ramUsage,
-          diskUsage: statusData.diskUsage,
-          timestamp: new Date()
-        });
-        
-        console.log(`Broadcasted status update for computer ${computerId} to room ${roomId}`);
-      }
-    } catch (error) {
-      console.error(`Error broadcasting status update for computer ${computerId}:`, error);
-    }
-  }
-
-  /**
-   * Store a pending command
-   * @param {string} commandId - The command ID
-   * @param {number} userId - The user ID who initiated the command
-   * @param {number} computerId - The target computer ID
-   */
-  storePendingCommand(commandId, userId, computerId) {
-    this.pendingCommands.set(commandId, {
-      userId,
-      computerId,
-      timestamp: new Date()
-    });
-    
-    // Auto-expire pending commands after 5 minutes
-    setTimeout(() => {
-      if (this.pendingCommands.has(commandId)) {
-        this.pendingCommands.delete(commandId);
-        console.log(`Command ${commandId} expired from pending commands`);
-      }
-    }, 5 * 60 * 1000);
-  }
-
-  /**
-   * Send a command to an agent
-   * @param {number} computerId - The target computer ID
-   * @param {string} command - The command to execute
-   * @param {string} commandId - The command ID
-   * @returns {boolean} True if the command was sent
-   */
-  sendCommandToAgent(computerId, command, commandId) {
-    try {
-      if (!this.io) return false;
-      
-      const socketId = this.getAgentSocketId(computerId);
-      
-      if (!socketId) {
-        console.log(`Cannot send command to computer ${computerId}: Agent not connected`);
-        return false;
-      }
-      
-      // Send the command to the agent
-      this.io.to(socketId).emit('command:execute', {
-        commandId,
-        command
-      });
-      
-      console.log(`Command ${commandId} sent to computer ${computerId}`);
-      return true;
-    } catch (error) {
-      console.error(`Error sending command to computer ${computerId}:`, error);
+      logger.error(`Error checking online status for computer ${computerId}: ${error.message}`);
       return false;
     }
   }
 
   /**
-   * Notify command completion to the user
-   * @param {string} commandId - The command ID
-   * @param {Object} result - The command execution result
+   * Retrieves the realtime status and system information for an agent from the cache (Map).
+   * @param {number} computerId - The computer ID.
+   * @returns {object | null} A copy of the agent's status data, or null if not found.
+   */
+  getAgentRealtimeStatus(computerId) {
+    if (!computerId) return null;
+    const status = this.agentRealtimeStatus.get(computerId);
+    return status ? { ...status } : null;
+  }
+
+  /**
+   * Handles an agent's disconnection. Removes status from Map after confirming offline state.
+   * @param {import("socket.io").Socket} socket - The disconnected socket instance.
+   */
+  async handleAgentDisconnect(socket) {
+    const computerId = socket.data?.computerId;
+
+    if (!computerId) {
+      logger.debug(`Socket ${socket.id} disconnected without associated computerId.`);
+      return;
+    }
+
+    logger.info(`Handling disconnect for agent socket ${socket.id} (Computer ID: ${computerId})`);
+
+    try {
+      setTimeout(async () => {
+        if (!this.isAgentConnected(computerId)) {
+          logger.info(`Computer ${computerId} confirmed offline after delay.`);
+
+          const offlineStatusData = {
+              computerId,
+              status: 'offline',
+              cpuUsage: 0,
+              ramUsage: 0,
+              diskUsage: 0,
+              timestamp: new Date(),
+          };
+
+          this._emitToRoom(
+              ROOM_PREFIXES.COMPUTER_SUBSCRIBERS(computerId),
+              EVENTS.COMPUTER_STATUS_UPDATED,
+              offlineStatusData
+          );
+          logger.info(`Broadcasted final 'offline' status for computer ${computerId}.`);
+
+          const deleted = this.agentRealtimeStatus.delete(computerId);
+          if (deleted) {
+            logger.info(`Removed realtime status for computer ${computerId} from Map.`);
+          } else {
+            logger.warn(`Attempted to remove status for computer ${computerId}, but it was not found in the Map.`);
+          }
+
+        } else {
+           logger.info(`Computer ${computerId} still has other connections active. Not marking as offline or removing status yet.`);
+        }
+      }, AGENT_OFFLINE_CHECK_DELAY_MS);
+
+    } catch (error) {
+      logger.error(`Error handling agent disconnect for computer ${computerId} (Socket ID: ${socket.id}): ${error.message}`, error.stack);
+    }
+  }
+
+  /**
+   * Broadcasts a computer status update to subscribers (retrieved from Map).
+   * @param {number} computerId - The computer ID.
+   */
+  async broadcastStatusUpdate(computerId) {
+     if (!computerId) {
+        logger.warn('broadcastStatusUpdate called with invalid computerId');
+        return;
+    }
+    try {
+      const statusData = this.getAgentRealtimeStatus(computerId);
+
+      if (!statusData) {
+          logger.warn(`No status data found in Map for computer ${computerId}. Skipping broadcast.`);
+          return;
+      }
+
+      const eventData = {
+        computerId,
+        status: statusData.status,
+        cpuUsage: statusData.cpuUsage ?? 0,
+        ramUsage: statusData.ramUsage ?? 0,
+        diskUsage: statusData.diskUsage ?? 0,
+        timestamp: statusData.lastUpdated || new Date(),
+      };
+
+      this._emitToRoom(ROOM_PREFIXES.COMPUTER_SUBSCRIBERS(computerId), EVENTS.COMPUTER_STATUS_UPDATED, eventData);
+
+    } catch (error) {
+      logger.error(`Failed during status broadcast preparation for computer ${computerId}: ${error.message}`, error.stack);
+    }
+  }
+
+  // --- Command Handling ---
+
+  /**
+   * Stores a pending command.
+   * @param {string} commandId - The command ID.
+   * @param {number} userId - The ID of the user who initiated the command.
+   * @param {number} computerId - The target computer ID.
+   */
+  storePendingCommand(commandId, userId, computerId) {
+     if (!commandId || !userId || !computerId) {
+        logger.warn('storePendingCommand called with invalid parameters', { commandId, userId, computerId });
+        return;
+    }
+
+    if (this.pendingCommands.has(commandId)) {
+        const existingCommand = this.pendingCommands.get(commandId);
+        clearTimeout(existingCommand.timeoutId);
+        logger.warn(`Command ${commandId} already existed in pending commands. Overwriting and clearing old timeout.`);
+    }
+
+    const timeoutId = setTimeout(() => {
+      if (this.pendingCommands.has(commandId)) {
+        logger.warn(`Command ${commandId} timed out and removed from pending commands.`);
+        this.pendingCommands.delete(commandId);
+      }
+    }, PENDING_COMMAND_TIMEOUT_MS);
+
+    this.pendingCommands.set(commandId, {
+      userId,
+      computerId,
+      timestamp: new Date(),
+      timeoutId,
+    });
+
+    logger.debug(`Command ${commandId} stored as pending for computer ${computerId} by user ${userId}`);
+  }
+
+  /**
+   * Sends a command to a specific agent.
+   * @param {number} computerId - The target computer ID.
+   * @param {string} command - The command to execute.
+   * @param {string} commandId - The command ID.
+   * @returns {boolean} True if the command was successfully emitted to at least one agent socket.
+   */
+  sendCommandToAgent(computerId, command, commandId) {
+    if (!computerId || !command || !commandId) {
+        logger.warn('sendCommandToAgent called with invalid parameters', { computerId, commandId });
+        return false;
+    }
+    try {
+
+      const agentRoom = ROOM_PREFIXES.AGENT(computerId);
+
+      if (!this.isAgentConnected(computerId)) {
+        logger.warn(`Cannot send command ${commandId} to computer ${computerId}: Agent is not connected.`);
+        return false;
+      }
+
+      this.io.to(agentRoom).emit(EVENTS.COMMAND_EXECUTE, { commandId, command });
+
+      logger.info(`Command ${commandId} sent to agent room ${agentRoom} for computer ${computerId}`);
+      return true;
+    } catch (error) {
+      logger.error(`Error sending command ${commandId} to computer ${computerId}: ${error.message}`, error.stack);
+      return false;
+    }
+  }
+
+  /**
+   * Notifies the initiating user about command completion.
+   * @param {string} commandId - The command ID.
+   * @param {object} result - The command execution result from the agent ({ stdout, stderr, exitCode }).
    */
   notifyCommandCompletion(commandId, result) {
+     if (!commandId || !result) {
+        logger.warn('notifyCommandCompletion called with invalid parameters', { commandId });
+        return;
+    }
     try {
-      if (!this.io) return;
-      
       const pendingCommand = this.pendingCommands.get(commandId);
-      
+
       if (!pendingCommand) {
-        console.log(`Command ${commandId} not found in pending commands`);
+        logger.warn(`Received completion for unknown or already processed command ${commandId}. Ignoring.`);
         return;
       }
-      
-      const { userId, computerId } = pendingCommand;
-      
-      // Remove from pending commands
+
+      const { userId, computerId, timeoutId } = pendingCommand;
+
+      clearTimeout(timeoutId);
+
       this.pendingCommands.delete(commandId);
-      
-      // Notify the user who initiated the command
-      this.io.to(`user_${userId}`).emit('command:completed', {
+
+      const formattedResult = {
         commandId,
         computerId,
-        ...result
-      });
-      
-      console.log(`Command ${commandId} completion notified to user ${userId}`);
+        stdout: result.stdout ?? '',
+        stderr: result.stderr ?? '',
+        exitCode: typeof result.exitCode === 'number' ? result.exitCode : -1,
+        timestamp: new Date(),
+      };
+
+      this._emitToRoom(ROOM_PREFIXES.USER(userId), EVENTS.COMMAND_COMPLETED, formattedResult);
+
+      logger.debug(`Command ${commandId} completion notified to user ${userId}`);
     } catch (error) {
-      console.error(`Error notifying command completion for ${commandId}:`, error);
+      logger.error(`Error processing command completion notification for ${commandId}: ${error.message}`, error.stack);
     }
   }
 
-  /**
-   * Get the room ID for a computer
-   * @param {number} computerId - The computer ID
-   * @returns {Promise<number|null>} The room ID or null
-   * @private
-   */
-  async getComputerRoomId(computerId) {
-    try {
-      // Import computerService only when needed to avoid circular dependencies
-      const computerService = require('./computer.service');
-      
-      // Get computer info from database
-      const computer = await computerService.getComputerById(computerId);
-      return computer?.room_id || null;
-    } catch (error) {
-      console.error(`Error getting room ID for computer ${computerId}:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * Send a command to all computers in a room
-   * @param {number} roomId - The room ID
-   * @param {string} command - The command to execute
-   * @param {number} userId - The user ID who initiated the command
-   * @returns {Promise<Array<number>>} Array of computer IDs that received the command
-   */
-  async sendCommandToRoomComputers(roomId, command, userId) {
-    try {
-      // Import models only when needed to avoid circular dependencies
-      const db = require('../database/models');
-      const { v4: uuidv4 } = require('uuid');
-      
-      // Find all computers in the room
-      const computers = await db.Computer.findAll({ 
-        where: { room_id: roomId },
-        attributes: ['id']
-      });
-      
-      const sentComputerIds = [];
-      
-      // Loop through each computer and send command if online
-      for (const computer of computers) {
-        const computerId = computer.id;
-        const isOnline = this.getAgentOnlineStatus(computerId);
-        
-        if (isOnline) {
-          // Generate unique command ID for each computer
-          const commandId = uuidv4();
-          
-          // Store the pending command
-          this.storePendingCommand(commandId, userId, computerId);
-          
-          // Send the command to the agent
-          const sent = this.sendCommandToAgent(computerId, command, commandId);
-          
-          if (sent) {
-            sentComputerIds.push(computerId);
-          }
-        }
-      }
-      
-      console.log(`Command sent to ${sentComputerIds.length} of ${computers.length} computers in room ${roomId}`);
-      return sentComputerIds;
-    } catch (error) {
-      console.error(`Error sending command to room ${roomId}:`, error);
-      throw new Error(`Failed to send command to room: ${error.message}`);
-    }
-  }
 }
 
+// Export a singleton instance
 module.exports = new WebSocketService();
+// export constants for use in other modules
+module.exports.EVENTS = EVENTS;
+module.exports.ROOM_PREFIXES = ROOM_PREFIXES;

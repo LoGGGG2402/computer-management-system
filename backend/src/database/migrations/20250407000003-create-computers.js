@@ -32,7 +32,7 @@ module.exports = {
         type: Sequelize.STRING(255),
         allowNull: true
       },
-      last_seen: {
+      last_update: {
         type: Sequelize.DATE
       },
       os_info: {

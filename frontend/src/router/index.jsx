@@ -5,12 +5,12 @@ import MainLayout from '../layouts/MainLayout';
 // Import pages
 import LoginPage from '../pages/LoginPage';
 import Dashboard from '../pages/dashboard/Dashboard';
-import RoomPage from '../pages/room/RoomPage'; 
+import RoomsListPage from '../pages/room/RoomsListPage'; 
 import RoomDetailPage from '../pages/room/RoomDetailPage';
 import ComputerDetailPage from '../pages/computer/ComputerDetailPage';
 
 // Import admin pages
-import AdminDashboard from '../pages/dashboard/AdminDashboard';
+import AdminDashboard from '../pages/Admin/AdminDashboard';
 
 // Placeholder components (these will need to be created later)
 const NotFound = () => <div>404 - Page Not Found</div>;
@@ -45,7 +45,7 @@ const router = createBrowserRouter([
           // Room routes
           {
             path: '/rooms',
-            element: <RoomPage />,
+            element: <RoomsListPage />,
           },
           {
             path: '/rooms/:id',
@@ -72,10 +72,10 @@ const router = createBrowserRouter([
             path: '/admin',
             element: <AdminDashboard />,
           },
-          // Use the same RoomPage component, but in admin context
+          // Use the same RoomsListPage component, but in admin context
           {
             path: '/admin/rooms',
-            element: <RoomPage />,
+            element: <RoomsListPage />,
           },
           // Computer detail page for admin
           {

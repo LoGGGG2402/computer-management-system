@@ -7,7 +7,7 @@ import AssignmentComponent from '../../components/admin/AssignmentComponent';
 
 const { Title } = Typography;
 
-const UserManagementPage = () => {
+const UsersListPage = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [modalAction, setModalAction] = useState('create'); // 'create', 'edit', 'view'
@@ -111,4 +111,4 @@ const UserManagementPage = () => {
   );
 };
 
-export default UserManagementPage;
+export default UsersListPage;
