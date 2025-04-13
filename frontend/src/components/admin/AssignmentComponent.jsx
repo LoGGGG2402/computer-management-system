@@ -9,6 +9,7 @@ const AssignmentComponent = ({ type, id, onSuccess }) => {
   const [availableItems, setAvailableItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [initialAssignments, setInitialAssignments] = useState([]);
+  const [assignedUsers, setAssignedUsers] = useState([]);
 
   useEffect(() => {
     if (id) {
@@ -21,76 +22,31 @@ const AssignmentComponent = ({ type, id, onSuccess }) => {
       setLoading(true);
       if (type === 'room') {
         // For a room, we need all users and the users assigned to this room
-        const [allUsersResponse, roomUsersResponse] = await Promise.all([
+        const [allUsers, assignedRoomUsers] = await Promise.all([
           userService.getAllUsers(),
           roomService.getUsersInRoom(id)
         ]);
         
-        // Extract users from potentially nested response
-        const allUsers = Array.isArray(allUsersResponse) 
-          ? allUsersResponse 
-          : (allUsersResponse?.data?.users || []);
-        
-        // Extract room users from potentially nested response
-        const roomUsers = Array.isArray(roomUsersResponse) 
-          ? roomUsersResponse 
-          : (roomUsersResponse?.data?.users || []);
-
-        
-        // Check if allUsers is an array before mapping
-        const formattedUsers = Array.isArray(allUsers) 
-          ? allUsers.map(user => ({
-              key: user.id,
-              title: `${user.firstName || ''} ${user.lastName || ''} (${user.username || 'User'})`,
-              description: user.email || '',
-            }))
-          : [];
+        // Format all users for the Transfer component
+        const formattedUsers = allUsers?.users?.map(user => ({
+          key: user.id,
+          title: `${user.firstName || ''} ${user.lastName || ''} (${user.username || 'User'})`,
+          description: user.email || '',
+        })) || [];
         
         setAvailableItems(formattedUsers);
         
-        // Check if roomUsers is an array before mapping
-        const roomUserIds = Array.isArray(roomUsers)
-          ? roomUsers.map(user => user.id)
-          : [];
+        // Extract assigned user IDs
+        const assignedUserIds = assignedRoomUsers?.map(user => user.id) || [];
+        setAssignedUsers(assignedRoomUsers || []);
         
-        setTargetKeys(roomUserIds);
-        setInitialAssignments(roomUserIds);
+        setTargetKeys(assignedUserIds);
+        setInitialAssignments(assignedUserIds);
       } else if (type === 'user') {
-        // For a user, we need all rooms and the rooms this user is assigned to
-        const [allRoomsResponse, userRoomsResponse] = await Promise.all([
-          roomService.getAllRooms(),
-          userService.getUserRooms(id)
-        ]);
-        
-        // Extract rooms from potentially nested response
-        const allRooms = Array.isArray(allRoomsResponse) 
-          ? allRoomsResponse 
-          : (allRoomsResponse?.data?.rooms || []);
-        
-        // Extract user's rooms from potentially nested response
-        const userRooms = Array.isArray(userRoomsResponse) 
-          ? userRoomsResponse 
-          : (userRoomsResponse?.data?.rooms || []);
-      
-        
-        // Check if allRooms is an array before mapping
-        const formattedRooms = Array.isArray(allRooms) 
-          ? allRooms.map(room => ({
-              key: room.id,
-              title: `${room.name || 'Room'}`,
-              description: room.description || '',
-            }))
-          : [];
-        
-        setAvailableItems(formattedRooms);
-        
-        // Check if userRooms is an array before mapping
-        const userRoomIds = Array.isArray(userRooms)
-          ? userRooms.map(room => room.id)
-          : [];
-        
-        setTargetKeys(userRoomIds);
-        setInitialAssignments(userRoomIds);
+        // For user-to-room assignments, we'd need similar functionality
+        // But it appears the user service doesn't have a getUserRooms method
+        // This would need to be implemented in the backend and user service
+        message.info('User-to-Room assignment functionality is not implemented yet');
       }
     } catch (error) {
       message.error('Failed to load assignment data');
@@ -113,27 +69,35 @@ const AssignmentComponent = ({ type, id, onSuccess }) => {
       
       // Find items to remove (in initialAssignments but not in targetKeys)
       const itemsToRemove = initialAssignments.filter(key => !targetKeys.includes(key));
-    
       
       if (type === 'room') {
         // For a room, we're assigning/unassigning users
+        let updatedUsers = [...assignedUsers];
+        
         if (itemsToAdd.length > 0) {
           await roomService.assignUsersToRoom(id, itemsToAdd);
+          // We'd need to fetch the updated user data to get complete user objects
         }
+        
         if (itemsToRemove.length > 0) {
           await roomService.unassignUsersFromRoom(id, itemsToRemove);
+          updatedUsers = updatedUsers.filter(user => !itemsToRemove.includes(user.id));
         }
-      } else if (type === 'user') {
-        // Here we would use equivalent service methods for assigning rooms to users
-        // This requires implementing these methods in the user service
-        message.info('User-Room assignment functionality is being implemented');
+        
+        // If any changes were made, fetch the updated list of users
+        if (itemsToAdd.length > 0 || itemsToRemove.length > 0) {
+          const refreshedUsers = await roomService.getUsersInRoom(id);
+          setAssignedUsers(refreshedUsers);
+          
+          // Update initial assignments to match current state after successful save
+          const refreshedUserIds = refreshedUsers.map(user => user.id);
+          setTargetKeys(refreshedUserIds);
+          setInitialAssignments(refreshedUserIds);
+        }
       }
       
-      // Update initial assignments to match current state after successful save
-      setInitialAssignments([...targetKeys]);
-      
       message.success('Assignments updated successfully');
-      if (onSuccess) onSuccess();
+      if (onSuccess) onSuccess(assignedUsers);
     } catch (error) {
       message.error('Failed to update assignments');
       console.error('Error updating assignments:', error);
@@ -145,7 +109,7 @@ const AssignmentComponent = ({ type, id, onSuccess }) => {
   return (
     <div className="assignment-component">
       {loading ? (
-        <LoadingComponent type="section" tip="Đang tải dữ liệu phân quyền..." />
+        <LoadingComponent type="section" tip="Loading assignment data..." />
       ) : (
         <>
           <Transfer

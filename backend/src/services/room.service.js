@@ -259,28 +259,6 @@ class RoomService {
   }
 
   /**
-   * Delete a room
-   * @param {number} id - Room ID to delete
-   * @returns {boolean} - Success status (true if room was successfully deleted)
-   * @throws {Error} - If room is not found
-   */
-  async deleteRoom(id) {
-    try {
-      const room = await Room.findByPk(id);
-
-      if (!room) {
-        throw new Error("Room not found");
-      }
-
-      await room.destroy();
-
-      return true;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
    * Assign users to a room
    * @param {number} roomId - Room ID to assign users to
    * @param {number[]} userIds - Array of user IDs to assign

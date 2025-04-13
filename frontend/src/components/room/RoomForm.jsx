@@ -89,7 +89,7 @@ const RoomForm = ({ initialValues, onSuccess, onCancel }) => {
             tooltip="Number of computers horizontally (X-axis)"
             rules={[{ required: true, message: 'Please enter number of columns' }]}
           >
-            <InputNumber min={1} max={20} style={{ width: '100%' }} />
+            <InputNumber min={1} max={20} style={{ width: '100%' }} disabled={isEditing} />
           </Form.Item>
 
           <Form.Item
@@ -98,9 +98,15 @@ const RoomForm = ({ initialValues, onSuccess, onCancel }) => {
             tooltip="Number of computers vertically (Y-axis)"
             rules={[{ required: true, message: 'Please enter number of rows' }]}
           >
-            <InputNumber min={1} max={20} style={{ width: '100%' }} />
+            <InputNumber min={1} max={20} style={{ width: '100%' }} disabled={isEditing} />
           </Form.Item>
         </div>
+        
+        {isEditing && (
+          <div style={{ marginBottom: '16px', backgroundColor: '#f6ffed', padding: '10px', border: '1px solid #b7eb8f', borderRadius: '4px' }}>
+            <strong>Note:</strong> Layout dimensions cannot be modified after room creation.
+          </div>
+        )}
 
         <Form.Item>
           <Button type="primary" htmlType="submit" loading={loading}>

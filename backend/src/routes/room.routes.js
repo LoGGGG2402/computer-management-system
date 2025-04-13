@@ -22,7 +22,6 @@ router.put('/:id', hasRoomAccess, roomController.updateRoom);
 // Admin-only routes below
 router.use('/admin', isAdmin);
 router.post('/', isAdmin, roomController.createRoom);
-router.delete('/:id', isAdmin, roomController.deleteRoom);
 
 // User assignment routes (admin only)
 router.post('/:roomId/assign', isAdmin, roomController.assignUsersToRoom);

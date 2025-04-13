@@ -79,7 +79,7 @@ async function startServer() {
             setTimeout(() => {
                 console.error('Graceful shutdown timed out. Forcing exit.');
                 process.exit(1);
-            }, 10000); // 10 seconds timeout
+            }, 1000); // 10 seconds timeout
         });
     });
 

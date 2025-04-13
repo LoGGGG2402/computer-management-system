@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Modal, Typography, message, Popconfirm } from 'antd';
+import { Card, Button, Modal, Typography, message } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import RoomList from '../../components/room/RoomList';
@@ -61,17 +61,7 @@ const RoomsListPage = () => {
     setIsModalVisible(false);
   };
 
-  const handleDelete = (roomId) => {
-    roomService.deleteRoom(roomId)
-      .then(() => {
-        message.success('Room deleted successfully');
-        setRefreshTrigger(prev => prev + 1);
-      })
-      .catch(error => {
-        message.error('Failed to delete room');
-        console.error('Error deleting room:', error);
-      });
-  };
+  // handleDelete function removed - room deletion not allowed
 
   const modalTitle = modalAction === 'create' ? 'Create New Room' : 'Edit Room';
 
@@ -94,7 +84,6 @@ const RoomsListPage = () => {
         <RoomList 
           onEdit={handleEdit} 
           onView={handleView}
-          onDelete={handleDelete}
           refreshTrigger={refreshTrigger} 
         />
       </Card>

@@ -1,23 +1,10 @@
 import React from 'react';
 import { Row, Col, Card, Empty, Badge } from 'antd';
 import { DesktopOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
 import SimpleComputerCard, { cardStyle } from '../computer/SimpleComputerCard';
 import { LoadingComponent } from '../../components/common';
 
-const RoomLayout = ({ roomId, computers, room, onEditComputer, onViewComputer, onRefresh }) => {
-  const navigate = useNavigate();
-
-  // Handle navigation to ComputerDetailPage
-  const handleViewComputer = (computerId) => {
-    // If onViewComputer prop is provided, use it
-    if (onViewComputer) {
-      onViewComputer(computerId);
-    } else {
-      // Otherwise navigate directly
-      navigate(`/computers/${computerId}`);
-    }
-  };
+const RoomLayout = ({ computers, room, onRefresh }) => {
 
   if (!computers || !room) {
     return <LoadingComponent type="inline" tip="Đang tải giao diện phòng..." />;
@@ -55,8 +42,6 @@ const RoomLayout = ({ roomId, computers, room, onEditComputer, onViewComputer, o
                 // Use the SimpleComputerCard component with simplified=true for consistent styling
                 <SimpleComputerCard 
                   computer={computer}
-                  onView={handleViewComputer}
-                  onEdit={onEditComputer}
                   onRefresh={onRefresh}
                 />
               ) : (

@@ -1,18 +1,16 @@
 import React, { useState } from 'react';
-import { Card, Button, Modal, Tabs, Typography, message } from 'antd';
+import { Card, Button, Modal, Typography, message } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import UserList from '../../components/admin/UserList';
 import UserForm from '../../components/admin/UserForm';
-import AssignmentComponent from '../../components/admin/AssignmentComponent';
 
 const { Title } = Typography;
 
 const UsersListPage = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [modalAction, setModalAction] = useState('create'); // 'create', 'edit', 'view'
+  const [modalAction, setModalAction] = useState('create'); // 'create', 'edit'
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [selectedUserId, setSelectedUserId] = useState(null);
 
   const handleCreate = () => {
     setSelectedUser(null);
@@ -23,12 +21,6 @@ const UsersListPage = () => {
   const handleEdit = (user) => {
     setSelectedUser(user);
     setModalAction('edit');
-    setIsModalVisible(true);
-  };
-
-  const handleView = (userId) => {
-    setSelectedUserId(userId);
-    setModalAction('view');
     setIsModalVisible(true);
   };
 
@@ -43,30 +35,7 @@ const UsersListPage = () => {
     setIsModalVisible(false);
   };
 
-  const modalTitle = 
-    modalAction === 'create' ? 'Create New User' : 
-    modalAction === 'edit' ? 'Edit User' : 
-    'User Details';
-
-  // Define the tab items for the Tabs component using the new format
-  const tabItems = [
-    {
-      key: 'details',
-      label: 'Details',
-      children: <div>User details will be displayed here</div>
-    },
-    {
-      key: 'rooms',
-      label: 'Room Assignments',
-      children: (
-        <AssignmentComponent 
-          type="user" 
-          id={selectedUserId} 
-          onSuccess={() => message.success('Room assignments updated')}
-        />
-      )
-    }
-  ];
+  const modalTitle = modalAction === 'create' ? 'Create New User' : 'Edit User';
 
   return (
     <div className="user-management-page">
@@ -84,7 +53,6 @@ const UsersListPage = () => {
       >
         <UserList 
           onEdit={handleEdit} 
-          onView={handleView} 
           onRefresh={() => setRefreshTrigger(prev => prev + 1)} 
           refreshTrigger={refreshTrigger} 
         />
@@ -95,17 +63,13 @@ const UsersListPage = () => {
         open={isModalVisible}
         onCancel={handleCancel}
         footer={null}
-        width={modalAction === 'view' ? 800 : 600}
+        width={600}
       >
-        {modalAction === 'view' ? (
-          <Tabs defaultActiveKey="details" items={tabItems} />
-        ) : (
-          <UserForm
-            initialValues={selectedUser}
-            onSuccess={handleSuccess}
-            onCancel={handleCancel}
-          />
-        )}
+        <UserForm
+          initialValues={selectedUser}
+          onSuccess={handleSuccess}
+          onCancel={handleCancel}
+        />
       </Modal>
     </div>
   );

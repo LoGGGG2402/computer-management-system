@@ -118,14 +118,11 @@ class RoomService {
    * @param {Object} roomData - Room data to update
    * @param {string} [roomData.name] - New name for the room
    * @param {string} [roomData.description] - New description for the room
-   * @param {Object} [roomData.layout] - New layout configuration for the room
-   * @param {number} [roomData.layout.columns] - Number of columns in the room grid
-   * @param {number} [roomData.layout.rows] - Number of rows in the room grid
    * @returns {Promise<Object>} Updated room data with:
    *   - id {number} - Room ID
    *   - name {string} - Room name
    *   - description {string} - Room description
-   *   - layout {Object} - Room layout configuration
+   *   - layout {Object} - Room layout configuration (cannot be modified)
    *     - columns {number} - Number of columns in the room grid
    *     - rows {number} - Number of rows in the room grid
    *   - created_at {Date} - When room was created
@@ -134,7 +131,10 @@ class RoomService {
    */
   async updateRoom(id, roomData) {
     try {
-      const response = await api.put(`/rooms/${id}`, roomData);
+      // Remove layout from data if it was mistakenly included
+      const { layout, ...dataWithoutLayout } = roomData;
+      
+      const response = await api.put(`/rooms/${id}`, dataWithoutLayout);
       return response.data.data;
     } catch (error) {
       const errorMessage = error.extractedMessage || 'Failed to update room';

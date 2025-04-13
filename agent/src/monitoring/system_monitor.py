@@ -171,8 +171,8 @@ class SystemMonitor:
             hardware_info["os_info"] = f"{platform.release()}"
             hardware_info["cpu_info"] = platform.processor() if platform.processor() else "N/A"
             hardware_info["gpu_info"] = self._get_gpu_info()
-            hardware_info["total_ram"] = psutil.virtual_memory()
-            hardware_info["total_disk_space"] = psutil.disk_usage('/')
+            hardware_info["total_ram"] = psutil.virtual_memory().total
+            hardware_info["total_disk_space"] = psutil.disk_usage('/').total
             hardware_info["ip_address"] = socket.gethostbyname(socket.gethostname())
 
         except Exception as e:

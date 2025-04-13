@@ -108,9 +108,6 @@ const setupFrontendHandlers = (socket) => {
              socket.emit(websocketService.EVENTS.COMPUTER_STATUS_UPDATED, {
                 computerId,
                 ...currentStatus,
-                // Ensure sensitive fields aren't included
-                unique_agent_id: undefined,
-                agent_token_hash: undefined
              });
         }
 

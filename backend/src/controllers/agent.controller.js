@@ -136,12 +136,12 @@ class AgentController {
         });
       }
 
-      const {isValid, positionInfo} = mfaService.verifyMfa(
+      const { valid, positionInfo } = mfaService.verifyMfa(
         unique_agent_id,
         mfaCode
       );
 
-      if (isValid) {
+      if (valid) {
         const { computer, plainToken } =
           await computerService.generateAndAssignAgentToken(
             unique_agent_id,

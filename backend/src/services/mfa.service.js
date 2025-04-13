@@ -62,7 +62,7 @@ class MfaService {
    */
   verifyMfa(agentId, code) {
     const storedMfaInfo = this.mfaCache.get(agentId);
-
+    
     if (!storedMfaInfo) {
       return { valid: false, positionInfo: null };
     }

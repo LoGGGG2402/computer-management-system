@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Space, message, Empty, Tooltip, Form, Input, Select, Row, Col, Card, Popconfirm } from 'antd';
-import { EyeOutlined, EditOutlined, DeleteOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Table, Button, Space, message, Empty, Tooltip, Form, Input, Select, Row, Col, Card } from 'antd';
+import { EyeOutlined, EditOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import roomService from '../../services/room.service';
 import userService from '../../services/user.service';
 import { useAuth } from '../../contexts/AuthContext';
@@ -147,20 +147,6 @@ const RoomList = ({ onEdit, onView, onDelete, refreshTrigger }) => {
               >
                 Edit
               </Button>
-              <Popconfirm
-                title="Are you sure you want to delete this room?"
-                onConfirm={() => onDelete(record.id)}
-                okText="Yes"
-                cancelText="No"
-              >
-                <Button
-                  type="primary"
-                  danger
-                  icon={<DeleteOutlined />}
-                >
-                  Delete
-                </Button>
-              </Popconfirm>
             </>
           )}
         </Space>

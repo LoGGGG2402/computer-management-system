@@ -96,7 +96,6 @@ class WebSocketService {
    */
   notifyAdminsAgentRegistered(agentId, computerId) {
      const eventData = {
-      unique_agent_id: agentId,
       computerId,
       timestamp: new Date(),
     };

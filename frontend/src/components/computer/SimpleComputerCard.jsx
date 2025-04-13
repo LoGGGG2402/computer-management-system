@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
-import { Card, Button, Popconfirm, message, Tooltip, Badge, Typography, Row, Col, Progress, Popover } from 'antd';
+import { Card, Button, Tooltip, Badge, Typography, Row, Col, Progress, Popover, Tag } from 'antd';
 import { 
-  DeleteOutlined, 
   DesktopOutlined, 
   GlobalOutlined,
   HomeOutlined,
@@ -10,12 +9,13 @@ import {
   DatabaseOutlined,
   CodeOutlined, 
   HddOutlined,
-  RocketOutlined
+  RocketOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined
 } from '@ant-design/icons';
-import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext'; 
 import { useCommandHandle } from '../../contexts/CommandHandleContext'; 
-import computerService from '../../services/computer.service';
+import { useNavigate } from 'react-router-dom';
 
 const { Text } = Typography;
 
@@ -29,11 +29,10 @@ export const cardStyle = {
   flexDirection: 'column'
 };
 
-const SimpleComputerCard = ({ computer, onView, onRefresh }) => {
-  const { isAdmin } = useAuth();
+const SimpleComputerCard = ({ computer, onRefresh }) => {
   const { getComputerStatus, subscribeToComputer, unsubscribeFromComputer } = useSocket(); 
   const { commandResults, clearResult } = useCommandHandle(); 
-
+  const navigate = useNavigate();
   const computerId = computer?.id;
 
   useEffect(() => {
@@ -51,17 +50,6 @@ const SimpleComputerCard = ({ computer, onView, onRefresh }) => {
   const statusData = getComputerStatus(computerId);
   const commandResult = computerId ? commandResults[computerId] : null;
 
-  const handleDelete = async () => {
-    if (!computerId) return;
-    try {
-      await computerService.deleteComputer(computerId);
-      message.success('Computer deleted successfully');
-      if (onRefresh) onRefresh();
-    } catch (error) {
-      message.error('Failed to delete computer');
-      console.error('Error deleting computer:', error);
-    }
-  };
 
   if (!computer) return null;
 
@@ -111,6 +99,7 @@ const SimpleComputerCard = ({ computer, onView, onRefresh }) => {
     return '#f5222d'; 
   };
 
+  // Enhanced command result display
   const renderCommandResultContent = () => {
     if (!commandResult) return null;
     
@@ -122,17 +111,19 @@ const SimpleComputerCard = ({ computer, onView, onRefresh }) => {
             size="small" 
             type="text" 
             style={{ float: 'right', padding: '0' }}
-            onClick={() => clearResult(computerId)} 
+            onClick={(e) => {
+              e.stopPropagation();  // Prevent card click event
+              clearResult(computerId);
+            }} 
           >
             Clear
           </Button>
         </div>
         
         <div style={{ marginBottom: '8px' }}>
-          <Badge color={commandResult.exitCode === 0 ? 'green' : 'red'} />
-          <Text style={{ marginLeft: '8px' }}>
+          <Tag color={commandResult.exitCode === 0 ? 'success' : 'error'}>
             Exit Code: {commandResult.exitCode}
-          </Text>
+          </Tag>
           <Text type="secondary" style={{ fontSize: '12px', marginLeft: '8px' }}>
             {getTimeAgo(commandResult.timestamp)}
           </Text>
@@ -167,6 +158,15 @@ const SimpleComputerCard = ({ computer, onView, onRefresh }) => {
     );
   };
 
+  // Get appropriate icon for command result status
+  const getCommandResultIcon = () => {
+    if (!commandResult) return null;
+    
+    return commandResult.exitCode === 0 
+      ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> 
+      : <CloseCircleOutlined style={{ color: '#f5222d' }} />;
+  };
+
   return (
     <Card
       hoverable
@@ -192,11 +192,12 @@ const SimpleComputerCard = ({ computer, onView, onRefresh }) => {
               trigger="hover"
               placement="right"
               overlayStyle={{ width: '300px' }}
+              onClick={(e) => e.stopPropagation()} // Prevent card click when clicking on popover
             >
               <Badge 
                 count={<CodeOutlined style={{ color: commandResult.exitCode === 0 ? '#52c41a' : '#f5222d' }} />} 
                 size="small"
-                style={{ marginLeft: '4px' }}
+                style={{ marginLeft: '4px', cursor: 'pointer' }}
               />
             </Popover>
           )}
@@ -210,22 +211,12 @@ const SimpleComputerCard = ({ computer, onView, onRefresh }) => {
               type="text" 
               icon={<DesktopOutlined style={{ fontSize: '12px' }} />} 
               size="small"
-              onClick={() => onView(computerId)} 
+              onClick={(e) => {
+                e.stopPropagation();  // Prevent card click event
+                navigate(`/computers/${computerId}`);
+              }} 
             />
           </Tooltip>
-
-          {isAdmin && (
-            <Tooltip title="Delete computer">
-              <Popconfirm
-                title="Delete this computer?"
-                onConfirm={handleDelete}
-                okText="Yes"
-                cancelText="No"
-              >
-                <Button type="text" danger icon={<DeleteOutlined style={{ fontSize: '12px' }} />} size="small" />
-              </Popconfirm>
-            </Tooltip>
-          )}
         </div>
       }
       styles={{

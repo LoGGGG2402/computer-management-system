@@ -5,4 +5,4 @@ python-socketio[client]>=5.0.0,<6.0.0 # Specify client extra for clarity
 psutil>=5.8.0,<6.0.0
 
 # Optional dependency for secure token storage
-keyring>=23.0.0,<24.0.0
+# keyring>=23.0.0,<24.0.0

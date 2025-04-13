@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Space, Popconfirm, message, Tag, Empty, Form, Input, Select, Row, Col, Card } from 'antd';
-import { EditOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
+import { EditOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ReloadOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import userService from '../../services/user.service';
 import { LoadingComponent } from '../common';
 
 const { Option } = Select;
 
-const UserList = ({ onEdit, onView, onRefresh, refreshTrigger }) => {
+const UserList = ({ onEdit, onRefresh, refreshTrigger }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
@@ -24,13 +24,15 @@ const UserList = ({ onEdit, onView, onRefresh, refreshTrigger }) => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await userService.getAllUsers(
-        pagination.current, 
-        pagination.pageSize, 
-        username,
-        role,
-        isActive
-      );
+      const filters = {
+        page: pagination.current,
+        limit: pagination.pageSize,
+        username: username || undefined,
+        role: role || undefined,
+        is_active: isActive !== null ? isActive : undefined
+      };
+      
+      const response = await userService.getAllUsers(filters);
       
       // Parse response according to API.md structure
       let usersData = [];
@@ -89,12 +91,24 @@ const UserList = ({ onEdit, onView, onRefresh, refreshTrigger }) => {
   const handleDelete = async (id) => {
     try {
       await userService.deleteUser(id);
-      message.success('User deleted successfully');
+      message.success('User deactivated successfully');
       fetchUsers();
       if (onRefresh) onRefresh();
     } catch (error) {
-      message.error('Failed to delete user');
-      console.error('Error deleting user:', error);
+      message.error('Failed to deactivate user');
+      console.error('Error deactivating user:', error);
+    }
+  };
+
+  const handleReactivate = async (id) => {
+    try {
+      await userService.reactivateUser(id);
+      message.success('User reactivated successfully');
+      fetchUsers();
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      message.error('Failed to reactivate user');
+      console.error('Error reactivating user:', error);
     }
   };
 
@@ -159,17 +173,53 @@ const UserList = ({ onEdit, onView, onRefresh, refreshTrigger }) => {
     {
       title: 'Actions',
       key: 'actions',
-      render: (_, record) => (
-        <Space size="middle">
-          <Button 
-            type="default" 
-            icon={<EyeOutlined />}
-            onClick={() => onView(record.id)}
-          >
-            View
-          </Button>
-        </Space>
-      ),
+      render: (_, record) => {
+        // Determine if user is active
+        const isActive = record.status === 'active' || record.is_active === true;
+        
+        return (
+          <Space size="middle">
+            <Button 
+              type="primary" 
+              icon={<EditOutlined />}
+              onClick={() => onEdit(record)}
+            >
+              Edit
+            </Button>
+            {isActive ? (
+              <Popconfirm
+                title="Are you sure you want to deactivate this user?"
+                onConfirm={() => handleDelete(record.id)}
+                okText="Yes"
+                cancelText="No"
+              >
+                <Button 
+                  type="danger" 
+                  icon={<DeleteOutlined />}
+                  danger
+                >
+                  Deactivate
+                </Button>
+              </Popconfirm>
+            ) : (
+              <Popconfirm
+                title="Are you sure you want to reactivate this user?"
+                onConfirm={() => handleReactivate(record.id)}
+                okText="Yes"
+                cancelText="No"
+              >
+                <Button
+                  type="primary"
+                  icon={<CheckCircleOutlined />}
+                  style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                >
+                  Reactivate
+                </Button>
+              </Popconfirm>
+            )}
+          </Space>
+        );
+      },
     },
   ];
 

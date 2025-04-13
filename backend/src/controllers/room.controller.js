@@ -175,9 +175,6 @@ class RoomController {
    * @param {Object} req.body - Request body
    * @param {string} [req.body.name] - New name for the room
    * @param {string} [req.body.description] - New description for the room
-   * @param {Object} [req.body.layout] - New layout configuration for the room
-   * @param {number} [req.body.layout.columns] - Number of columns in the room grid
-   * @param {number} [req.body.layout.rows] - Number of rows in the room grid
    * @param {Object} res - Express response object
    * @returns {Object} JSON response with:
    *   - status {string} - 'success' or 'error'
@@ -195,7 +192,7 @@ class RoomController {
   async updateRoom(req, res) {
     try {
       const id = parseInt(req.params.id);
-      const { name, description, layout } = req.body;
+      const { name, description } = req.body;
       
       if (!id) {
         return res.status(400).json({
@@ -208,7 +205,7 @@ class RoomController {
       
       if (name !== undefined) roomData.name = name;
       if (description !== undefined) roomData.description = description;
-      if (layout !== undefined) roomData.layout = layout;
+      // Layout changes are not allowed for room updates
       
       const room = await roomService.updateRoom(id, roomData);
       
@@ -221,41 +218,6 @@ class RoomController {
       return res.status(400).json({
         status: 'error',
         message: error.message || 'Failed to update room'
-      });
-    }
-  }
-
-  /**
-   * Delete a room
-   * @param {Object} req - Express request object
-   * @param {Object} req.params - Route parameters
-   * @param {string} req.params.id - Room ID to delete
-   * @param {Object} res - Express response object
-   * @returns {Object} JSON response with:
-   *   - status {string} - 'success' or 'error'
-   *   - message {string} - Success or error message
-   */
-  async deleteRoom(req, res) {
-    try {
-      const id = parseInt(req.params.id);
-      
-      if (!id) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'Room ID is required'
-        });
-      }
-      
-      await roomService.deleteRoom(id);
-      
-      return res.status(200).json({
-        status: 'success',
-        message: 'Room deleted successfully'
-      });
-    } catch (error) {
-      return res.status(404).json({
-        status: 'error',
-        message: error.message || 'Room not found'
       });
     }
   }

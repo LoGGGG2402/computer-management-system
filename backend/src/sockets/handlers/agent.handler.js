@@ -43,8 +43,6 @@ async function handleAgentAuthentication(socket, data) {
 
     console.info(`Agent authenticated: Agent ID ${agentId}, Computer ID ${computerId}, Socket ID ${socket.id}, Joined Room ${roomName}`);
 
-    await websocketService.updateAndBroadcastOnlineStatus(computerId);
-
   } catch (error) {
     console.error(`Agent authentication error for agent ${data?.agentId}, socket ${socket.id}: ${error.message}`, error.stack);
     socket.emit('agent:ws_auth_failed', { status: 'error', message: 'Internal server error during authentication' });
@@ -117,50 +115,6 @@ function handleAgentCommandResult(socket, data) {
   }
 }
 
-/**
- * Handles hardware information updates received from an authenticated agent.
- * @param {import("socket.io").Socket} socket - The socket instance for the agent client.
- * @param {object} data - Hardware info data (e.g., { cpu, ram, disk, os, hostname, ipAddress, macAddress }).
- */
-async function handleAgentHardwareInfo(socket, data) {
-  const computerId = socket.data.computerId;
-
-  if (!computerId) {
-    console.warn(`Unauthenticated hardware info update received from ${socket.id}. Ignoring.`);
-    return;
-  }
-
-   if (!data) {
-      console.warn(`Received empty hardware info update from computer ${computerId} (Socket ${socket.id})`);
-      return;
-  }
-
-  console.debug(`Hardware info update received from computer ${computerId} (Socket ${socket.id})`);
-
-  try {
-    const updateData = {
-        ...(data.cpu && { cpu: data.cpu }),
-        ...(data.ram && { ram: data.ram }),
-        ...(data.disk && { disk: data.disk }),
-        ...(data.os && { os: data.os }),
-        ...(data.hostname && { hostname: data.hostname }),
-        ...(data.ipAddress && { ip_address: data.ipAddress }),
-        ...(data.macAddress && { mac_address: data.macAddress }),
-    };
-
-    if (Object.keys(updateData).length > 0) {
-        await computerService.updateComputer(computerId, updateData);
-        console.info(`Hardware info updated in DB for computer ${computerId}`);
-    } else {
-         console.debug(`No valid hardware fields found in update from computer ${computerId}`);
-    }
-
-  } catch (error) {
-    console.error(`Hardware info update error for computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
-  }
-}
-
-
 // --- Setup and Disconnect ---
 
 /**
@@ -196,10 +150,6 @@ const setupAgentHandlers = (io, socket) => {
 
   socket.on('agent:command_result', (data) => {
     handleAgentCommandResult(socket, data);
-  });
-
-  socket.on('agent:hardware_info', (data) => {
-    handleAgentHardwareInfo(socket, data);
   });
 
 };

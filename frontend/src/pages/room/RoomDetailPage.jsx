@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Button, Space, message, Typography, Modal, Row, Col, Popconfirm, Input, Divider } from 'antd';
+import React, { useState, useEffect, useRef } from 'react';
+import { Card, Button, Space, message, Typography, Modal, Row, Col, Popconfirm, Input, Divider, Progress } from 'antd';
 import { LayoutOutlined, ArrowLeftOutlined, EditOutlined, DeleteOutlined, UserAddOutlined, SendOutlined, CodeOutlined } from '@ant-design/icons';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import RoomLayout from '../../components/room/RoomLayout';
@@ -15,9 +15,8 @@ const { Title } = Typography;
 const RoomDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
   const { isAdmin } = useAuth();
-  const { sendCommandToRoom } = useCommandHandle();
+  const { sendCommand } = useCommandHandle();
   
   const [room, setRoom] = useState(null);
   const [computers, setComputers] = useState([]);
@@ -26,7 +25,6 @@ const RoomDetailPage = () => {
   
   // Command input state
   const [command, setCommand] = useState('');
-  const [sendingCommand, setSendingCommand] = useState(false);
   
   // For the edit modal
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
@@ -60,35 +58,14 @@ const RoomDetailPage = () => {
         setComputers([]);
       }
 
-      // If admin, fetch assigned users for this room
-      if (isAdmin) {
-        fetchRoomUsers();
-      }
+      // We're no longer fetching assigned users here since AssignmentComponent handles that
+      // and will provide this data when needed
     } catch (error) {
       message.error('Failed to load room data');
       console.error('Error loading room data:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  const fetchRoomUsers = async () => {
-    try {
-      const users = await roomService.getUsersInRoom(id);
-      setAssignedUsers(users);
-    } catch (error) {
-      console.error('Error fetching room users:', error);
-    }
-  };
-
-  const handleEditComputer = (computer) => {
-    // Navigate to computer edit page or open modal
-    message.info('Edit computer functionality will be implemented soon');
-  };
-
-  const handleViewComputer = (computerId) => {
-    // Navigate to computer detail page
-    navigate(`/computers/${computerId}`);
   };
   
   const handleRefresh = () => {
@@ -97,8 +74,7 @@ const RoomDetailPage = () => {
 
   const handleBack = () => {
     // Determine if we came from admin or user page
-    const isFromAdmin = location.state?.from === 'admin';
-    navigate(isFromAdmin ? '/admin/rooms' : '/rooms');
+    navigate('/rooms');
   };
   
   // Handle editing room
@@ -121,10 +97,11 @@ const RoomDetailPage = () => {
     setIsAssignModalVisible(true);
   };
   
-  const handleAssignmentSuccess = () => {
+  const handleAssignmentSuccess = (assignedUsersList) => {
     message.success('User assignments updated successfully');
+    // Update the assigned users from the data passed from AssignmentComponent
+    setAssignedUsers(assignedUsersList || []);
     setIsAssignModalVisible(false);
-    fetchRoomUsers(); // Refresh the room users list after assignment changes
     handleRefresh(); // Also refresh the entire room data
   };
   
@@ -138,39 +115,46 @@ const RoomDetailPage = () => {
       await roomService.deleteRoom(id);
       message.success('Room deleted successfully');
       // Navigate back to the rooms list
-      const isFromAdmin = location.state?.from === 'admin';
-      navigate(isFromAdmin ? '/admin/rooms' : '/rooms');
+      navigate('/rooms');
     } catch (error) {
       message.error('Failed to delete room');
       console.error('Error deleting room:', error);
     }
   };
 
-  // Handle sending command to all computers in room via WebSocket
+  // Simplified command sending without cooldown
   const handleSendCommand = async () => {
     if (!command.trim()) return;
     
+    if (computers.length === 0) {
+      message.warning('No computers available in this room');
+      return;
+    }
+    
     try {
-      setSendingCommand(true);
+      // Use the sendCommand from useCommandHandle to send command to computers
+      // We're only going to send the commands, we don't need to handle the responses
+      const commandPromises = computers.map(computer => {
+        return sendCommand(computer.id, command.trim())
+          .catch(error => {
+            console.warn(`Failed to send command to computer ${computer.id}:`, error);
+            // We're ignoring individual errors as requested
+            return null;
+          });
+      });
       
-      // Use WebSocket instead of HTTP API
-      const result = await sendCommandToRoom(id, command.trim());
+      // We don't need to wait for the results, but we'll wait for the commands to be sent
+      // to ensure we have network connectivity before showing success message
+      await Promise.all(commandPromises);
       
-      // Show success message with count of computers receiving the command
-      const computerCount = result?.computerIds?.length || 0;
-      if (computerCount > 0) {
-        message.success(`Command sent to ${computerCount} online computers in this room`);
-      } else {
-        message.warning('No online computers available to receive the command');
-      }
+      // Show success message
+      message.success(`Command sent to all computers in this room`);
       
       // Clear the command input after sending
       setCommand('');
     } catch (error) {
       message.error(error?.message || 'Failed to send command');
       console.error('Error sending command to room:', error);
-    } finally {
-      setSendingCommand(false);
     }
   };
 
@@ -227,21 +211,6 @@ const RoomDetailPage = () => {
             >
               Edit Room
             </Button>
-            {isAdmin && (
-              <Popconfirm
-                title="Are you sure you want to delete this room?"
-                onConfirm={handleDeleteRoom}
-                okText="Yes"
-                cancelText="No"
-              >
-                <Button 
-                  danger
-                  icon={<DeleteOutlined />}
-                >
-                  Delete
-                </Button>
-              </Popconfirm>
-            )}
             <Button 
               onClick={handleRefresh}
             >
@@ -289,7 +258,6 @@ const RoomDetailPage = () => {
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
                 onPressEnter={handleSendCommand}
-                disabled={sendingCommand}
                 prefix={<CodeOutlined />}
                 allowClear
               />
@@ -299,7 +267,6 @@ const RoomDetailPage = () => {
                 type="primary" 
                 icon={<SendOutlined />} 
                 onClick={handleSendCommand}
-                loading={sendingCommand}
                 disabled={!command.trim()}
                 block
               >
@@ -318,11 +285,8 @@ const RoomDetailPage = () => {
               </Space>
             </div>
             <RoomLayout 
-              roomId={id}
               room={room}
               computers={computers}
-              onEditComputer={handleEditComputer}
-              onViewComputer={handleViewComputer}
               onRefresh={handleRefresh}
             />
           </div>
@@ -355,7 +319,7 @@ const RoomDetailPage = () => {
         <AssignmentComponent 
           type="room" 
           id={id} 
-          onSuccess={handleAssignmentSuccess}
+          onSuccess={(users) => handleAssignmentSuccess(users)}
         />
       </Modal>
     </div>

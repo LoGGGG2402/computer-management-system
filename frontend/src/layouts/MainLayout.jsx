@@ -29,8 +29,8 @@ const NotificationHandler = () => {
       // Create room information text if available
       const positionInfoText = data.positionInfo ? 
         `\nPhòng: ${data.positionInfo.room || 'Không xác định'}` +
-        `\nVị trí: (${data.positionInfo.posX || 0}, ${data.positionInfo.posY || 0})` +
-        `\nRoom ID: ${data.positionInfo.roomId || 'N/A'}` : '';
+        `\nVị trí: (${String(data.positionInfo.posX || 0)}, ${String(data.positionInfo.posY || 0)})` +
+        `\nRoom ID: ${String(data.positionInfo.roomId || 'N/A')}` : '';
       
       // Show toast with MFA code
       toast(
@@ -77,6 +77,7 @@ const NotificationHandler = () => {
 
     // Listen for new agent registrations
     socket.on('admin:agent_registered', (data) => {
+      console.log('[NotificationHandler] Received agent registration notification:', data);
       toast.success(
         (t) => (
           <div 
@@ -88,7 +89,7 @@ const NotificationHandler = () => {
           >
             <div className="font-bold">New Agent Registered</div>
             <div>A new agent has been registered.</div>
-            <div>Computer ID: {data.computerId}</div>
+            {/* <div>Computer ID: {data}</div> */}
             <div className="text-xs text-gray-500 mt-1">Click to view computer details</div>
           </div>
         ),

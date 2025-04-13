@@ -17,10 +17,14 @@ import {
   ReloadOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  ExclamationCircleOutlined,
+  CodeOutlined,
 } from "@ant-design/icons";
 import computerService from "../../services/computer.service";
 import { useSocket } from "../../contexts/SocketContext";
 import ComputerCard from "../../components/computer/ComputerCard";
+import ComputerError from "../../components/computer/ComputerError";
+import ComputerConsole from "../../components/computer/ComputerConsole";
 import { LoadingComponent } from "../../components/common";
 
 const { Title, Text } = Typography;
@@ -120,6 +124,34 @@ const ComputerDetailPage = () => {
             />
           )}
         </div>
+      ),
+    },
+    {
+      key: "errors",
+      label: (
+        <span>
+          <ExclamationCircleOutlined /> Errors
+        </span>
+      ),
+      children: (
+        <ComputerError 
+          computerId={parseInt(id)} 
+          onRefresh={handleRefresh}
+        />
+      ),
+    },
+    {
+      key: "console",
+      label: (
+        <span>
+          <CodeOutlined /> Console
+        </span>
+      ),
+      children: (
+        <ComputerConsole 
+          computerId={parseInt(id)} 
+          isOnline={isOnline}
+        />
       ),
     },
   ];
