@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, Button, Tooltip, Badge, Typography, Row, Col, Progress, Popover, Tag } from 'antd';
 import { 
   DesktopOutlined, 
@@ -30,26 +30,36 @@ export const cardStyle = {
 };
 
 const SimpleComputerCard = ({ computer, onRefresh }) => {
-  const { getComputerStatus, subscribeToComputer, unsubscribeFromComputer } = useSocket(); 
+  const { getComputerStatus, subscribeToComputer, unsubscribeFromComputer, isSocketReady } = useSocket(); 
   const { commandResults, clearResult } = useCommandHandle(); 
   const navigate = useNavigate();
   const computerId = computer?.id;
+  const [activeResultIndex, setActiveResultIndex] = useState(0);
 
   useEffect(() => {
-    if (computerId) {
+    if (computerId && isSocketReady) {
+      console.log(`[SimpleCard ${computerId}] Socket ready, subscribing.`);
       subscribeToComputer(computerId);
+    } else {
+      console.log(`[SimpleCard ${computerId}] Socket not ready or no ID, skipping subscription.`);
     }
 
     return () => {
-      if (computerId) {
+      if (computerId && isSocketReady) {
+        console.log(`[SimpleCard ${computerId}] Cleaning up, unsubscribing.`);
         unsubscribeFromComputer(computerId);
       }
     };
-  }, [computerId, subscribeToComputer, unsubscribeFromComputer]);
+  }, [computerId, subscribeToComputer, unsubscribeFromComputer, isSocketReady]);
 
   const statusData = getComputerStatus(computerId);
-  const commandResult = computerId ? commandResults[computerId] : null;
+  const computerCommandResults = computerId ? commandResults[computerId] || [] : [];
+  const commandResult = computerCommandResults[activeResultIndex];
+  const resultCount = computerCommandResults.length;
 
+  const onView = (id) => {
+    if (id) navigate(`/computers/${id}`);
+  };
 
   if (!computer) return null;
 
@@ -85,8 +95,8 @@ const SimpleComputerCard = ({ computer, onRefresh }) => {
     return getTimeAgo(computer.last_update);
   };
 
-  const isOnline = statusData?.status === 'online' || 
-    (computer.status === 'online') || 
+  const isOnline = (isSocketReady && statusData?.status === 'online') ||
+    (!isSocketReady && computer.status === 'online') || 
     (computer.last_update && (new Date() - new Date(computer.last_update) < 5 * 60 * 1000)); 
 
   const cpuUsage = statusData?.cpuUsage ?? 0;
@@ -99,35 +109,66 @@ const SimpleComputerCard = ({ computer, onRefresh }) => {
     return '#f5222d'; 
   };
 
-  // Enhanced command result display
   const renderCommandResultContent = () => {
     if (!commandResult) return null;
     
     return (
       <div style={{ maxWidth: '300px' }}>
         <div style={{ marginBottom: '8px' }}>
-          <Text strong>Command Result</Text>
+          <Text strong>Command Result {activeResultIndex + 1} of {resultCount}</Text>
           <Button 
             size="small" 
             type="text" 
             style={{ float: 'right', padding: '0' }}
             onClick={(e) => {
-              e.stopPropagation();  // Prevent card click event
-              clearResult(computerId);
+              e.stopPropagation();
+              clearResult(computerId, activeResultIndex);
             }} 
           >
             Clear
           </Button>
         </div>
         
+        {/* Display the command that was executed */}
         <div style={{ marginBottom: '8px' }}>
+          <Text code style={{ display: 'block', wordBreak: 'break-all' }}>
+            $ {commandResult.commandText || '[Unknown Command]'}
+          </Text>
+        </div>
+        
+        <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
           <Tag color={commandResult.exitCode === 0 ? 'success' : 'error'}>
             Exit Code: {commandResult.exitCode}
           </Tag>
-          <Text type="secondary" style={{ fontSize: '12px', marginLeft: '8px' }}>
+          <Text type="secondary" style={{ fontSize: '12px' }}>
             {getTimeAgo(commandResult.timestamp)}
           </Text>
         </div>
+
+        {resultCount > 1 && (
+          <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+            <Button 
+              size="small" 
+              disabled={activeResultIndex === 0}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveResultIndex(prev => prev - 1);
+              }}
+            >
+              Previous
+            </Button>
+            <Button 
+              size="small" 
+              disabled={activeResultIndex === resultCount - 1}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveResultIndex(prev => prev + 1);
+              }}
+            >
+              Next
+            </Button>
+          </div>
+        )}
         
         {commandResult.stdout && (
           <div style={{ marginBottom: '8px' }}>
@@ -158,15 +199,6 @@ const SimpleComputerCard = ({ computer, onRefresh }) => {
     );
   };
 
-  // Get appropriate icon for command result status
-  const getCommandResultIcon = () => {
-    if (!commandResult) return null;
-    
-    return commandResult.exitCode === 0 
-      ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> 
-      : <CloseCircleOutlined style={{ color: '#f5222d' }} />;
-  };
-
   return (
     <Card
       hoverable
@@ -185,19 +217,20 @@ const SimpleComputerCard = ({ computer, onRefresh }) => {
             {computer.name}
           </span>
           
-          {commandResult && (
+          {resultCount > 0 && (
             <Popover
               content={renderCommandResultContent()}
               title={null}
               trigger="hover"
               placement="right"
               overlayStyle={{ width: '300px' }}
-              onClick={(e) => e.stopPropagation()} // Prevent card click when clicking on popover
+              onClick={(e) => e.stopPropagation()}
             >
               <Badge 
-                count={<CodeOutlined style={{ color: commandResult.exitCode === 0 ? '#52c41a' : '#f5222d' }} />} 
+                count={resultCount} 
                 size="small"
                 style={{ marginLeft: '4px', cursor: 'pointer' }}
+                title={`${resultCount} command result${resultCount !== 1 ? 's' : ''}`}
               />
             </Popover>
           )}
@@ -212,7 +245,7 @@ const SimpleComputerCard = ({ computer, onRefresh }) => {
               icon={<DesktopOutlined style={{ fontSize: '12px' }} />} 
               size="small"
               onClick={(e) => {
-                e.stopPropagation();  // Prevent card click event
+                e.stopPropagation();
                 navigate(`/computers/${computerId}`);
               }} 
             />

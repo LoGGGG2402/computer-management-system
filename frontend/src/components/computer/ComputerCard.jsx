@@ -155,7 +155,7 @@ const ComputerCard = React.memo(({
           <Col span={8}>
             <Tooltip title={`Sử dụng CPU: ${cpuUsage}%`}>
               <Progress 
-                type="dashboard" percent={cpuUsage} width={80} 
+                type="dashboard" percent={cpuUsage} size={80} 
                 format={() => 'CPU'} strokeColor={getStatusColor(cpuUsage)}
               />
             </Tooltip>
@@ -163,7 +163,7 @@ const ComputerCard = React.memo(({
           <Col span={8}>
             <Tooltip title={`Sử dụng RAM: ${ramUsage}%`}>
               <Progress 
-                type="dashboard" percent={ramUsage} width={80} 
+                type="dashboard" percent={ramUsage} size={80} 
                 format={() => 'RAM'} strokeColor={getStatusColor(ramUsage)}
               />
             </Tooltip>
@@ -171,7 +171,7 @@ const ComputerCard = React.memo(({
           <Col span={8}>
             <Tooltip title={`Sử dụng Disk: ${diskUsage}%`}>
               <Progress 
-                type="dashboard" percent={diskUsage} width={80} 
+                type="dashboard" percent={diskUsage} size={80} 
                 format={() => 'Disk'} strokeColor={getStatusColor(diskUsage)}
               />
             </Tooltip>
@@ -256,30 +256,6 @@ const ComputerCard = React.memo(({
             </Space>
           </Col>
         </Row>
-
-        {computer.errors && Array.isArray(computer.errors) && computer.errors.length > 0 && (
-          <>
-            <Divider style={{ margin: '10px 0' }} />
-            <div style={{ 
-              backgroundColor: '#fff2f0', border: '1px solid #ffccc7', 
-              padding: '10px', borderRadius: '4px', marginTop: '10px'
-            }}>
-              <Space align="start">
-                <WarningOutlined style={{ color: '#ff4d4f', fontSize: '16px', marginTop: '3px' }} />
-                <div>
-                  <Text strong style={{ color: '#ff4d4f' }}>Phát hiện lỗi:</Text>
-                  <ul style={{ margin: '5px 0 0 0', paddingLeft: '20px', listStyleType: 'disc' }}>
-                    {computer.errors.map((error, index) => (
-                      <li key={index}>
-                        <Text type="danger">{error}</Text>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </Space>
-            </div>
-          </>
-        )}
       </div>
     </Card>
   );

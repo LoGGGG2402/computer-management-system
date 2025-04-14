@@ -193,7 +193,7 @@ class ComputerService {
       }
 
       const { count, rows } = await Computer.findAndCountAll({
-        attributes: { exclude: ['agent_token_hash', 'unique_agent_id'] },
+        attributes: { exclude: ['agent_token_hash', 'unique_agent_id', 'errors'] },
         where: whereClause,
         include: [
           {
@@ -243,7 +243,7 @@ class ComputerService {
    */
   async getComputerById(id) {
     const computer = await Computer.findByPk(id, {
-      attributes: { exclude: ['agent_token_hash', 'unique_agent_id'] },
+      attributes: { exclude: ['agent_token_hash', 'unique_agent_id', 'errors'] },
       include: [
         {
           model: Room,

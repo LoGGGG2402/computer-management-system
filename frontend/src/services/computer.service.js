@@ -80,6 +80,7 @@ class ComputerService {
   async getComputerById(id) {
     try {
       const response = await api.get(`/computers/${id}`);
+      console.log('Get computer response:', response.data.data);
       return response.data.data;
     } catch (error) {
       const errorMessage = error.extractedMessage || 'Failed to fetch computer';

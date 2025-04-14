@@ -150,64 +150,79 @@ const setupFrontendHandlers = (socket) => {
 
   /**
    * Handles requests from frontend clients to send a command to a specific agent.
-   * Verifies user has access to the computer and forwards command to the agent.
-   * 
+   * Verifies user has access, forwards command, and uses acknowledgement for response.
+   *
    * @listens frontend:send_command
-   * @emits command_sent - Command sending result with status and details
+   * @param {object} payload - The command payload { computerId, command }.
+   * @param {function} ack - The Socket.IO acknowledgement callback.
    */
-  socket.on('frontend:send_command', async (payload) => {
+  socket.on('frontend:send_command', async (payload, ack) => { // Add ack parameter
     const { computerId, command } = payload || {};
     const userId = socket.data.userId;
 
+    // Ensure ack is a function before proceeding
+    if (typeof ack !== 'function') {
+        console.warn(`frontend:send_command received without acknowledgement callback from socket ${socket.id}`);
+        return; // Cannot proceed without ack
+    }
+
+    // --- Input Validations ---
     if (!userId) {
       console.warn(`Unauthenticated command attempt from ${socket.id}`);
-      socket.emit('command_sent', { status: 'error', message: 'Not authenticated' });
+      ack({ status: 'error', message: 'Not authenticated' }); // Use ack for error
       return;
     }
-
     if (!computerId || typeof computerId !== 'number') {
       console.warn(`Invalid command attempt from user ${userId} (Socket ${socket.id}): Invalid or missing computerId`);
-      socket.emit('command_sent', { status: 'error', message: 'Valid Computer ID is required' });
+      ack({ status: 'error', message: 'Valid Computer ID is required' }); // Use ack for error
       return;
     }
-
     if (!command || typeof command !== 'string' || command.trim() === '') {
       console.warn(`Invalid command attempt from user ${userId} (Socket ${socket.id}): Missing or empty command`);
-      socket.emit('command_sent', { status: 'error', message: 'Command content is required', computerId });
+      ack({ status: 'error', message: 'Command content is required', computerId }); // Use ack for error
       return;
     }
 
     try {
+      // --- Access Control ---
       const isAdmin = socket.data.role === 'admin';
       let hasAccess = isAdmin;
-
       if (!hasAccess) {
         hasAccess = await computerService.checkUserComputerAccess(userId, computerId);
       }
-
       if (!hasAccess) {
         console.warn(`Command access denied for user ${userId} to computer ${computerId} (Socket ${socket.id})`);
-        socket.emit('command_sent', { status: 'error', message: 'Access denied to send commands to this computer', computerId });
+        ack({ status: 'error', message: 'Access denied to send commands to this computer', computerId }); // Use ack for error
         return;
       }
 
-      const commandId = uuidv4();
+      // --- Command Processing ---
+      const commandId = uuidv4(); // Generate command ID
 
+      // Store pending command info (optional, good practice)
       websocketService.storePendingCommand(commandId, userId, computerId);
 
+      // Attempt to send command to agent
       const sent = websocketService.sendCommandToAgent(computerId, command, commandId);
 
+      // --- Respond via Acknowledgement ---
       if (sent) {
         console.info(`Command ${commandId} initiated by user ${userId} sent towards computer ${computerId} (Socket ${socket.id})`);
-        socket.emit('command_sent', { status: 'success', computerId, commandId });
+        // Acknowledge success with commandId
+        ack({ status: 'success', computerId, commandId });
+        // NOTE: No separate 'command_sent' emit needed here for success
       } else {
         console.warn(`Failed to send command ${commandId} from user ${userId} to computer ${computerId}: Agent not connected (Socket ${socket.id})`);
-        websocketService.pendingCommands.delete(commandId);
-        socket.emit('command_sent', { status: 'error', message: 'Agent is not connected', computerId, commandId });
+        // Clean up pending command if send failed immediately
+        websocketService.pendingCommands.delete(commandId); // Assuming delete method exists
+        // Acknowledge failure
+        ack({ status: 'error', message: 'Agent is not connected', computerId, commandId }); // Include commandId even on error if generated
       }
+
     } catch (error) {
       console.error(`Send command error for user ${userId}, computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
-      socket.emit('command_sent', { status: 'error', message: 'Failed to send command due to server error', computerId });
+      // Acknowledge server error
+      ack({ status: 'error', message: 'Failed to send command due to server error', computerId });
     }
   });
 };

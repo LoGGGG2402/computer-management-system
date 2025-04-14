@@ -158,7 +158,7 @@ class RoomService {
               exclude: [
                 "unique_agent_id",
                 "agent_token_hash",
-                "error",
+                "errors",
               ],
             },
           },

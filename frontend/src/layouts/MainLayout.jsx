@@ -7,23 +7,26 @@ import { useEffect } from 'react';
 
 // Notification handler component
 const NotificationHandler = () => {
-  const { socket } = useSocket();
+  // Destructure isSocketReady
+  const { socket, isSocketReady } = useSocket();
   const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!socket || user?.role !== 'admin') {
-      console.log('[NotificationHandler] Not listening for MFA - Conditions not met:', {
+    // Check socket readiness and user role before registering listeners
+    if (!socket || !isSocketReady || user?.role !== 'admin') {
+      console.log('[NotificationHandler] Not listening for MFA/Registrations - Conditions not met:', {
         socketExists: !!socket,
+        isSocketReady,
         userRole: user?.role
       });
       return;
     }
 
-    console.log('[NotificationHandler] Starting to listen for MFA notifications');
+    console.log('[NotificationHandler] Socket ready, starting to listen for admin notifications');
 
-    // Listen for new MFA codes
-    socket.on('admin:new_agent_mfa', (data) => {
+    // Listener for new MFA codes
+    const handleNewMfa = (data) => {
       console.log('[NotificationHandler] Received MFA notification:', data);
       
       // Create room information text if available
@@ -73,10 +76,10 @@ const NotificationHandler = () => {
           }
         }
       );
-    });
+    };
 
-    // Listen for new agent registrations
-    socket.on('admin:agent_registered', (data) => {
+    // Listener for new agent registrations
+    const handleAgentRegistered = (data) => {
       console.log('[NotificationHandler] Received agent registration notification:', data);
       toast.success(
         (t) => (
@@ -101,13 +104,23 @@ const NotificationHandler = () => {
           }
         }
       );
-    });
-
-    return () => {
-      socket.off('admin:new_agent_mfa');
-      socket.off('admin:agent_registered');
     };
-  }, [socket, user?.role, navigate]);
+
+    // Register listeners
+    socket.on('admin:new_agent_mfa', handleNewMfa);
+    socket.on('admin:agent_registered', handleAgentRegistered);
+
+    // Cleanup function
+    return () => {
+      // Check socket exists before trying to unregister
+      if (socket) {
+        console.log('[NotificationHandler] Cleaning up listeners');
+        socket.off('admin:new_agent_mfa', handleNewMfa);
+        socket.off('admin:agent_registered', handleAgentRegistered);
+      }
+    };
+    // Add isSocketReady to dependency array
+  }, [socket, isSocketReady, user?.role, navigate]);
 
   return null;
 };

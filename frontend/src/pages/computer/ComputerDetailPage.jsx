@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react"; // Import useMemo
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Button,
@@ -32,7 +32,7 @@ const { Title, Text } = Typography;
 const ComputerDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { subscribeToComputer, unsubscribeFromComputer, getComputerStatus } = useSocket();
+  const { subscribeToComputer, unsubscribeFromComputer, getComputerStatus, isSocketReady } = useSocket();
 
   const [computer, setComputer] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -40,33 +40,39 @@ const ComputerDetailPage = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const computerIdInt = useMemo(() => parseInt(id), [id]); // Memoize parsed ID
+
   // Get real-time status from socket context
-  const computerStatus = getComputerStatus(parseInt(id));
-  const isOnline = computerStatus?.status === "online";
+  const computerStatus = getComputerStatus(computerIdInt);
+  const isOnline = isSocketReady && computerStatus && computerStatus.status === "online";
 
   // Load computer details when component mounts or refreshKey changes
   useEffect(() => {
     fetchComputerDetails();
   }, [id, refreshKey]);
 
-  // Subscribe to computer updates when id is available
+  // Subscribe to computer updates when id is available AND socket is ready
   useEffect(() => {
-    if (id) {
-      subscribeToComputer(parseInt(id));
+    if (computerIdInt && isSocketReady) {
+      console.log(`[DetailPage ${computerIdInt}] Socket ready, subscribing.`);
+      subscribeToComputer(computerIdInt);
+    } else {
+      console.log(`[DetailPage ${id}] Socket not ready or no ID, skipping subscription.`);
     }
 
-    // Clean up by unsubscribing when component unmounts
+    // Clean up by unsubscribing when component unmounts or dependencies change
     return () => {
-      if (id) {
-        unsubscribeFromComputer(parseInt(id));
+      if (computerIdInt && isSocketReady) {
+        console.log(`[DetailPage ${computerIdInt}] Cleaning up, unsubscribing.`);
+        unsubscribeFromComputer(computerIdInt);
       }
     };
-  }, [id, subscribeToComputer, unsubscribeFromComputer]);
+  }, [id, subscribeToComputer, unsubscribeFromComputer, isSocketReady, computerIdInt]);
 
   const fetchComputerDetails = async () => {
     setLoading(true);
     try {
-      const data = await computerService.getComputerById(parseInt(id));
+      const data = await computerService.getComputerById(computerIdInt);
       setComputer(data);
       setError(null);
     } catch (error) {
@@ -88,11 +94,12 @@ const ComputerDetailPage = () => {
 
   // Render status tag
   const renderStatusTag = (status) => {
-    switch (status) {
+    const displayStatus = isSocketReady ? status : (computer?.status || 'unknown');
+    switch (displayStatus) {
       case "online":
         return (
           <Tag color="success" icon={<CheckCircleOutlined />}>
-            Online
+            Online { !isSocketReady && computer?.status === 'online' ? '(cached)' : ''}
           </Tag>
         );
       case "offline":
@@ -106,8 +113,8 @@ const ComputerDetailPage = () => {
     }
   };
 
-  // Define tab items
-  const items = [
+  // Define tab items using useMemo
+  const items = useMemo(() => [
     {
       key: "overview",
       label: "Overview",
@@ -134,8 +141,8 @@ const ComputerDetailPage = () => {
         </span>
       ),
       children: (
-        <ComputerError 
-          computerId={parseInt(id)} 
+        <ComputerError
+          computerId={computerIdInt}
           onRefresh={handleRefresh}
         />
       ),
@@ -148,13 +155,15 @@ const ComputerDetailPage = () => {
         </span>
       ),
       children: (
-        <ComputerConsole 
-          computerId={parseInt(id)} 
+        <ComputerConsole
+          key={computerIdInt}
+          computerId={computerIdInt}
+          computer={computer}
           isOnline={isOnline}
         />
       ),
     },
-  ];
+  ], [computerIdInt, computer, isOnline, computerStatus, handleRefresh]);
 
   const handleTabChange = (key) => {
     setActiveTab(key);
