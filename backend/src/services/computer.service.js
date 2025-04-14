@@ -21,7 +21,7 @@ class ComputerService {
    *   - unique_agent_id {string} - Unique identifier for the agent
    *   - agent_token_hash {string} - Hashed authentication token
    *   - status {string} - Current status ('online' or 'offline')
-   *   - has_active_errors {boolean} - Whether the computer has unresolved errors
+   *   - have_active_errors {boolean} - Whether the computer has unresolved errors
    *   - last_update {Date} - When the computer was last updated
    *   - room_id {number} - ID of the room where the computer is located
    *   - pos_x {number} - X position in the room grid
@@ -65,7 +65,7 @@ class ComputerService {
    *     - unique_agent_id {string} - Unique identifier for the agent
    *     - agent_token_hash {string} - Hashed authentication token
    *     - status {string} - Current status ('online' or 'offline')
-   *     - has_active_errors {boolean} - Whether the computer has unresolved errors
+   *     - have_active_errors {boolean} - Whether the computer has unresolved errors
    *     - last_update {Date} - When the computer was last updated
    *     - room_id {number} - ID of the room where the computer is located
    *     - pos_x {number} - X position in the room grid
@@ -95,7 +95,7 @@ class ComputerService {
         name: `Computer-${agentId.substring(0, 8)}`,
         status: "offline",
         errors: [],
-        has_active_errors: false,
+        have_active_errors: false,
         last_update: new Date(),
         room_id: positionInfo?.roomId,
         pos_x: positionInfo?.posX,
@@ -156,7 +156,7 @@ class ComputerService {
    *     - id {number} - Computer ID
    *     - name {string} - Computer name
    *     - status {string} - Status ('online' or 'offline')
-   *     - has_active_errors {boolean} - Whether computer has errors
+   *     - have_active_errors {boolean} - Whether computer has errors
    *     - last_update {Date} - When the computer was last updated
    *     - room_id {number} - ID of the room where the computer is located
    *     - pos_x {number} - X position in the room grid
@@ -189,7 +189,7 @@ class ComputerService {
       }
 
       if (filters.has_errors === "true") {
-        whereClause.has_active_errors = true;
+        whereClause.have_active_errors = true;
       }
 
       const { count, rows } = await Computer.findAndCountAll({
@@ -226,7 +226,7 @@ class ComputerService {
    *   - id {number} - Computer ID
    *   - name {string} - Computer name
    *   - status {string} - Status ('online' or 'offline')
-   *   - has_active_errors {boolean} - Whether computer has errors
+   *   - have_active_errors {boolean} - Whether computer has errors
    *   - last_update {Date} - When the computer was last updated
    *   - room_id {number} - ID of the room where the computer is located
    *   - pos_x {number} - X position in the room grid
@@ -267,7 +267,7 @@ class ComputerService {
    * @param {Object} data - The data fields to update on the computer record
    * @param {string} [data.name] - New computer name
    * @param {string} [data.status] - New status ('online' or 'offline')
-   * @param {boolean} [data.has_active_errors] - New error status
+   * @param {boolean} [data.have_active_errors] - New error status
    * @param {number} [data.room_id] - New room ID
    * @param {number} [data.pos_x] - New X position in room grid
    * @param {number} [data.pos_y] - New Y position in room grid

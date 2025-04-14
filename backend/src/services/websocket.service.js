@@ -149,6 +149,14 @@ class WebSocketService {
   }
 
   /**
+   * Returns the number of connected agents.
+   * @returns {number} The number of connected agents.
+   */
+  numberOfConnectedAgents() {
+    return this.agentRealtimeStatus.size;
+  }
+
+  /**
    * Retrieves the realtime status and system information for an agent from the cache (Map).
    * @param {number} computerId - The computer ID.
    * @returns {object | null} A copy of the agent's status data, or null if not found.
@@ -294,9 +302,10 @@ class WebSocketService {
    * @param {number} computerId - The target computer ID.
    * @param {string} command - The command to execute.
    * @param {string} commandId - The command ID.
+   * @param {string} [commandType='console'] - Type of command (console, script, etc).
    * @returns {boolean} True if the command was successfully emitted to at least one agent socket.
    */
-  sendCommandToAgent(computerId, command, commandId) {
+  sendCommandToAgent(computerId, command, commandId, commandType = 'console') {
     if (!computerId || !command || !commandId) {
         console.warn('sendCommandToAgent called with invalid parameters', { computerId, commandId });
         return false;
@@ -310,9 +319,9 @@ class WebSocketService {
         return false;
       }
 
-      this.io.to(agentRoom).emit(EVENTS.COMMAND_EXECUTE, { commandId, command });
+      this.io.to(agentRoom).emit(EVENTS.COMMAND_EXECUTE, { commandId, command, commandType });
 
-      console.info(`Command ${commandId} sent to agent room ${agentRoom} for computer ${computerId}`);
+      console.info(`Command ${commandId} (type: ${commandType}) sent to agent room ${agentRoom} for computer ${computerId}`);
       return true;
     } catch (error) {
       console.error(`Error sending command ${commandId} to computer ${computerId}: ${error.message}`, error.stack);
@@ -324,9 +333,9 @@ class WebSocketService {
    * Notifies the initiating user about command completion.
    * @param {string} commandId - The command ID.
    * @param {object} result - The command execution result from the agent.
-   * @param {string} result.stdout - Standard output from the command.
-   * @param {string} result.stderr - Standard error from the command.
-   * @param {number} result.exitCode - Exit code from the command.
+   * @param {string} result.type - Command type (console, script, etc.)
+   * @param {boolean} result.success - Whether command was successful
+   * @param {string} result.result - Command result object
    */
   notifyCommandCompletion(commandId, result) {
      if (!commandId || !result) {
@@ -347,12 +356,13 @@ class WebSocketService {
 
       this.pendingCommands.delete(commandId);
 
+      // Format the result for frontend clients
       const formattedResult = {
         commandId,
         computerId,
-        stdout: result.stdout ?? '',
-        stderr: result.stderr ?? '',
-        exitCode: typeof result.exitCode === 'number' ? result.exitCode : -1,
+        type: result.type || 'console',
+        success: result.success === true,
+        result: result.result || '',
         timestamp: new Date(),
       };
 

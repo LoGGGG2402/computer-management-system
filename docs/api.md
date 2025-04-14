@@ -288,7 +288,7 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
             "pos_y": "integer",
             "unique_agent_id": "string",
             "status": "string ('online'|'offline')",
-            "has_active_errors": "boolean"
+            "have_active_errors": "boolean"
           },
           ...
         ]
@@ -453,7 +453,7 @@ Dưới đây là mô tả chi tiết cho các API endpoint của Backend, bao g
           "room_id": "integer",
           "unique_agent_id": "string",
           "status": "string ('online'|'offline')",
-          "has_active_errors": "boolean"
+          "have_active_errors": "boolean"
         },
         ...
       ]

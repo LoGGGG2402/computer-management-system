@@ -177,8 +177,8 @@ class WSClient:
              self.send_command_result(command_id, {"stderr": "Agent Error: Missing command payload", "exitCode": -1})
              return
 
+        command_type = data.get('commandType', 'console')
         if self._message_handler:
-            command_type = data.get('commandType', 'unknown')
             logger.debug(f"Received command (ID: {command_id}, Type: {command_type}), routing to handler.")
             try:
                 self._message_handler(data)
@@ -385,16 +385,38 @@ class WSClient:
 
         if not isinstance(result, dict):
              logger.error(f"Cannot send command result for {command_id}: result is not a dictionary ({type(result)}).")
-             result = {"stderr": "Agent Error: Invalid result format", "exitCode": -1}
+             result = {
+                 "type": "unknown",
+                 "success": False,
+                 "result": {
+                     "stderr": "Agent Error: Invalid result format", 
+                     "exitCode": -1
+                 }
+             }
 
-        formatted_result = {
-            'commandId': command_id,
-            'stdout': result.get('stdout', ''),
-            'stderr': result.get('stderr', ''),
-            'exitCode': result.get('exitCode', -1)
-        }
+        # Check if result already has the new format structure
+        if "type" in result and "success" in result and "result" in result:
+            # Already in new format, use as is but ensure agentId is included
+            formatted_result = result
+        else:
+            # Convert old format to new format (for backward compatibility)
+            logger.warning(f"Converting legacy result format for command {command_id}")
+            formatted_result = {
+                "type": "console",  # Default to console
+                "success": result.get("exitCode", -1) == 0,  # Success if exitCode is 0
+                "result": {
+                    "stdout": result.get("stdout", ""),
+                    "stderr": result.get("stderr", ""),
+                    "exitCode": result.get("exitCode", -1)
+                }
+            }
+
+        # Always add the agent ID
         if self._agent_id:
             formatted_result['agentId'] = self._agent_id
+
+        # Always include command ID
+        formatted_result['commandId'] = command_id
 
         # _emit_message now checks for authentication
         return self._emit_message('agent:command_result', formatted_result)

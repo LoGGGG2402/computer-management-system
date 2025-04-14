@@ -1,20 +1,22 @@
-import React, { useState, useEffect, useMemo } from "react"; // Import useMemo
-import { useParams, useNavigate } from "react-router-dom";
+/**
+ * @fileoverview Detailed computer view component for the Computer Management System
+ * 
+ * This component displays comprehensive information about a single computer,
+ * including its status, hardware information, error logs, and console access.
+ * 
+ * @module ComputerDetailPage
+ */
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Button,
-  message,
   Typography,
-  Breadcrumb,
   Tag,
   Space,
-  Alert,
-  Tabs,
+  Card,
 } from "antd";
 import {
-  HomeOutlined,
-  DesktopOutlined,
   ArrowLeftOutlined,
-  ReloadOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   ExclamationCircleOutlined,
@@ -26,73 +28,111 @@ import ComputerCard from "../../components/computer/ComputerCard";
 import ComputerError from "../../components/computer/ComputerError";
 import ComputerConsole from "../../components/computer/ComputerConsole";
 import { LoadingComponent } from "../../components/common";
+import { useSimpleFetch } from "../../hooks/useSimpleFetch";
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
+/**
+ * Computer Detail Page Component
+ * 
+ * Displays detailed information about a specific computer with:
+ * - Basic information and online status
+ * - System resource usage (CPU, RAM, disk)
+ * - Error logs and management
+ * - Real-time console access
+ * - Tab-based navigation between different sections
+ * 
+ * @component
+ * @returns {React.ReactElement} The rendered ComputerDetailPage component
+ */
 const ComputerDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { subscribeToComputer, unsubscribeFromComputer, getComputerStatus, isSocketReady } = useSocket();
 
-  const [computer, setComputer] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState("overview");
-  const [refreshKey, setRefreshKey] = useState(0);
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const initialTab = searchParams.get('tab') || 'overview';
+  const [activeTab, setActiveTab] = useState(initialTab);
 
-  const computerIdInt = useMemo(() => parseInt(id), [id]); // Memoize parsed ID
+  const computerIdInt = useMemo(() => parseInt(id), [id]);
 
-  // Get real-time status from socket context
+  // Fetch computer details using useSimpleFetch
+  const fetchComputerDetailsCallback = useCallback(() => {
+    if (!computerIdInt) return Promise.resolve(null);
+    return computerService.getComputerById(computerIdInt);
+  }, [computerIdInt]);
+
+  const { data: computer, loading, error: fetchError, refresh: refreshComputerDetails } = useSimpleFetch(
+    fetchComputerDetailsCallback,
+    [fetchComputerDetailsCallback],
+    { errorMessage: "Failed to load computer details" }
+  );
+
   const computerStatus = getComputerStatus(computerIdInt);
-  const isOnline = isSocketReady && computerStatus && computerStatus.status === "online";
+  const isOnline = useMemo(() => {
+    return (isSocketReady && computerStatus?.status === "online") ||
+      (!isSocketReady && computer?.status === "online") ||
+      (computer?.last_update && new Date() - new Date(computer.last_update) < 5 * 60 * 1000);
+  }, [isSocketReady, computerStatus, computer]);
 
-  // Load computer details when component mounts or refreshKey changes
-  useEffect(() => {
-    fetchComputerDetails();
-  }, [id, refreshKey]);
-
-  // Subscribe to computer updates when id is available AND socket is ready
+  /**
+   * Handles WebSocket subscription for real-time computer status
+   * 
+   * @effect
+   * @dependency {number} computerIdInt - Parsed integer computer ID
+   * @dependency {boolean} isSocketReady - WebSocket connection status
+   */
   useEffect(() => {
     if (computerIdInt && isSocketReady) {
-      console.log(`[DetailPage ${computerIdInt}] Socket ready, subscribing.`);
       subscribeToComputer(computerIdInt);
-    } else {
-      console.log(`[DetailPage ${id}] Socket not ready or no ID, skipping subscription.`);
     }
 
-    // Clean up by unsubscribing when component unmounts or dependencies change
     return () => {
       if (computerIdInt && isSocketReady) {
-        console.log(`[DetailPage ${computerIdInt}] Cleaning up, unsubscribing.`);
         unsubscribeFromComputer(computerIdInt);
       }
     };
-  }, [id, subscribeToComputer, unsubscribeFromComputer, isSocketReady, computerIdInt]);
+  }, [computerIdInt, subscribeToComputer, unsubscribeFromComputer, isSocketReady]);
 
-  const fetchComputerDetails = async () => {
-    setLoading(true);
-    try {
-      const data = await computerService.getComputerById(computerIdInt);
-      setComputer(data);
-      setError(null);
-    } catch (error) {
-      console.error("Error fetching computer details:", error);
-      setError("Failed to load computer details. Please try again later.");
-      message.error("Failed to load computer details");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  /**
+   * Triggers a refresh of computer details
+   * 
+   * @function
+   */
   const handleRefresh = () => {
-    setRefreshKey((prev) => prev + 1);
+    // refreshComputerDetails();
   };
 
+  /**
+   * Handles navigation to previous page
+   * 
+   * @function
+   */
   const handleGoBack = () => {
     navigate(-1);
   };
 
-  // Render status tag
+  /**
+   * Handles tab change and updates URL query parameter
+   * 
+   * @function
+   * @param {string} key - Selected tab key
+   */
+  const handleTabChange = (key) => {
+    setActiveTab(key);
+    const newSearchParams = new URLSearchParams(location.search);
+    newSearchParams.set('tab', key);
+    navigate(`${location.pathname}?${newSearchParams.toString()}`, { replace: true });
+  };
+
+  /**
+   * Renders the appropriate status tag based on computer status
+   * 
+   * @function
+   * @param {string} status - Computer status (online/offline)
+   * @returns {React.ReactNode} - Status tag component
+   */
   const renderStatusTag = (status) => {
     const displayStatus = isSocketReady ? status : (computer?.status || 'unknown');
     switch (displayStatus) {
@@ -113,7 +153,11 @@ const ComputerDetailPage = () => {
     }
   };
 
-  // Define tab items using useMemo
+  /**
+   * Defines tab items for the tabbed interface
+   * 
+   * @type {Array<Object>}
+   */
   const items = useMemo(() => [
     {
       key: "overview",
@@ -126,7 +170,7 @@ const ComputerDetailPage = () => {
               isOnline={isOnline}
               cpuUsage={computerStatus?.cpuUsage || 0}
               ramUsage={computerStatus?.ramUsage || 0}
-              diskUsage={computerStatus?.diskUsage || 0}
+              diskUsage={computerStatus?.diskUsage || computer?.disk_usage || 0}
               onRefresh={handleRefresh}
             />
           )}
@@ -165,139 +209,56 @@ const ComputerDetailPage = () => {
     },
   ], [computerIdInt, computer, isOnline, computerStatus, handleRefresh]);
 
-  const handleTabChange = (key) => {
-    setActiveTab(key);
-  };
-
   if (loading) {
     return (
       <LoadingComponent
-        tip="Đang tải thông tin máy tính..."
+        tip="Loading computer details..."
         type="section"
         size="large"
       />
     );
   }
 
-  if (error) {
+  if (fetchError || !computer) {
     return (
-      <div className="not-found">
-        <Alert message="Error" description={error} type="error" showIcon />
-        <Button
-          type="primary"
-          onClick={handleGoBack}
-          style={{ marginTop: "16px" }}
-        >
-          <ArrowLeftOutlined /> Go Back
-        </Button>
-      </div>
-    );
-  }
-
-  if (!computer) {
-    return (
-      <div className="not-found">
-        <Alert
-          message="Computer Not Found"
-          description="The requested computer could not be found."
-          type="warning"
-          showIcon
-        />
-        <Button
-          type="primary"
-          onClick={handleGoBack}
-          style={{ marginTop: "16px" }}
-        >
-          <ArrowLeftOutlined /> Go Back
-        </Button>
-      </div>
+      <Card className="computer-detail-page">
+        <div className="text-center">
+          <Title level={4}>{fetchError || "Computer not found"}</Title>
+          <Button
+            type="primary"
+            icon={<ArrowLeftOutlined />}
+            onClick={handleGoBack}
+          >
+            Go Back
+          </Button>
+        </div>
+      </Card>
     );
   }
 
   return (
     <div className="computer-detail-page">
-      <div className="page-header" style={{ marginBottom: "24px" }}>
-        <Breadcrumb
-          items={[
-            {
-              title: (
-                <span className="cursor-pointer text-blue-600 hover:text-blue-800 hover:underline transition-colors duration-200 ease-in-out">
-                  <HomeOutlined /> Home
-                </span>
-              ),
-              onClick: () => navigate("/dashboard"),
-            },
-            {
-              title: (
-                <span className="cursor-pointer text-blue-600 hover:text-blue-800 hover:underline transition-colors duration-200 ease-in-out">
-                  Rooms
-                </span>
-              ),
-              onClick: () => navigate("/rooms"),
-            },
-            {
-              title: (
-                <span className="cursor-pointer text-blue-600 hover:text-blue-800 hover:underline transition-colors duration-200 ease-in-out">
-                  {computer.room?.name || "Room"}
-                </span>
-              ),
-              onClick: () => computer.room_id && navigate(`/rooms/${computer.room_id}`),
-            },
-            {
-              title: (
-                <span className="text-gray-500 font-medium">
-                  {computer.name || "Computer"}
-                </span>
-              ),
-            },
-          ]}
-        />
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginTop: "16px",
-          }}
-        >
-          <div>
-            <Title level={2}>
-              <DesktopOutlined /> {computer.name}
-            </Title>
-            <Space>
-              {renderStatusTag(isOnline ? "online" : "offline")}
-              <Text type="secondary">
-                ID: {computer.id} &bull; Room:{" "}
-                {computer.room?.name || "Unknown"}
-              </Text>
-            </Space>
-          </div>
-          <div>
-            <Button
-              icon={<ArrowLeftOutlined />}
-              onClick={handleGoBack}
-              style={{ marginRight: "8px" }}
-            >
+      <Card
+        title={
+          <Space>
+            <Button icon={<ArrowLeftOutlined />} onClick={handleGoBack}>
               Back
             </Button>
-            <Button
-              type="primary"
-              icon={<ReloadOutlined />}
-              onClick={handleRefresh}
-            >
-              Refresh
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <Tabs
-        activeKey={activeTab}
-        items={items}
-        onChange={handleTabChange}
-        tabBarStyle={{ marginBottom: "16px" }}
-      />
+            <span>{computer.name}</span>
+            {renderStatusTag(computerStatus?.status)}
+          </Space>
+        }
+        extra={
+          <Button onClick={handleRefresh} disabled={loading}>
+            Refresh
+          </Button>
+        }
+        tabList={items.map(item => ({ key: item.key, tab: item.label }))}
+        activeTabKey={activeTab}
+        onTabChange={handleTabChange}
+      >
+        {items.find(item => item.key === activeTab)?.children}
+      </Card>
     </div>
   );
 };

@@ -1,93 +1,130 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * @fileoverview Room listing component with filtering and pagination
+ * 
+ * This component displays a list of rooms with filtering options,
+ * pagination, and actions for viewing and editing rooms.
+ * 
+ * @module RoomList
+ */
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Table, Button, Space, message, Empty, Tooltip, Form, Input, Select, Row, Col, Card } from 'antd';
 import { EyeOutlined, EditOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import roomService from '../../services/room.service';
 import userService from '../../services/user.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { LoadingComponent } from '../common';
+import { useSimpleFetch } from '../../hooks/useSimpleFetch';
+import { useFormatting } from '../../hooks/useFormatting';
 
 const { Option } = Select;
 
+/**
+ * RoomList Component
+ * 
+ * Displays a filterable, paginated table of rooms with actions for viewing and editing.
+ * Admin users can also edit rooms. Includes a search form for filtering by name and assigned user.
+ *
+ * @component
+ * @param {Object} props - Component props
+ * @param {Function} props.onEdit - Callback when edit button is clicked with the room data
+ * @param {Function} props.onView - Callback when view button is clicked with the room ID
+ * @param {Function} props.onDelete - Callback when delete button is clicked with the room ID
+ * @param {number|string} props.refreshTrigger - Value that changes to trigger a refresh of the room list
+ * @returns {React.ReactElement} The rendered RoomList component
+ */
 const RoomList = ({ onEdit, onView, onDelete, refreshTrigger }) => {
-  const [rooms, setRooms] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
   const { isAdmin } = useAuth();
-  
-  // Filter states
-  const [name, setName] = useState('');
-  const [assignedUserId, setAssignedUserId] = useState(null);
-  const [users, setUsers] = useState([]);
+  const { formatTimestamp } = useFormatting();
   const [form] = Form.useForm();
 
+  // State for filters and pagination
+  const [filters, setFilters] = useState({ name: '', assigned_user_id: null });
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
+
+  // Fetch users for filter dropdown (only for admin)
+  const { data: usersData, loading: usersLoading } = useSimpleFetch(
+    userService.getAllUsers,
+    [isAdmin],
+    { manual: !isAdmin, errorMessage: 'Failed to fetch users' }
+  );
+  const users = useMemo(() => usersData?.users || usersData?.data?.users || usersData?.data || usersData || [], [usersData]);
+
+  // Fetch rooms using useSimpleFetch
+  const fetchRoomsCallback = useCallback(async () => {
+    const params = {
+      page: pagination.current,
+      limit: pagination.pageSize,
+      ...(filters.name && { name: filters.name }),
+      ...(filters.assigned_user_id && { assigned_user_id: filters.assigned_user_id }),
+    };
+    return await roomService.getAllRooms(params);
+  }, [pagination.current, pagination.pageSize, filters.name, filters.assigned_user_id]);
+
+  const { data: roomsResponse, loading, error, refresh: fetchRooms } = useSimpleFetch(
+    fetchRoomsCallback,
+    [fetchRoomsCallback],
+    { errorMessage: 'Failed to fetch rooms' }
+  );
+
+  // Update pagination total when roomsResponse changes
   useEffect(() => {
-    fetchRooms();
-    if (isAdmin) {
-      fetchUsers();
-    }
-  }, [refreshTrigger, pagination.current, pagination.pageSize]);
-
-  const fetchUsers = async () => {
-    try {
-      const response = await userService.getAllUsers();
-      setUsers(response?.data?.users || response?.users || response?.data || response || []);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    }
-  };
-
-  const fetchRooms = async () => {
-    try {
-      setLoading(true);
-      // Create filters object according to the expected API
-      const filters = {
-        page: pagination.current,
-        limit: pagination.pageSize
-      };
-
-      if (name) filters.name = name;
-      if (assignedUserId) filters.assigned_user_id = assignedUserId;
-
-      const response = await roomService.getAllRooms(filters);
-      
-      // Simplified response handling, expecting the room service to handle format conversions
-      const roomsData = Array.isArray(response) ? response : 
-                         response?.data?.rooms || response?.rooms || response?.data || [];
-      
-      const totalRooms = response?.total || response?.data?.total || roomsData.length;
-      
-      console.log('Fetched rooms:', roomsData);
-      
-      setRooms(roomsData);
+    if (roomsResponse) {
+      const totalRooms = roomsResponse?.total || roomsResponse?.data?.total || roomsResponse?.data?.rooms?.length || roomsResponse?.rooms?.length || (Array.isArray(roomsResponse) ? roomsResponse.length : 0);
       setPagination(prev => ({ ...prev, total: totalRooms }));
-    } catch (error) {
-      message.error('Failed to fetch rooms');
-      console.error('Error fetching rooms:', error);
-      setRooms([]);
-    } finally {
-      setLoading(false);
     }
+  }, [roomsResponse]);
+
+  // Trigger refetch when external refreshTrigger changes
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      fetchRooms();
+    }
+  }, [refreshTrigger, fetchRooms]);
+
+  const rooms = useMemo(() => {
+    return Array.isArray(roomsResponse) ? roomsResponse :
+           roomsResponse?.data?.rooms || roomsResponse?.rooms || roomsResponse?.data || [];
+  }, [roomsResponse]);
+
+  /**
+   * Handles pagination change
+   * @function
+   * @param {Object} newPagination - New pagination state
+   */
+  const handleTableChange = (newPagination) => {
+    setPagination(prev => ({
+      ...prev,
+      current: newPagination.current,
+      pageSize: newPagination.pageSize,
+    }));
   };
 
-  const handleTableChange = (pagination) => {
-    setPagination(pagination);
-  };
-
+  /**
+   * Handles form search submission
+   * @function
+   * @param {Object} values - Form values with filter criteria
+   */
   const handleSearch = (values) => {
-    setName(values.name || '');
-    setAssignedUserId(values.assigned_user_id || null);
-    setPagination(prev => ({ ...prev, current: 1 })); // Reset to first page
-    fetchRooms();
+    setFilters({
+      name: values.name || '',
+      assigned_user_id: values.assigned_user_id || null
+    });
+    setPagination(prev => ({ ...prev, current: 1 }));
   };
 
+  /**
+   * Resets all filters and refreshes the room list
+   * @function
+   */
   const handleReset = () => {
     form.resetFields();
-    setName('');
-    setAssignedUserId(null);
+    setFilters({ name: '', assigned_user_id: null });
     setPagination(prev => ({ ...prev, current: 1 }));
-    fetchRooms();
   };
 
+  /**
+   * Table column definitions with sorting, rendering, and actions
+   */
   const columns = [
     {
       title: 'Name',
@@ -124,15 +161,16 @@ const RoomList = ({ onEdit, onView, onDelete, refreshTrigger }) => {
       title: 'Created',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (date) => date ? new Date(date).toLocaleDateString() : 'N/A',
+      render: (date) => formatTimestamp(date).split(' ')[0],
+      sorter: (a, b) => new Date(a.created_at) - new Date(b.created_at),
     },
     {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
         <Space size="middle">
-          <Button 
-            type="default" 
+          <Button
+            type="default"
             icon={<EyeOutlined />}
             onClick={() => onView(record.id)}
           >
@@ -157,7 +195,7 @@ const RoomList = ({ onEdit, onView, onDelete, refreshTrigger }) => {
   return (
     <div className="room-list">
       <Card className="filter-card" style={{ marginBottom: '16px' }}>
-        <Form 
+        <Form
           form={form}
           name="room_filter"
           onFinish={handleSearch}
@@ -173,11 +211,15 @@ const RoomList = ({ onEdit, onView, onDelete, refreshTrigger }) => {
             {isAdmin && (
               <Col xs={24} sm={12}>
                 <Form.Item name="assigned_user_id" label="Assigned User">
-                  <Select 
-                    placeholder="Filter by assigned user" 
+                  <Select
+                    placeholder="Filter by assigned user"
                     allowClear
                     showSearch
                     optionFilterProp="children"
+                    loading={usersLoading}
+                    filterOption={(input, option) =>
+                      option.children.toLowerCase().includes(input.toLowerCase())
+                    }
                   >
                     {users.map(user => (
                       <Option key={user.id} value={user.id}>
@@ -206,16 +248,18 @@ const RoomList = ({ onEdit, onView, onDelete, refreshTrigger }) => {
 
       {loading ? (
         <LoadingComponent type="section" tip="Loading room list..." />
+      ) : error ? (
+        <Empty description={error || "Failed to load rooms"} />
       ) : (
         <Table
           columns={columns}
           dataSource={Array.isArray(rooms) ? rooms.map(room => ({ ...room, key: room.id })) : []}
-          loading={false}
+          loading={loading}
           pagination={pagination}
           onChange={handleTableChange}
           rowClassName="room-row"
           locale={{
-            emptyText: <Empty description="No rooms found" />
+            emptyText: <Empty description="No rooms found matching your criteria" />
           }}
         />
       )}

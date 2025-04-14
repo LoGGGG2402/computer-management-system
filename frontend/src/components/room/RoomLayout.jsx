@@ -1,10 +1,30 @@
+/**
+ * @fileoverview Room layout grid component
+ * 
+ * This component renders a room layout as a grid, displaying computers
+ * positioned in their respective locations within a room.
+ * 
+ * @module RoomLayout
+ */
 import React from 'react';
 import { Row, Col, Card, Empty, Badge } from 'antd';
 import { DesktopOutlined } from '@ant-design/icons';
 import SimpleComputerCard, { cardStyle } from '../computer/SimpleComputerCard';
 import { LoadingComponent } from '../../components/common';
 
-const RoomLayout = ({ computers, room, onRefresh }) => {
+/**
+ * RoomLayout Component
+ * 
+ * Renders a room's layout as a grid with computers positioned according to layout configuration.
+ * Shows loading state or empty state when layout information is not available.
+ *
+ * @component
+ * @param {Object} props - Component props
+ * @param {Array<Object>} props.computers - Array of computer objects to display in the layout
+ * @param {Object} props.room - Room object containing layout information
+ * @returns {React.ReactElement} The rendered RoomLayout component
+ */
+const RoomLayout = ({ computers, room }) => {
 
   if (!computers || !room) {
     return <LoadingComponent type="inline" tip="Đang tải giao diện phòng..." />;
@@ -20,7 +40,13 @@ const RoomLayout = ({ computers, room, onRefresh }) => {
   const rows = room.layout.rows || 4;
   const columns = room.layout.columns || 4;
   
-  // Create a 2D grid representation
+  /**
+   * Creates a 2D grid representation of the room layout
+   * with computers positioned according to their coordinates
+   * 
+   * @function
+   * @returns {React.ReactElement[]} Array of row elements containing computer cells
+   */
   const renderGrid = () => {
     const grid = [];
     
@@ -42,7 +68,6 @@ const RoomLayout = ({ computers, room, onRefresh }) => {
                 // Use the SimpleComputerCard component with simplified=true for consistent styling
                 <SimpleComputerCard 
                   computer={computer}
-                  onRefresh={onRefresh}
                 />
               ) : (
                 <Card 

@@ -1,8 +1,29 @@
+/**
+ * @fileoverview Login page component for user authentication
+ * 
+ * This component provides the user authentication interface, allowing users to
+ * log in to the Computer Management System with their credentials.
+ * 
+ * @module LoginPage
+ */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingComponent } from '../components/common';
 
+/**
+ * Login Page Component
+ * 
+ * Provides a form for user authentication with:
+ * - Username input field
+ * - Password input field
+ * - Error message handling
+ * - Loading state management during authentication
+ * - Redirection to dashboard upon successful login
+ * 
+ * @component
+ * @returns {React.ReactElement} The rendered LoginPage component
+ */
 const LoginPage = () => {
   const [formData, setFormData] = useState({
     username: '',
@@ -14,6 +35,12 @@ const LoginPage = () => {
   const { loginAction } = useAuth();
   const navigate = useNavigate();
 
+  /**
+   * Handles form input changes
+   * 
+   * @function
+   * @param {React.ChangeEvent<HTMLInputElement>} e - The change event
+   */
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -22,6 +49,13 @@ const LoginPage = () => {
     }));
   };
 
+  /**
+   * Handles form submission for login
+   * 
+   * @function
+   * @async
+   * @param {React.FormEvent<HTMLFormElement>} e - The form submit event
+   */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');

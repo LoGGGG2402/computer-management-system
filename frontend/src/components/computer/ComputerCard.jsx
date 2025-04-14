@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Computer Card component for displaying detailed computer information
+ * 
+ * This component renders a detailed card view of a computer in the system,
+ * showing its status (online/offline), resource usage (CPU, RAM, disk),
+ * hardware specifications, and location information. It also provides
+ * admin users with the ability to delete computers from the system.
+ */
 import React from 'react';
 import { Card, Button, Space, Popconfirm, message, Tooltip, Badge, Tag, Typography, Row, Col, Divider, Progress } from 'antd'; 
 import { 
@@ -6,16 +14,23 @@ import {
   HomeOutlined,
   InfoCircleOutlined,
   ClockCircleOutlined,
-  WarningOutlined,
   LaptopOutlined,
   DatabaseOutlined,
   HddOutlined,
-  RocketOutlined
+  RocketOutlined,
+  ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext'; 
 import computerService from '../../services/computer.service'; 
+import { useNavigate } from 'react-router-dom';
+import { useFormatting } from '../../hooks/useFormatting'; // Import useFormatting
 
 const { Text, Title } = Typography;
+
+/**
+ * Default styling for computer cards
+ * @constant {Object} cardStyle - Base styling for computer cards
+ */
 export const cardStyle = {
   height: '180px',
   width: '100%', 
@@ -25,6 +40,39 @@ export const cardStyle = {
   display: 'flex',
   flexDirection: 'column'
 };
+
+/**
+ * Computer Card Component
+ * 
+ * Displays detailed information about a computer including:
+ * - Online/offline status
+ * - Resource usage metrics (CPU, RAM, disk)
+ * - Hardware specifications
+ * - Network information
+ * - Room assignment
+ * - Error indicators
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {Object} props.computer - Computer data object
+ * @param {number} props.computer.id - Computer ID
+ * @param {string} props.computer.name - Computer name
+ * @param {string} props.computer.ip_address - IP address
+ * @param {string} props.computer.cpu_info - CPU information
+ * @param {string} props.computer.gpu_info - GPU information
+ * @param {string} props.computer.os_info - Operating system information
+ * @param {number} props.computer.total_ram - Total RAM in bytes
+ * @param {number} props.computer.total_disk_space - Total disk space in bytes
+ * @param {string} props.computer.last_update - Timestamp of last update
+ * @param {boolean} props.computer.have_active_errors - Whether computer has active errors
+ * @param {Object} props.computer.room - Room assignment information
+ * @param {boolean} props.isOnline - Whether the computer is currently online
+ * @param {number} props.cpuUsage - Current CPU usage percentage (0-100)
+ * @param {number} props.ramUsage - Current RAM usage percentage (0-100)
+ * @param {number} props.diskUsage - Current disk usage percentage (0-100)
+ * @param {Function} props.onRefresh - Callback function to refresh the parent component
+ * @returns {JSX.Element|null} The rendered component or null if no computer data
+ */
 const ComputerCard = React.memo(({ 
   computer, 
   isOnline, 
@@ -34,63 +82,42 @@ const ComputerCard = React.memo(({
   onRefresh,
 }) => {
   const { isAdmin } = useAuth(); 
+  const navigate = useNavigate();
+  const { formatRAMSize, formatDiskSize, formatTimestamp, getTimeAgo, getStatusColor } = useFormatting(); // Use formatting hook
 
+  /**
+   * Handles computer deletion
+   * 
+   * Deletes the computer from the system and triggers a refresh
+   * Only available to admin users
+   * 
+   * @async
+   * @function handleDelete
+   * @returns {Promise<void>}
+   */
   const handleDelete = async () => {
     if (!computer?.id) return;
     try {
       await computerService.deleteComputer(computer.id);
-      message.success('Đã xóa máy tính thành công');
+      message.success('Computer deleted successfully');
       if (onRefresh) onRefresh(); 
     } catch (error) {
-      message.error('Xóa máy tính thất bại');
-      console.error('Lỗi khi xóa máy tính:', error);
+      message.error('Failed to delete computer');
+      console.error('Error deleting computer:', error);
     }
   };
 
   if (!computer) return null;
 
-  const formatRAMSize = (bytes) => {
-    if (!bytes) return 'Không rõ';
-    const gb = parseInt(bytes) / (1024 * 1024 * 1024);
-    return `${gb.toFixed(2)} GB`;
-  };
-
-  const formatDiskSize = (bytes) => {
-    if (!bytes) return 'Không rõ';
-    const gb = parseInt(bytes) / (1024 * 1024 * 1024);
-    return `${gb.toFixed(2)} GB`;
-  };
-
-  const formatTimestamp = (timestamp) => {
-    if (!timestamp) return 'Chưa bao giờ';
-    const date = new Date(timestamp);
-    return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
-  };
-
-  const getTimeAgo = (timestamp) => {
-    if (!timestamp) return 'Chưa bao giờ';
-    const now = new Date();
-    const time = new Date(timestamp);
-    const diffMs = now - time;
-    const diffSecs = Math.floor(diffMs / 1000);
-    if (diffSecs < 60) return `${diffSecs} giây trước`;
-    const diffMins = Math.floor(diffSecs / 60);
-    if (diffMins < 60) return `${diffMins} phút trước`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours} giờ trước`;
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays} ngày trước`;
-  };
-
+  /**
+   * Gets a human-readable string representing time since computer was last seen
+   * 
+   * @function getTimeSinceLastSeen
+   * @returns {string} Time since last seen
+   */
   const getTimeSinceLastSeen = () => {
-    if (!computer.last_update) return 'Chưa bao giờ';
-    return getTimeAgo(computer.last_update); 
-  };
-
-  const getStatusColor = (value) => {
-    if (value < 60) return '#52c41a'; 
-    if (value < 80) return '#faad14'; 
-    return '#f5222d'; 
+    if (!computer.last_update) return 'Never';
+    return getTimeAgo(computer.last_update); // Use hook function
   };
 
   return (
@@ -116,6 +143,24 @@ const ComputerCard = React.memo(({
               <Text style={{ color: 'white' }}>
                 {isOnline ? "Online" : "Offline"} 
               </Text>
+              {computer.have_active_errors && (
+                <Tooltip title="Computer has errors requiring attention">
+                  <ExclamationCircleOutlined 
+                    style={{ 
+                      color: '#ff4d4f', 
+                      fontSize: '16px',
+                      backgroundColor: 'white',
+                      borderRadius: '50%',
+                      padding: '2px',
+                      cursor: 'pointer'
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/computers/${computer.id}?tab=errors`);
+                    }}
+                  />
+                </Tooltip>
+              )}
               {computer.room?.name && (
                 <Tag color="blue">
                   <HomeOutlined /> {computer.room.name}
@@ -126,12 +171,12 @@ const ComputerCard = React.memo(({
           <div style={{ position: 'absolute', right: '15px', top: '15px' }}>
             <Space>
               {isAdmin && (
-                <Tooltip title="Xóa máy tính">
+                <Tooltip title="Delete computer">
                   <Popconfirm
-                    title="Bạn chắc chắn muốn xóa máy tính này?"
+                    title="Are you sure you want to delete this computer?"
                     onConfirm={handleDelete} 
-                    okText="Có"
-                    cancelText="Không"
+                    okText="Yes"
+                    cancelText="No"
                   >
                     <Button 
                       type="text" 
@@ -153,26 +198,26 @@ const ComputerCard = React.memo(({
       <div style={{ padding: '20px' }}>
         <Row gutter={16} style={{ marginBottom: '20px', textAlign: 'center' }}>
           <Col span={8}>
-            <Tooltip title={`Sử dụng CPU: ${cpuUsage}%`}>
+            <Tooltip title={`CPU Usage: ${cpuUsage}%`}>
               <Progress 
                 type="dashboard" percent={cpuUsage} size={80} 
-                format={() => 'CPU'} strokeColor={getStatusColor(cpuUsage)}
+                format={() => 'CPU'} strokeColor={getStatusColor(cpuUsage)} // Use hook
               />
             </Tooltip>
           </Col>
           <Col span={8}>
-            <Tooltip title={`Sử dụng RAM: ${ramUsage}%`}>
+            <Tooltip title={`RAM Usage: ${ramUsage}%`}>
               <Progress 
                 type="dashboard" percent={ramUsage} size={80} 
-                format={() => 'RAM'} strokeColor={getStatusColor(ramUsage)}
+                format={() => 'RAM'} strokeColor={getStatusColor(ramUsage)} // Use hook
               />
             </Tooltip>
           </Col>
           <Col span={8}>
-            <Tooltip title={`Sử dụng Disk: ${diskUsage}%`}>
+            <Tooltip title={`Disk Usage: ${diskUsage}%`}>
               <Progress 
                 type="dashboard" percent={diskUsage} size={80} 
-                format={() => 'Disk'} strokeColor={getStatusColor(diskUsage)}
+                format={() => 'Disk'} strokeColor={getStatusColor(diskUsage)} // Use hook
               />
             </Tooltip>
           </Col>
@@ -184,23 +229,23 @@ const ComputerCard = React.memo(({
            <Col xs={24} sm={12}>
             <Space align="center">
               <GlobalOutlined />
-              <Text>{computer.ip_address || 'Chưa có IP'}</Text>
+              <Text>{computer.ip_address || 'No IP'}</Text>
             </Space>
           </Col>
           <Col xs={24} sm={12}>
             <Space align="center">
               <ClockCircleOutlined />
-              <Tooltip title={`Thời gian cụ thể: ${formatTimestamp(computer.last_update)}`}>
-                <Text>Lần cuối thấy: {getTimeSinceLastSeen()}</Text>
+              <Tooltip title={`Specific time: ${formatTimestamp(computer.last_update)}`}> {/* Use hook */}
+                <Text>Last seen: {getTimeSinceLastSeen()}</Text>
               </Tooltip>
             </Space>
           </Col>
           <Col xs={24} sm={12}>
             <Space align="center">
               <InfoCircleOutlined />
-              <Tooltip title={computer.cpu_info || 'CPU không rõ'}>
+              <Tooltip title={computer.cpu_info || 'CPU Unknown'}>
                  <Text style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {computer.cpu_info || 'CPU không rõ'}
+                    {computer.cpu_info || 'CPU Unknown'}
                  </Text>
               </Tooltip>
             </Space>
@@ -208,9 +253,9 @@ const ComputerCard = React.memo(({
            <Col xs={24} sm={12}>
             <Space align="center">
               <LaptopOutlined />
-               <Tooltip title={computer.os_info || 'OS không rõ'}>
+               <Tooltip title={computer.os_info || 'OS Unknown'}>
                  <Text style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                   {computer.os_info || 'OS không rõ'}
+                   {computer.os_info || 'OS Unknown'}
                  </Text>
                </Tooltip>
             </Space>
@@ -218,21 +263,21 @@ const ComputerCard = React.memo(({
           <Col xs={24} sm={12}>
             <Space align="center">
               <DatabaseOutlined />
-              <Text>RAM: {formatRAMSize(computer.total_ram)}</Text>
+              <Text>RAM: {formatRAMSize(computer.total_ram)}</Text> {/* Use hook */}
             </Space>
           </Col>
           <Col xs={24} sm={12}>
             <Space align="center">
               <HddOutlined />
-              <Text>Disk: {formatDiskSize(computer.total_disk_space)}</Text>
+              <Text>Disk: {formatDiskSize(computer.total_disk_space)}</Text> {/* Use hook */}
             </Space>
           </Col>
           <Col xs={24} sm={12}>
             <Space align="center">
               <RocketOutlined />
-              <Tooltip title={computer.gpu_info || 'GPU không rõ'}>
+              <Tooltip title={computer.gpu_info || 'GPU Unknown'}>
                 <Text style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {computer.gpu_info || 'GPU không rõ'}
+                  {computer.gpu_info || 'GPU Unknown'}
                 </Text>
               </Tooltip>
             </Space>
@@ -241,7 +286,7 @@ const ComputerCard = React.memo(({
             <Col xs={24} sm={12}>
               <Space align="center">
                 <HomeOutlined />
-                <Text>Phòng: {computer.room.name}</Text>
+                <Text>Room: {computer.room.name}</Text>
               </Space>
             </Col>
           )}
@@ -252,7 +297,7 @@ const ComputerCard = React.memo(({
           <Col span={24}>
             <Space>
               <InfoCircleOutlined />
-              <Text type="secondary">Agent ID: {computer.unique_agent_id || 'Chưa đăng ký'}</Text>
+              <Text type="secondary">Agent ID: {computer.unique_agent_id || 'Not registered'}</Text>
             </Space>
           </Col>
         </Row>

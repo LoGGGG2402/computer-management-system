@@ -97,9 +97,13 @@ class CommandExecutor:
                  if command_info:
                       _, cmd_id_err, _ = command_info
                       self._send_result(cmd_id_err, {
-                           "stdout": "",
-                           "stderr": f"Agent internal error in worker thread: {e}",
-                           "exitCode": -1
+                           "type": "unknown",
+                           "success": False,
+                           "result": {
+                               "stdout": "",
+                               "stderr": f"Agent internal error in worker thread: {e}",
+                               "exitCode": -1
+                           }
                       })
                       self._command_queue.task_done() # Mark as done even on error
                  # Avoid busy-waiting on continuous errors
@@ -110,8 +114,33 @@ class CommandExecutor:
     def _execute_and_send_result(self, command: str, command_id: str, command_type: str):
         """Executes a single command and sends the result back via WebSocket."""
         logger.info(f"Executing command: '{command}' (ID: {command_id}, Type: {command_type})")
-        result: Dict[str, Any] = {"stdout": "", "stderr": "", "exitCode": -1}
+        
+        # Initialize standard result format
+        result = {
+            "type": command_type,  # Include command type in result
+            "success": False,      # Default to false, set to true on success
+            "result": {
+                "stdout": "", 
+                "stderr": "", 
+                "exitCode": -1
+            }
+        }
 
+        # Handle different command types
+        if command_type == 'console':
+            # Execute console commands using shell
+            self._execute_console_command(command, command_id, result)
+        else:
+            # For future command types, currently unsupported
+            logger.warning(f"Command type '{command_type}' is not yet implemented")
+            result["result"]["stderr"] = f"Lỗi: Loại lệnh '{command_type}' chưa được hỗ trợ."
+            result["result"]["exitCode"] = -2
+        
+        # Always attempt to send a result back
+        self._send_result(command_id, result)
+
+    def _execute_console_command(self, command: str, command_id: str, result: Dict[str, Any]):
+        """Execute a console command using shell and update the result dict."""
         # --- Security Note ---
         # Using shell=True is potentially dangerous if 'command' comes from an untrusted source.
         # If possible, avoid shell=True and pass arguments as a list after splitting
@@ -120,15 +149,13 @@ class CommandExecutor:
         # (the server) MUST rigorously sanitize it.
         use_shell = True # Keep original behavior for now, but be aware of risks
         if use_shell:
-             logger.warning(f"Executing command '{command_id}' with shell=True. Ensure the command source is trusted and sanitized.")
+            logger.warning(f"Executing command '{command_id}' with shell=True. Ensure the command source is trusted and sanitized.")
 
         # Determine appropriate encoding based on platform
         # Use UTF-8 as a general default, but Windows might use others like 'cp1252' or 'cp437'
         # Using 'utf-8' with 'replace' errors is often a safe compromise.
         output_encoding = 'utf-8' #'locale' might be better sometimes but can fail
-        # if sys.platform == "win32":
-        #     output_encoding = 'cp1252' # Example, adjust based on typical Windows console encoding
-
+        
         try:
             process = subprocess.run(
                 command,
@@ -142,22 +169,24 @@ class CommandExecutor:
                 check=False # Don't raise exception for non-zero exit code, handle it manually
             )
 
-            result = {
+            result["result"] = {
                 "stdout": process.stdout.strip() if process.stdout else "",
                 "stderr": process.stderr.strip() if process.stderr else "",
                 "exitCode": process.returncode
             }
+            result["success"] = process.returncode == 0
+            
             log_level = logging.INFO if process.returncode == 0 else logging.WARNING
             logger.log(log_level, f"Command '{command_id}' completed. Exit Code: {process.returncode}")
             # Log output only if it exists
-            if result["stdout"]:
-                 logger.debug(f"Command '{command_id}' STDOUT:\n{result['stdout']}")
-            if result["stderr"]:
-                 logger.warning(f"Command '{command_id}' STDERR:\n{result['stderr']}")
+            if result["result"]["stdout"]:
+                logger.debug(f"Command '{command_id}' STDOUT:\n{result['result']['stdout']}")
+            if result["result"]["stderr"]:
+                logger.warning(f"Command '{command_id}' STDERR:\n{result['result']['stderr']}")
 
         except subprocess.TimeoutExpired:
             logger.error(f"Command '{command_id}' timed out after {self.command_timeout} seconds: {command}")
-            result = {
+            result["result"] = {
                 "stdout": "",
                 "stderr": f"Lỗi: Lệnh hết hạn sau {self.command_timeout} giây.",
                 "exitCode": 124 # Standard exit code for timeout
@@ -166,22 +195,22 @@ class CommandExecutor:
             # Extract the likely command name that wasn't found
             cmd_part = command.split()[0] if command else 'N/A'
             logger.error(f"Command '{command_id}' not found: '{cmd_part}'")
-            result = {
+            result["result"] = {
                 "stdout": "",
                 "stderr": f"Lỗi: Lệnh không tìm thấy: '{cmd_part}'. Đảm bảo lệnh đã được cài đặt và nằm trong PATH của hệ thống.",
                 "exitCode": 127 # Standard exit code for command not found
             }
         except PermissionError as e:
-             logger.error(f"Permission denied executing command '{command_id}': {e}", exc_info=True)
-             result = {
+            logger.error(f"Permission denied executing command '{command_id}': {e}", exc_info=True)
+            result["result"] = {
                 "stdout": "",
                 "stderr": f"Lỗi: Không có quyền thực thi lệnh: {e}",
                 "exitCode": 126 # Standard exit code for permission denied
-             }
+            }
         except OSError as e:
             # Catch other OS-level errors during process creation/execution
             logger.error(f"OS error executing command '{command_id}': {e}", exc_info=True)
-            result = {
+            result["result"] = {
                 "stdout": "",
                 "stderr": f"Lỗi hệ điều hành khi thực thi lệnh: {e}",
                 "exitCode": e.errno if hasattr(e, 'errno') else 1 # Use errno if available
@@ -189,21 +218,18 @@ class CommandExecutor:
         except Exception as e:
             # Catch any other unexpected errors
             logger.critical(f"Unexpected error executing command '{command_id}': {e}", exc_info=True)
-            result = {
+            result["result"] = {
                 "stdout": "",
                 "stderr": f"Lỗi không mong muốn khi thực thi lệnh: {str(e)}",
                 "exitCode": 1 # Generic error code
             }
-        finally:
-            # Always attempt to send a result back
-            self._send_result(command_id, result)
 
     def _send_result(self, command_id: str, result: Dict[str, Any]):
         """Sends the command result to the server using the WebSocket client."""
         logger.debug(f"Attempting to send result for command ID: {command_id}")
         if not self.ws_client:
-             logger.error(f"Cannot send result for {command_id}: WSClient is not available.")
-             return
+            logger.error(f"Cannot send result for {command_id}: WSClient is not available.")
+            return
 
         success = self.ws_client.send_command_result(command_id, result)
         if success:
@@ -231,17 +257,25 @@ class CommandExecutor:
             if command is None: # Check specifically for None
                 logger.error(f"Received command message missing required 'command' field for ID {command_id}: {command_data}")
                 self._send_result(command_id, {
-                    "stdout": "",
-                    "stderr": "Lỗi Agent: Thiếu trường 'command' trong dữ liệu lệnh.",
-                    "exitCode": -1 # Indicate agent-side error
+                    "type": "unknown",
+                    "success": False,
+                    "result": {
+                        "stdout": "",
+                        "stderr": "Lỗi Agent: Thiếu trường 'command' trong dữ liệu lệnh.",
+                        "exitCode": -1 # Indicate agent-side error
+                    }
                 })
                 return
             if not isinstance(command, str):
                  logger.error(f"Received command with non-string 'command' field for ID {command_id}: {type(command)}")
                  self._send_result(command_id, {
-                    "stdout": "",
-                    "stderr": "Lỗi Agent: Trường 'command' phải là một chuỗi.",
-                    "exitCode": -1
+                    "type": "unknown",
+                    "success": False,
+                    "result": {
+                        "stdout": "",
+                        "stderr": "Lỗi Agent: Trường 'command' phải là một chuỗi.",
+                        "exitCode": -1
+                    }
                  })
                  return
 
@@ -253,9 +287,13 @@ class CommandExecutor:
             except Full:
                  logger.error(f"Command queue is full (max={self._command_queue.maxsize}). Cannot queue command: {command_id}")
                  self._send_result(command_id, {
-                    "stdout": "",
-                    "stderr": "Lỗi Agent: Hàng đợi lệnh đã đầy. Vui lòng thử lại sau.",
-                    "exitCode": -1
+                    "type": command_type,
+                    "success": False,
+                    "result": {
+                        "stdout": "",
+                        "stderr": "Lỗi Agent: Hàng đợi lệnh đã đầy. Vui lòng thử lại sau.",
+                        "exitCode": -1
+                    }
                  })
 
 
@@ -266,9 +304,13 @@ class CommandExecutor:
             # Try to send error back if possible
             if cmd_id_err != 'N/A':
                  self._send_result(cmd_id_err, {
-                    "stdout": "",
-                    "stderr": f"Lỗi nội bộ Agent khi xử lý lệnh: {e}",
-                    "exitCode": -1
+                    "type": "unknown",
+                    "success": False,
+                    "result": {
+                        "stdout": "",
+                        "stderr": f"Lỗi nội bộ Agent khi xử lý lệnh: {e}",
+                        "exitCode": -1
+                    }
                  })
 
     def stop(self):

@@ -1,5 +1,4 @@
 const db = require("../database/models");
-const { Sequelize, Op } = db.Sequelize;
 
 const Room = db.Room;
 const User = db.User;
@@ -138,7 +137,7 @@ class RoomService {
    *     - pos_x {number} - X position in room grid
    *     - pos_y {number} - Y position in room grid
    *     - room_id {number} - ID of the room this computer belongs to
-   *     - has_active_errors {boolean} - Whether the computer has active errors
+   *     - have_active_errors {boolean} - Whether the computer has active errors
    *     - last_update {Date} - When the computer was last updated
    *     - os_info {Object} - Operating system information
    *     - cpu_info {Object} - CPU information

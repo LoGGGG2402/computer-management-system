@@ -1,205 +1,203 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Tabs, Typography, Row, Col, Statistic } from 'antd';
+/**
+ * @fileoverview Admin Dashboard component for the Computer Management System
+ * 
+ * This component serves as the main control panel for administrators, providing
+ * system-wide statistics and overview, including unresolved errors.
+ * 
+ * @module AdminDashboard
+ */
+import React from 'react';
+import { Card, Typography, Row, Col, Statistic, List, Tag, Tooltip } from 'antd';
 import { 
   DesktopOutlined, 
-  UserOutlined, 
-  DashboardOutlined,
   TeamOutlined,
-  BankOutlined
+  BankOutlined,
+  WarningOutlined,
+  CloudServerOutlined,
+  ApiOutlined,
+  InfoCircleOutlined
 } from '@ant-design/icons';
-import UsersListPage from '../user/UsersListPage';
-import ComputersListPage from '../computer/ComputersListPage';
-import userService from '../../services/user.service';
-import roomService from '../../services/room.service';
-import computerService from '../../services/computer.service';
+import staticsService from '../../services/statics.service';
 import { LoadingComponent } from '../../components/common';
+import { useSimpleFetch } from '../../hooks/useSimpleFetch';
+import { useFormatting } from '../../hooks/useFormatting';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
+/**
+ * Admin Dashboard Component
+ * 
+ * Provides administrative interface with:
+ * - Overview statistics (users, rooms, computers)
+ * - System status indicators
+ * - List of unresolved computer errors
+ * 
+ * @component
+ * @returns {React.ReactElement} The rendered AdminDashboard component
+ */
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [stats, setStats] = useState({
-    users: { total: 0, loading: true },
-    rooms: { total: 0, loading: true },
-    computers: { total: 0, online: 0, loading: true }
-  });
+  // Use hooks for fetching and formatting
+  const { data: stats, loading } = useSimpleFetch(
+    staticsService.getSystemStats,
+    [], // Fetch on mount
+    { errorMessage: 'Failed to fetch statistics' }
+  );
+  const { formatTimestamp, getTimeAgo } = useFormatting();
 
-  useEffect(() => {
-    if (activeTab === 'dashboard') {
-      fetchStatistics();
-    }
-  }, [activeTab]);
-
-  const fetchStatistics = async () => {
-    try {
-      // Fetch users
-      setStats(prev => ({...prev, users: {...prev.users, loading: true}}));
-      const usersData = await userService.getAllUsers();
-      const users = usersData.data?.users || [];
-      
-      // Fetch rooms
-      setStats(prev => ({...prev, rooms: {...prev.rooms, loading: true}}));
-      const roomsData = await roomService.getAllRooms();
-      const rooms = Array.isArray(roomsData) ? roomsData : (roomsData?.data?.rooms || []);
-      
-      // Fetch computers
-      setStats(prev => ({...prev, computers: {...prev.computers, loading: true}}));
-      const computersData = await computerService.getAllComputers();
-      const computers = computersData?.data?.computers || [];
-      const onlineComputers = computers.filter(c => c.status === 'online').length;
-      
-      setStats({
-        users: { total: users.length, loading: false },
-        rooms: { total: rooms.length, loading: false },
-        computers: { 
-          total: computers.length, 
-          online: onlineComputers,
-          loading: false 
-        }
-      });
-      
-    } catch (error) {
-      console.error('Failed to fetch statistics:', error);
-      setStats({
-        users: { total: 0, loading: false },
-        rooms: { total: 0, loading: false },
-        computers: { total: 0, online: 0, loading: false }
-      });
-    }
+  // Default stats structure
+  const defaultStats = {
+    totalUsers: 0,
+    totalRooms: 0,
+    totalComputers: 0,
+    onlineComputers: 0,
+    offlineComputers: 0,
+    computersWithErrors: 0,
+    unresolvedErrors: [],
   };
 
-  // Define tab items
-  const items = [
-    {
-      key: 'dashboard',
-      label: (
-        <span>
-          <DashboardOutlined />
-          Dashboard
-        </span>
-      ),
-      children: (
-        <div className="p-6">
-          <div className="mb-8 pb-4 border-b border-gray-200">
-            <Title level={2}>Admin Dashboard</Title>
-            <p className="text-gray-600">Welcome to the Computer Management System administration panel</p>
-          </div>
-          
+  // Use fetched stats or default if loading/error
+  const displayStats = stats || defaultStats;
+  const unresolvedErrors = displayStats.unresolvedErrors || [];
+
+  return (
+    <div className="admin-dashboard p-6"> 
+      <div className="mb-8 pb-4 border-b border-gray-200">
+        <Title level={2}>Admin Dashboard</Title>
+        <p className="text-gray-600">Welcome to the Computer Management System administration panel</p>
+      </div>
+      
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} md={6}>
+          <Card className="shadow-md hover:shadow-lg transition-shadow">
+            <Statistic
+              title="Total Users"
+              value={loading ? <LoadingComponent type="inline" size="small" tip="" /> : displayStats.totalUsers}
+              prefix={<TeamOutlined />}
+            />
+          </Card>
+        </Col>
+        
+        <Col xs={24} sm={12} md={6}>
+          <Card className="shadow-md hover:shadow-lg transition-shadow">
+            <Statistic
+              title="Total Rooms"
+              value={loading ? <LoadingComponent type="inline" size="small" tip="" /> : displayStats.totalRooms}
+              prefix={<BankOutlined />}
+            />
+          </Card>
+        </Col>
+        
+        <Col xs={24} sm={12} md={6}>
+          <Card className="shadow-md hover:shadow-lg transition-shadow">
+            <Statistic
+              title="Total Computers"
+              value={loading ? <LoadingComponent type="inline" size="small" tip="" /> : displayStats.totalComputers}
+              prefix={<DesktopOutlined />}
+            />
+          </Card>
+        </Col>
+
+        <Col xs={24} sm={12} md={6}>
+          <Card className="shadow-md hover:shadow-lg transition-shadow">
+            <Statistic
+              title="Computers with Errors"
+              value={loading ? <LoadingComponent type="inline" size="small" tip="" /> : displayStats.computersWithErrors}
+              prefix={<WarningOutlined />}
+              valueStyle={{ color: displayStats.computersWithErrors > 0 ? '#cf1322' : undefined }}
+            />
+          </Card>
+        </Col>
+      </Row>
+      
+      <div className="mt-8">
+        <Card title="System Status" className="shadow-md hover:shadow-lg transition-shadow">
           <Row gutter={[16, 16]}>
-            <Col xs={24} sm={8}>
-              <Card className="shadow-md hover:shadow-lg transition-shadow">
+            <Col xs={24} sm={12}>
+              <Card bordered={false}>
                 <Statistic
-                  title="Total Users"
-                  value={stats.users.loading ? <LoadingComponent type="inline" size="small" tip="" /> : stats.users.total}
-                  prefix={<TeamOutlined />}
+                  title="Online Computers"
+                  value={loading ? <LoadingComponent type="inline" size="small" tip="" /> : displayStats.onlineComputers}
+                  prefix={<CloudServerOutlined style={{ color: '#3f8600' }} />}
+                  suffix={`/ ${displayStats.totalComputers}`}
                 />
+                <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                  <div 
+                    className="bg-green-600 h-2.5 rounded-full" 
+                    style={{ 
+                      width: loading || displayStats.totalComputers === 0 ? '0%' : 
+                      `${(displayStats.onlineComputers / displayStats.totalComputers) * 100}%` 
+                    }}
+                  ></div>
+                </div>
               </Card>
             </Col>
             
-            <Col xs={24} sm={8}>
-              <Card className="shadow-md hover:shadow-lg transition-shadow">
+            <Col xs={24} sm={12}>
+              <Card bordered={false}>
                 <Statistic
-                  title="Total Rooms"
-                  value={stats.rooms.loading ? <LoadingComponent type="inline" size="small" tip="" /> : stats.rooms.total}
-                  prefix={<BankOutlined />}
+                  title="Offline Computers"
+                  value={loading ? <LoadingComponent type="inline" size="small" tip="" /> : displayStats.offlineComputers}
+                  prefix={<ApiOutlined style={{ color: '#cf1322' }} />}
+                  suffix={`/ ${displayStats.totalComputers}`}
                 />
-              </Card>
-            </Col>
-            
-            <Col xs={24} sm={8}>
-              <Card className="shadow-md hover:shadow-lg transition-shadow">
-                <Statistic
-                  title="Total Computers"
-                  value={stats.computers.loading ? <LoadingComponent type="inline" size="small" tip="" /> : stats.computers.total}
-                  prefix={<DesktopOutlined />}
-                />
+                <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                  <div 
+                    className="bg-red-600 h-2.5 rounded-full" 
+                    style={{ 
+                      width: loading || displayStats.totalComputers === 0 ? '0%' : 
+                      `${(displayStats.offlineComputers / displayStats.totalComputers) * 100}%` 
+                    }}
+                  ></div>
+                </div>
               </Card>
             </Col>
           </Row>
-          
-          <div className="mt-8">
-            <Card title="System Status" className="shadow-md hover:shadow-lg transition-shadow">
-              <Row gutter={[16, 16]}>
-                <Col span={12}>
-                  <div>
-                    <h3 className="text-lg font-medium">Computers Online</h3>
-                    <div className="flex items-center mt-2">
-                      <div className="w-full bg-gray-200 rounded-full h-2.5 mr-2">
-                        <div 
-                          className="bg-green-600 h-2.5 rounded-full" 
-                          style={{ 
-                            width: stats.computers.loading ? '0%' : 
-                              stats.computers.total === 0 ? '0%' : 
-                              `${(stats.computers.online / stats.computers.total) * 100}%` 
-                          }}
-                        ></div>
-                      </div>
-                      <span className="text-sm font-medium">
-                        {stats.computers.loading ? 
-                          <LoadingComponent type="inline" size="small" tip="" /> : 
-                          `${stats.computers.online}/${stats.computers.total}`
-                        }
-                      </span>
-                    </div>
-                  </div>
-                </Col>
-                
-                <Col span={12}>
-                  <div>
-                    <h3 className="text-lg font-medium">System Load</h3>
-                    <div className="flex items-center mt-2">
-                      <div className="w-full bg-gray-200 rounded-full h-2.5 mr-2">
-                        <div 
-                          className="bg-blue-600 h-2.5 rounded-full" 
-                          style={{ width: '42%' }}
-                        ></div>
-                      </div>
-                      <span className="text-sm font-medium">42%</span>
-                    </div>
-                  </div>
-                </Col>
-              </Row>
-            </Card>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'computers',
-      label: (
-        <span>
-          <DesktopOutlined />
-          Computer Management
-        </span>
-      ),
-      children: <ComputersListPage />,
-    },
-    {
-      key: 'users',
-      label: (
-        <span>
-          <UserOutlined />
-          User Management
-        </span>
-      ),
-      children: <UsersListPage />,
-    },
-  ];
+        </Card>
+      </div>
 
-  const handleTabChange = (key) => {
-    setActiveTab(key);
-  };
-
-  return (
-    <div className="admin-dashboard">
-      <Tabs 
-        defaultActiveKey="dashboard" 
-        activeKey={activeTab}
-        onChange={handleTabChange}
-        items={items}
-        size="large"
-        tabBarStyle={{ marginBottom: 24 }}
-      />
+      <div className="mt-8">
+        <Card 
+          title={<><WarningOutlined style={{ color: '#faad14', marginRight: 8 }} /> Unresolved Errors</>} 
+          className="shadow-md hover:shadow-lg transition-shadow"
+          extra={loading ? <LoadingComponent type="inline" size="small" tip="" /> : <Tag color="volcano">{unresolvedErrors.length} Active</Tag>}
+        >
+          {loading ? (
+            <LoadingComponent tip="Loading errors..." />
+          ) : unresolvedErrors.length === 0 ? (
+            <Text type="secondary">No unresolved errors found.</Text>
+          ) : (
+            <List
+              itemLayout="horizontal"
+              dataSource={unresolvedErrors}
+              renderItem={item => (
+                <List.Item
+                  actions={[
+                    <Tooltip title={`Reported at: ${formatTimestamp(item.reported_at)}`}>
+                      <Text type="secondary">{getTimeAgo(item.reported_at)}</Text>
+                    </Tooltip>
+                  ]}
+                >
+                  <List.Item.Meta
+                    avatar={<WarningOutlined style={{ color: '#faad14', fontSize: '1.5em' }} />}
+                    title={<Text strong>{item.computerName || `Computer ID: ${item.computerId}`}</Text>}
+                    description={
+                      <>
+                        <Tag color="red">{item.error_type || 'General'}</Tag>
+                        {item.error_message}
+                        {item.error_details && Object.keys(item.error_details).length > 0 && (
+                          <Tooltip title={<pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{JSON.stringify(item.error_details, null, 2)}</pre>}>
+                            <InfoCircleOutlined style={{ marginLeft: 8, cursor: 'pointer', color: '#1890ff' }} />
+                          </Tooltip>
+                        )}
+                      </>
+                    }
+                  />
+                </List.Item>
+              )}
+            />
+          )}
+        </Card>
+      </div>
     </div>
   );
 };

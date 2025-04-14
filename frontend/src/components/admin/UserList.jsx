@@ -1,94 +1,83 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Table, Button, Space, Popconfirm, message, Tag, Empty, Form, Input, Select, Row, Col, Card } from 'antd';
-import { EditOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ReloadOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { EditOutlined, DeleteOutlined, SearchOutlined, ReloadOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import userService from '../../services/user.service';
 import { LoadingComponent } from '../common';
+import { useSimpleFetch } from '../../hooks/useSimpleFetch';
 
 const { Option } = Select;
 
 const UserList = ({ onEdit, onRefresh, refreshTrigger }) => {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
-  
-  // Filter states
-  const [username, setUsername] = useState('');
-  const [role, setRole] = useState(null);
-  const [isActive, setIsActive] = useState(null);
   const [form] = Form.useForm();
 
+  // State for filters and pagination
+  const [filters, setFilters] = useState({ username: '', role: null, is_active: null });
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Fetch users using useSimpleFetch
+  const fetchUsersCallback = useCallback(async () => {
+    const params = {
+      page: pagination.current,
+      limit: pagination.pageSize,
+      ...(filters.username && { username: filters.username }),
+      ...(filters.role && { role: filters.role }),
+      ...(filters.is_active !== null && { is_active: filters.is_active }),
+    };
+    return await userService.getAllUsers(params);
+  }, [pagination.current, pagination.pageSize, filters.username, filters.role, filters.is_active]);
+
+  const { data: usersResponse, loading, error: fetchError, refresh: fetchUsers, setData: setUsersData } = useSimpleFetch(
+    fetchUsersCallback,
+    [fetchUsersCallback],
+    { errorMessage: 'Failed to fetch users' }
+  );
+
+  // Update pagination total when usersResponse changes
   useEffect(() => {
-    fetchUsers();
-  }, [refreshTrigger, pagination.current, pagination.pageSize]);
-
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      const filters = {
-        page: pagination.current,
-        limit: pagination.pageSize,
-        username: username || undefined,
-        role: role || undefined,
-        is_active: isActive !== null ? isActive : undefined
-      };
-      
-      const response = await userService.getAllUsers(filters);
-      
-      // Parse response according to API.md structure
-      let usersData = [];
-      let totalUsers = 0;
-      
-      if (response?.data?.users && Array.isArray(response.data.users)) {
-        // API spec: /api/users returns array in data.users
-        usersData = response.data.users;
-        totalUsers = response.data.total || usersData.length;
-      } else if (response?.data && Array.isArray(response.data)) {
-        // Alternative: array in data property
-        usersData = response.data;
-        totalUsers = usersData.length;
-      } else if (response?.users && Array.isArray(response.users)) {
-        // Alternative: direct users property
-        usersData = response.users;
-        totalUsers = response.total || usersData.length;
-      } else if (Array.isArray(response)) {
-        // Alternative: direct array
-        usersData = response;
-        totalUsers = usersData.length;
-      }
-      
-      setUsers(usersData || []);
+    if (usersResponse) {
+      const totalUsers = usersResponse?.total || usersResponse?.data?.total || usersResponse?.data?.users?.length || usersResponse?.users?.length || (Array.isArray(usersResponse) ? usersResponse.length : 0);
       setPagination(prev => ({ ...prev, total: totalUsers }));
-    } catch (error) {
-      message.error('Failed to fetch users');
-      console.error('Error fetching users:', error);
-      setUsers([]);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [usersResponse]);
 
-  const handleTableChange = (pagination) => {
-    setPagination(pagination);
+  // Trigger refetch when external refreshTrigger changes
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      fetchUsers();
+    }
+  }, [refreshTrigger, fetchUsers]);
+
+  const users = useMemo(() => {
+    return Array.isArray(usersResponse) ? usersResponse :
+      usersResponse?.data?.users || usersResponse?.users || usersResponse?.data || [];
+  }, [usersResponse]);
+
+  const handleTableChange = (newPagination) => {
+    setPagination(prev => ({
+      ...prev,
+      current: newPagination.current,
+      pageSize: newPagination.pageSize,
+    }));
   };
 
   const handleSearch = (values) => {
-    setUsername(values.username || '');
-    setRole(values.role || null);
-    setIsActive(values.is_active !== undefined ? values.is_active : null);
-    setPagination(prev => ({ ...prev, current: 1 })); // Reset to first page
-    fetchUsers();
+    setFilters({
+      username: values.username || '',
+      role: values.role || null,
+      is_active: values.is_active !== undefined ? values.is_active : null
+    });
+    setPagination(prev => ({ ...prev, current: 1 }));
   };
 
   const handleReset = () => {
     form.resetFields();
-    setUsername('');
-    setRole(null);
-    setIsActive(null);
+    setFilters({ username: '', role: null, is_active: null });
     setPagination(prev => ({ ...prev, current: 1 }));
-    fetchUsers();
   };
 
   const handleDelete = async (id) => {
+    setActionLoading(true);
     try {
       await userService.deleteUser(id);
       message.success('User deactivated successfully');
@@ -97,10 +86,13 @@ const UserList = ({ onEdit, onRefresh, refreshTrigger }) => {
     } catch (error) {
       message.error('Failed to deactivate user');
       console.error('Error deactivating user:', error);
+    } finally {
+      setActionLoading(false);
     }
   };
 
   const handleReactivate = async (id) => {
+    setActionLoading(true);
     try {
       await userService.reactivateUser(id);
       message.success('User reactivated successfully');
@@ -109,6 +101,8 @@ const UserList = ({ onEdit, onRefresh, refreshTrigger }) => {
     } catch (error) {
       message.error('Failed to reactivate user');
       console.error('Error reactivating user:', error);
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -134,7 +128,6 @@ const UserList = ({ onEdit, onRefresh, refreshTrigger }) => {
       title: 'Role',
       key: 'role',
       render: (_, record) => {
-        // Handle both 'role' string and 'roles' array cases
         if (record.roles && Array.isArray(record.roles)) {
           return (
             <>
@@ -159,10 +152,9 @@ const UserList = ({ onEdit, onRefresh, refreshTrigger }) => {
       title: 'Status',
       key: 'status',
       render: (_, record) => {
-        // Handle both is_active boolean and status string
         const isActive = record.status === 'active' || record.is_active === true;
         const status = isActive ? 'active' : 'inactive';
-        
+
         return (
           <span style={{ color: isActive ? 'green' : 'red' }}>
             {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -174,15 +166,14 @@ const UserList = ({ onEdit, onRefresh, refreshTrigger }) => {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => {
-        // Determine if user is active
         const isActive = record.status === 'active' || record.is_active === true;
-        
         return (
           <Space size="middle">
-            <Button 
-              type="primary" 
+            <Button
+              type="primary"
               icon={<EditOutlined />}
               onClick={() => onEdit(record)}
+              disabled={actionLoading}
             >
               Edit
             </Button>
@@ -192,11 +183,14 @@ const UserList = ({ onEdit, onRefresh, refreshTrigger }) => {
                 onConfirm={() => handleDelete(record.id)}
                 okText="Yes"
                 cancelText="No"
+                disabled={actionLoading}
               >
-                <Button 
-                  type="danger" 
-                  icon={<DeleteOutlined />}
+                <Button
+                  type="default"
                   danger
+                  icon={<DeleteOutlined />}
+                  loading={actionLoading && record.id === users.find(u => u.id === record.id)?.id}
+                  disabled={actionLoading}
                 >
                   Deactivate
                 </Button>
@@ -207,11 +201,14 @@ const UserList = ({ onEdit, onRefresh, refreshTrigger }) => {
                 onConfirm={() => handleReactivate(record.id)}
                 okText="Yes"
                 cancelText="No"
+                disabled={actionLoading}
               >
                 <Button
                   type="primary"
                   icon={<CheckCircleOutlined />}
                   style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                  loading={actionLoading && record.id === users.find(u => u.id === record.id)?.id}
+                  disabled={actionLoading}
                 >
                   Reactivate
                 </Button>
@@ -226,7 +223,7 @@ const UserList = ({ onEdit, onRefresh, refreshTrigger }) => {
   return (
     <div className="user-list">
       <Card className="filter-card" style={{ marginBottom: '16px' }}>
-        <Form 
+        <Form
           form={form}
           name="user_filter"
           onFinish={handleSearch}
@@ -272,17 +269,19 @@ const UserList = ({ onEdit, onRefresh, refreshTrigger }) => {
       </Card>
 
       {loading ? (
-        <LoadingComponent type="section" tip="Đang tải danh sách người dùng..." />
+        <LoadingComponent type="section" tip="Loading user list..." />
+      ) : fetchError ? (
+        <Empty description={fetchError || "Failed to load users"} />
       ) : (
         <Table
           columns={columns}
           dataSource={Array.isArray(users) ? users.map(user => ({ ...user, key: user.id })) : []}
-          loading={false}
+          loading={loading || actionLoading}
           pagination={pagination}
           onChange={handleTableChange}
           rowClassName="user-row"
           locale={{
-            emptyText: <Empty description="No users found" />
+            emptyText: <Empty description="No users found matching your criteria" />
           }}
         />
       )}

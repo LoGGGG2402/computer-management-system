@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import {
   Table,
   Tag,
@@ -11,7 +11,7 @@ import {
   Input,
   Select,
   message,
-  Space // Import Space for Form.List layout
+  Space
 } from "antd";
 import {
   ExclamationCircleOutlined,
@@ -19,69 +19,15 @@ import {
   ClockCircleOutlined,
   ReloadOutlined,
   PlusOutlined,
-  EyeOutlined, // Icon for View buttons
-  MinusCircleOutlined // Icon for removing Form.List item
+  EyeOutlined,
+  MinusCircleOutlined
 } from "@ant-design/icons";
-// Giả sử computerService được import đúng cách
 import computerService from "../../services/computer.service";
+import { useSimpleFetch } from "../../hooks/useSimpleFetch";
+import { useModalState } from "../../hooks/useModalState";
+import { useFormatting } from "../../hooks/useFormatting";
 
-// // *** Mock computerService for demonstration (Updated) ***
-// const computerService = {
-//   getComputerErrors: async (computerId) => {
-//     console.log(`Fetching errors for computer ${computerId}`);
-//     await new Promise(resolve => setTimeout(resolve, 500));
-//     // Sample data including error_details and resolution_notes
-//     const mockErrors = {
-//         1: [
-//             { id: 101, error_type: 'Hardware', error_message: 'CPU Overheating causing shutdown.', reported_at: new Date(Date.now() - 7200000).toISOString(), resolved: false, error_details: { temperature: '95C', core: 'CPU0', threshold: '90C' } },
-//             { id: 102, error_type: 'Software', error_message: 'Application crashed unexpectedly.', reported_at: new Date(Date.now() - 86400000).toISOString(), resolved: true, resolved_at: new Date(Date.now() - 43200000).toISOString(), resolution_notes: 'Restarted the application service and applied patch v1.2.', error_details: { process_id: '12345', memory_usage: '2.5GB', exception_code: '0xC0000005' } },
-//             { id: 103, error_type: 'Network', error_message: 'Cannot connect to internal server.', reported_at: new Date(Date.now() - 3600000).toISOString(), resolved: false, error_details: { target_server: 'SRV-DATA01', ip_address: '192.168.1.100', port: '1433', ping_status: 'timeout' } },
-//             { id: 104, error_type: 'Security', error_message: 'Unauthorized login attempt detected.', reported_at: new Date(Date.now() - 1800000).toISOString(), resolved: true, resolved_at: new Date().toISOString(), resolution_notes: 'Blocked source IP address at firewall. User confirmed it was not them.', error_details: { source_ip: '10.20.30.40', username: 'admin', attempt_time: new Date(Date.now() - 1800000).toISOString() } },
-//         ],
-//         2: [], // No errors for computer 2 initially
-//         // Add more computer IDs if needed
-//     };
-//     return mockErrors[computerId] || [];
-//   },
-//   resolveComputerError: async (computerId, errorId, data) => {
-//     console.log(`Resolving error ${errorId} for computer ${computerId} with notes: ${data.resolution_notes}`);
-//     await new Promise(resolve => setTimeout(resolve, 500));
-//     // Find the error in mock data to return updated info (optional, good for consistency)
-//     // For simplicity, just return a generic success structure
-//     return {
-//         error: {
-//             id: errorId,
-//             error_type: 'Unknown', // In a real scenario, fetch the actual error type
-//             error_message: 'Error resolved',
-//             reported_at: new Date().toISOString(),
-//             resolved: true,
-//             resolved_at: new Date().toISOString(),
-//             resolution_notes: data.resolution_notes,
-//             error_details: {} // Details might not change upon resolution
-//         },
-//         computerId: computerId
-//     };
-//   },
-//   reportComputerError: async (computerId, errorData) => {
-//      console.log(`Reporting new error for computer ${computerId}:`, errorData); // Log includes error_details now
-//      await new Promise(resolve => setTimeout(resolve, 500));
-//      const newError = {
-//          id: Math.floor(Math.random() * 1000) + 200,
-//          error_type: errorData.error_type,
-//          error_message: errorData.error_message,
-//          error_details: errorData.error_details || {}, // Include details
-//          reported_at: new Date().toISOString(),
-//          resolved: false,
-//          resolved_at: null,
-//          resolution_notes: null
-//      };
-//      // In a real app, you might want to add this to your mock data source if testing locally
-//      return { error: newError, computerId: computerId };
-//   }
-// };
-// // *** End Mock computerService ***
-
-const { Title, Text, Paragraph } = Typography; // Add Paragraph
+const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 const { Option } = Select;
 
@@ -89,113 +35,122 @@ const STANDARDIZED_ERROR_TYPES = [
   "Hardware", "Software", "Network", "System", "Security", "Other"
 ];
 
-// Helper function to render error details object
+/**
+ * Renders a list of error details.
+ * @param {object|null} details - The error details object.
+ * @returns {React.ReactElement} A paragraph or an unordered list of details.
+ */
 const renderErrorDetails = (details) => {
-    if (!details || Object.keys(details).length === 0) {
-        return <Paragraph>No additional details provided.</Paragraph>;
-    }
-    return (
-        <ul style={{ paddingLeft: '20px', listStyle: 'disc' }}>
-            {Object.entries(details).map(([key, value]) => (
-                <li key={key}>
-                    <Text strong>{key}:</Text>{' '}
-                    {typeof value === 'object' && value !== null 
-                        ? JSON.stringify(value) 
-                        : String(value || '')}
-                </li>
-            ))}
-        </ul>
-    );
+  if (!details || Object.keys(details).length === 0) {
+    return <Paragraph>No additional details provided.</Paragraph>;
+  }
+  return (
+    <ul style={{ paddingLeft: '20px', listStyle: 'disc' }}>
+      {Object.entries(details).map(([key, value]) => (
+        <li key={key}>
+          <Text strong>{key}:</Text>{' '}
+          {typeof value === 'object' && value !== null 
+            ? JSON.stringify(value) 
+            : String(value || '')}
+        </li>
+      ))}
+    </ul>
+  );
 };
 
+/**
+ * Component to display and manage errors for a specific computer.
+ * Allows viewing error history, reporting new errors, and resolving existing ones.
+ *
+ * @component
+ * @param {object} props - Component props.
+ * @param {string|number} props.computerId - The ID of the computer whose errors are being managed.
+ * @param {Function} [props.onRefresh] - Optional callback function triggered after resolving an error to refresh parent data.
+ * @returns {React.ReactElement} The rendered ComputerError component.
+ */
 const ComputerError = ({ computerId, onRefresh }) => {
-  const [errors, setErrors] = useState([]);
-  const [loading, setLoading] = useState(false);
-  // Modal visibility states
-  const [resolveModalVisible, setResolveModalVisible] = useState(false);
-  const [reportModalVisible, setReportModalVisible] = useState(false);
-  const [errorDetailsModalVisible, setErrorDetailsModalVisible] = useState(false); // State for error details modal
-  const [resolutionNotesModalVisible, setResolutionNotesModalVisible] = useState(false); // State for resolution notes modal
+  const { formatTimestamp } = useFormatting();
 
-  const [currentError, setCurrentError] = useState(null); // Holds the error being interacted with
+  const fetchErrorsCallback = useCallback(() => {
+    if (!computerId) return Promise.resolve([]);
+    return computerService.getComputerErrors(computerId);
+  }, [computerId]);
+
+  const { data: errors, loading, error: fetchError, refresh: fetchErrors, setData: setErrors } = useSimpleFetch(
+    fetchErrorsCallback,
+    [fetchErrorsCallback],
+    { errorMessage: 'Failed to load computer errors' }
+  );
+
+  const { isModalVisible: resolveModalVisible, selectedItem: currentError, openModal: openResolveModal, closeModal: closeResolveModal, setSelectedItem: setCurrentError } = useModalState();
+  const { isModalVisible: reportModalVisible, openModal: openReportModal, closeModal: closeReportModal } = useModalState();
+  const { isModalVisible: errorDetailsModalVisible, openModal: openErrorDetailsModal, closeModal: closeErrorDetailsModal } = useModalState();
+  const { isModalVisible: resolutionNotesModalVisible, openModal: openResolutionNotesModal, closeModal: closeResolutionNotesModal } = useModalState();
+
   const [resolveForm] = Form.useForm();
   const [reportForm] = Form.useForm();
 
-  useEffect(() => {
-    fetchErrors();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [computerId]);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [viewingError, setViewingError] = useState(null);
 
-  const fetchErrors = async () => {
-    if (!computerId) {
-        setErrors([]);
-        return;
-    };
-    setLoading(true);
-    try {
-      const errorData = await computerService.getComputerErrors(computerId);
-      setErrors(errorData || []);
-    } catch (error) {
-      console.error("Failed to fetch errors:", error);
-      message.error("Failed to load computer errors. Please try again.");
-      setErrors([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // --- Modal Open Handlers ---
   const handleOpenResolveModal = (error) => {
-    setCurrentError(error);
     resolveForm.setFieldsValue({ resolution_notes: '' });
-    setResolveModalVisible(true);
+    openResolveModal('resolve', error);
   };
 
   const handleOpenReportModal = () => {
-    reportForm.resetFields(); // Reset form including error details list
-    setReportModalVisible(true);
+    reportForm.resetFields();
+    openReportModal('report');
   };
 
   const handleOpenErrorDetailsModal = (error) => {
-    setCurrentError(error);
-    setErrorDetailsModalVisible(true);
+    setViewingError(error);
+    openErrorDetailsModal('details');
   };
 
   const handleOpenResolutionNotesModal = (error) => {
-    setCurrentError(error);
-    setResolutionNotesModalVisible(true);
+    setViewingError(error);
+    openResolutionNotesModal('notes');
   };
 
-  // --- Form Submit Handlers ---
+  const handleCloseErrorDetailsModal = () => {
+    closeErrorDetailsModal();
+    setViewingError(null);
+  };
+
+  const handleCloseResolutionNotesModal = () => {
+    closeResolutionNotesModal();
+    setViewingError(null);
+  };
+
   const handleResolveSubmit = async () => {
     try {
       const values = await resolveForm.validateFields();
-      setLoading(true);
+      setActionLoading(true);
       await computerService.resolveComputerError(computerId, currentError.id, {
         resolution_notes: values.resolution_notes,
       });
       message.success("Error has been resolved successfully!");
-      setResolveModalVisible(false);
+      closeResolveModal();
       fetchErrors();
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error("Failed to resolve error:", error);
       message.error(error.message || "Failed to resolve error. Please try again.");
     } finally {
-       setLoading(false);
+      setActionLoading(false);
     }
   };
 
   const handleReportSubmit = async () => {
     try {
       const values = await reportForm.validateFields();
-      setLoading(true);
+      setActionLoading(true);
 
-      // Convert error_details_list from Form.List [{key: k, value: v}] to object {k: v}
       const errorDetailsObject = {};
       if (values.error_details_list) {
         values.error_details_list.forEach(item => {
-          if (item && item.key) { // Ensure item and key exist
+          if (item && item.key) {
             errorDetailsObject[item.key] = item.value;
           }
         });
@@ -204,34 +159,29 @@ const ComputerError = ({ computerId, onRefresh }) => {
       await computerService.reportComputerError(computerId, {
         error_type: values.error_type,
         error_message: values.error_message,
-        error_details: errorDetailsObject, // Send the converted object
+        error_details: errorDetailsObject,
       });
 
       message.success("New error reported successfully!");
-      setReportModalVisible(false);
-      fetchErrors();
-      if (onRefresh) onRefresh();
+      closeReportModal();
+      fetchErrors(); 
     } catch (error) {
       console.error("Failed to report error:", error);
-      // Handle validation errors specifically if needed
       if (error.errorFields) {
-           message.error("Please fill in all required fields correctly.");
+        message.error("Please fill in all required fields correctly.");
       } else {
-           message.error(error.message || "Failed to report error. Please try again.");
+        message.error(error.message || "Failed to report error. Please try again.");
       }
     } finally {
-       setLoading(false);
+      setActionLoading(false);
     }
   };
 
-  // --- Refresh Logic ---
   const handleRefresh = () => {
     fetchErrors();
   };
 
-  // --- Helper Functions ---
   const getErrorTypeTag = (errorType) => {
-    // (Function remains the same as before)
     if (!errorType) return <Tag>Unknown</Tag>;
     const lowerCaseType = errorType.toLowerCase();
     switch (lowerCaseType) {
@@ -245,7 +195,6 @@ const ComputerError = ({ computerId, onRefresh }) => {
     }
   };
 
-  // --- Table Columns (Updated) ---
   const columns = [
     {
       title: "Type",
@@ -257,15 +206,15 @@ const ComputerError = ({ computerId, onRefresh }) => {
       width: 120,
     },
     {
-      title: "Message / Details", // Updated title
+      title: "Message / Details",
       dataIndex: "error_message",
       key: "message_details",
-      render: (_, record) => ( // Render a button instead of text
+      render: (_, record) => (
         <Button
           type="link"
           icon={<EyeOutlined />}
           onClick={() => handleOpenErrorDetailsModal(record)}
-          style={{ padding: 0 }} // Remove padding for link-like appearance
+          style={{ padding: 0 }}
         >
           View Details
         </Button>
@@ -275,7 +224,7 @@ const ComputerError = ({ computerId, onRefresh }) => {
       title: "Reported At",
       dataIndex: "reported_at",
       key: "reported_at",
-      render: (text) => text ? new Date(text).toLocaleString() : '-',
+      render: (text) => formatTimestamp(text),
       sorter: (a, b) => new Date(a.reported_at) - new Date(b.reported_at),
       defaultSortOrder: 'descend',
       width: 180,
@@ -283,11 +232,13 @@ const ComputerError = ({ computerId, onRefresh }) => {
     {
       title: "Status",
       key: "status",
-      dataIndex: 'resolved', // Use dataIndex for filtering/sorting
-      render: (resolved) => ( // Render based on resolved status
-        resolved ?
-          <Tag color="success" icon={<CheckCircleOutlined />}>Resolved</Tag> :
+      dataIndex: 'resolved',
+      render: (resolved) => (
+        resolved ? (
+          <Tag color="success" icon={<CheckCircleOutlined />}>Resolved</Tag>
+        ) : (
           <Tag color="error" icon={<ClockCircleOutlined />}>Pending</Tag>
+        )
       ),
       filters: [
         { text: 'Pending', value: false },
@@ -301,22 +252,21 @@ const ComputerError = ({ computerId, onRefresh }) => {
       key: "action",
       render: (_, record) => (
         record.resolved ? (
-          // Show "View Resolution" button if resolved
           <Button
-            type="default" // Or "link"
+            type="default"
             size="small"
             icon={<EyeOutlined />}
             onClick={() => handleOpenResolutionNotesModal(record)}
-            disabled={!record.resolution_notes} // Disable if no notes
+            disabled={!record.resolution_notes}
           >
             View Resolution
           </Button>
         ) : (
-          // Show "Resolve" button if pending
           <Button
             type="primary"
             size="small"
             onClick={() => handleOpenResolveModal(record)}
+            loading={actionLoading && resolveModalVisible && currentError?.id === record.id}
           >
             Resolve
           </Button>
@@ -326,52 +276,48 @@ const ComputerError = ({ computerId, onRefresh }) => {
     },
   ];
 
-  // --- Render Component ---
   return (
     <div className="computer-errors" style={{ padding: '20px', background: '#f0f2f5', borderRadius: '8px' }}>
-      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'center', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>
           <ExclamationCircleOutlined style={{ marginRight: 8 }}/> Error History
         </Title>
         <div>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenReportModal} style={{ marginRight: 8 }} disabled={!computerId || loading}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenReportModal} style={{ marginRight: 8 }} disabled={!computerId || loading || actionLoading}>
             Report New Error
           </Button>
-          <Button icon={<ReloadOutlined />} onClick={handleRefresh} disabled={loading}>
+          <Button icon={<ReloadOutlined />} onClick={handleRefresh} disabled={loading || actionLoading}>
             Refresh
           </Button>
         </div>
       </div>
 
-      {/* Error Table */}
-      {loading && !resolveModalVisible && !reportModalVisible && !errorDetailsModalVisible && !resolutionNotesModalVisible ? ( // Show main spinner only if no modals are open
+      {loading ? (
         <div style={{ textAlign: "center", padding: "50px" }}>
           <Spin size="large" />
         </div>
-      ) : errors.length > 0 ? (
+      ) : fetchError ? (
+         <Empty description={fetchError || "Failed to load errors"} />
+      ) : (errors || []).length > 0 ? (
         <Table
           columns={columns}
-          dataSource={errors.map(error => ({ ...error, key: error.id }))}
+          dataSource={(errors || []).map(error => ({ ...error, key: error.id }))}
           pagination={{ pageSize: 5, showSizeChanger: true, pageSizeOptions: ['5', '10', '20'], size: 'small' }}
-          loading={loading && !reportModalVisible && !resolveModalVisible && !errorDetailsModalVisible && !resolutionNotesModalVisible} // Show table loading indicator if modals aren't blocking
+          loading={loading}
           size="small"
           rowClassName={(record) => !record.resolved ? 'table-row-pending' : ''}
-          scroll={{ x: 700 }} // Add horizontal scroll if content overflows
+          scroll={{ x: 700 }}
         />
       ) : (
-        !loading && <Empty description={computerId ? "No errors reported for this computer" : "Select a computer to view errors"} />
+        <Empty description={computerId ? "No errors reported for this computer" : "Select a computer to view errors"} />
       )}
 
-      {/* --- Modals --- */}
-
-      {/* Resolve Error Modal */}
       <Modal
         title="Resolve Error"
         open={resolveModalVisible}
         onOk={handleResolveSubmit}
-        onCancel={() => setResolveModalVisible(false)}
-        confirmLoading={loading}
+        onCancel={closeResolveModal}
+        confirmLoading={actionLoading}
         okText="Mark as Resolved"
         destroyOnClose
       >
@@ -380,7 +326,7 @@ const ComputerError = ({ computerId, onRefresh }) => {
             <div style={{ marginBottom: 16 }}>
               <Text strong>Error Type:</Text> {getErrorTypeTag(currentError.error_type)} <br />
               <Text strong>Message:</Text> {currentError.error_message} <br />
-              <Text strong>Reported At:</Text> {new Date(currentError.reported_at).toLocaleString()}
+              <Text strong>Reported At:</Text> {formatTimestamp(currentError.reported_at)}
             </div>
             <Form form={resolveForm} layout="vertical" preserve={false}>
               <Form.Item name="resolution_notes" label="Resolution Notes" rules={[{ required: true, message: "Please enter resolution notes" }]}>
@@ -391,18 +337,17 @@ const ComputerError = ({ computerId, onRefresh }) => {
         )}
       </Modal>
 
-      {/* Report New Error Modal (Updated with Error Details) */}
       <Modal
         title="Report New Error"
         open={reportModalVisible}
         onOk={handleReportSubmit}
-        onCancel={() => setReportModalVisible(false)}
-        confirmLoading={loading}
+        onCancel={closeReportModal}
+        confirmLoading={actionLoading}
         okText="Report Error"
         destroyOnClose
-        width={600} // Increase width for details section
+        width={600}
       >
-         <Form form={reportForm} layout="vertical" preserve={false} initialValues={{ error_details_list: [{ key: '', value: '' }] }}> {/* Add initial empty item */}
+         <Form form={reportForm} layout="vertical" preserve={false} initialValues={{ error_details_list: [{ key: '', value: '' }] }}>
            <Form.Item name="error_type" label="Error Type" rules={[{ required: true, message: "Please select the error type" }]}>
              <Select placeholder="Select error type">
                {STANDARDIZED_ERROR_TYPES.map(type => (<Option key={type} value={type}>{type}</Option>))}
@@ -412,7 +357,6 @@ const ComputerError = ({ computerId, onRefresh }) => {
              <TextArea rows={3} placeholder="Describe the error encountered" />
            </Form.Item>
 
-           {/* Dynamic Error Details Section */}
            <Form.Item label="Error Details (Optional Key-Value Pairs)">
              <Form.List name="error_details_list">
                {(fields, { add, remove }) => (
@@ -422,7 +366,6 @@ const ComputerError = ({ computerId, onRefresh }) => {
                        <Form.Item
                          {...restField}
                          name={[name, 'key']}
-                         // rules={[{ required: true, message: 'Missing key' }]} // Make key optional or required based on needs
                          style={{ marginBottom: 0 }}
                        >
                          <Input placeholder="Key (e.g., IP Address)" style={{ width: '180px' }}/>
@@ -430,7 +373,6 @@ const ComputerError = ({ computerId, onRefresh }) => {
                        <Form.Item
                          {...restField}
                          name={[name, 'value']}
-                         // rules={[{ required: true, message: 'Missing value' }]} // Make value optional or required
                           style={{ marginBottom: 0 }}
                        >
                          <Input placeholder="Value (e.g., 192.168.1.10)" style={{ width: '250px' }}/>
@@ -450,71 +392,67 @@ const ComputerError = ({ computerId, onRefresh }) => {
          </Form>
       </Modal>
 
-       {/* Error Details Modal (New) */}
-       <Modal
-         title="Error Details"
-         open={errorDetailsModalVisible}
-         onCancel={() => setErrorDetailsModalVisible(false)}
-         footer={[ <Button key="back" onClick={() => setErrorDetailsModalVisible(false)}>Close</Button> ]} // Only Close button needed
-       >
-         {currentError && (
-           <>
-             <Paragraph>
-               <Text strong>Type:</Text> {getErrorTypeTag(currentError.error_type)}
-             </Paragraph>
-             <Paragraph>
-               <Text strong>Reported At:</Text> {new Date(currentError.reported_at).toLocaleString()}
-             </Paragraph>
-              <Paragraph>
-                 <Text strong>Message:</Text>
-                 <Paragraph style={{ marginTop: '4px', paddingLeft: '10px', borderLeft: '3px solid #eee' }}>
-                     {currentError.error_message || "N/A"}
-                 </Paragraph>
-             </Paragraph>
-             <Paragraph>
-               <Text strong>Additional Details:</Text>
-               {renderErrorDetails(currentError.error_details)}
-             </Paragraph>
-           </>
-         )}
-       </Modal>
+      <Modal
+        title="Error Details"
+        open={errorDetailsModalVisible}
+        onCancel={handleCloseErrorDetailsModal}
+        footer={[ <Button key="back" onClick={handleCloseErrorDetailsModal}>Close</Button> ]}
+      >
+        {viewingError && (
+          <>
+            <Paragraph>
+              <Text strong>Type:</Text> {getErrorTypeTag(viewingError.error_type)}
+            </Paragraph>
+            <Paragraph>
+              <Text strong>Reported At:</Text> {formatTimestamp(viewingError.reported_at)}
+            </Paragraph>
+            <Paragraph>
+              <Text strong>Message:</Text>
+              <Paragraph style={{ marginTop: '4px', paddingLeft: '10px', borderLeft: '3px solid #eee' }}>
+                {viewingError.error_message || "N/A"}
+              </Paragraph>
+            </Paragraph>
+            <Paragraph>
+              <Text strong>Additional Details:</Text>
+              {renderErrorDetails(viewingError.error_details)}
+            </Paragraph>
+          </>
+        )}
+      </Modal>
 
-       {/* Resolution Notes Modal (New) */}
-       <Modal
-         title="Resolution Notes"
-         open={resolutionNotesModalVisible}
-         onCancel={() => setResolutionNotesModalVisible(false)}
-         footer={[ <Button key="back" onClick={() => setResolutionNotesModalVisible(false)}>Close</Button> ]}
-       >
-         {currentError && (
-           <>
-             <Paragraph>
-               <Text strong>Error Type:</Text> {getErrorTypeTag(currentError.error_type)}
-             </Paragraph>
-             <Paragraph>
-                <Text strong>Resolved At:</Text> {currentError.resolved_at ? new Date(currentError.resolved_at).toLocaleString() : "N/A"}
-             </Paragraph>
-             <Paragraph>
-               <Text strong>Notes:</Text>
-                <Paragraph style={{ marginTop: '4px', paddingLeft: '10px', borderLeft: '3px solid #eee' }}>
-                   {currentError.resolution_notes || "No resolution notes provided."}
-                </Paragraph>
-             </Paragraph>
-           </>
-         )}
-       </Modal>
+      <Modal
+        title="Resolution Notes"
+        open={resolutionNotesModalVisible}
+        onCancel={handleCloseResolutionNotesModal}
+        footer={[ <Button key="back" onClick={handleCloseResolutionNotesModal}>Close</Button> ]}
+      >
+        {viewingError && (
+          <>
+            <Paragraph>
+              <Text strong>Type:</Text> {getErrorTypeTag(viewingError.error_type)}
+            </Paragraph>
+            <Paragraph>
+              <Text strong>Resolved At:</Text> {viewingError.resolved_at ? formatTimestamp(viewingError.resolved_at) : "N/A"}
+            </Paragraph>
+            <Paragraph>
+              <Text strong>Notes:</Text>
+              <Paragraph style={{ marginTop: '4px', paddingLeft: '10px', borderLeft: '3px solid #eee' }}>
+                {viewingError.resolution_notes || "No resolution notes provided."}
+              </Paragraph>
+            </Paragraph>
+          </>
+        )}
+      </Modal>
 
-      {/* Optional Styling */}
       <style>{`
-        .table-row-pending td { /* Optional: Highlight pending rows */
-          /* background-color: #fffbe6 !important; */
+        .table-row-pending td {
         }
         .ant-table-thead > tr > th {
-            background-color: #fafafa !important; /* Header background */
-            font-weight: bold; /* Make header bold */
+            background-color: #fafafa !important;
+            font-weight: bold;
         }
         .ant-form-item {
-            margin-bottom: 16px; /* Consistent spacing for form items */
+            margin-bottom: 16px;
         }
       `}</style>
     </div>

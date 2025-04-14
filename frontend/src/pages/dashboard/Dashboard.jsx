@@ -1,6 +1,25 @@
+/**
+ * @fileoverview Main dashboard component for the Computer Management System
+ * 
+ * This component serves as the landing page after user authentication,
+ * providing quick access to user information and common navigation links.
+ * 
+ * @module Dashboard
+ */
 import { useAuth } from '../../contexts/AuthContext';
-import { Link } from 'react-router-dom'; // 👈 Thêm dòng này
+import { Link } from 'react-router-dom';
 
+/**
+ * Dashboard Component
+ * 
+ * Displays a personalized dashboard with:
+ * - User profile information
+ * - Quick links to frequently accessed sections
+ * - Role-specific navigation options (for admins)
+ * 
+ * @component
+ * @returns {React.ReactElement} The rendered Dashboard component
+ */
 const Dashboard = () => {
   const { user } = useAuth();
 
@@ -59,6 +78,14 @@ const Dashboard = () => {
                 Dashboard
               </Link>
             </li>
+            <li>
+              <Link to="/rooms" className="flex items-center text-blue-600 no-underline p-2 rounded-lg transition-colors hover:bg-blue-50">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+                </svg>
+                View Rooms
+              </Link>
+            </li>
             {user?.role === 'admin' && (
               <>
                 <li>
@@ -78,13 +105,18 @@ const Dashboard = () => {
                     User Management
                   </Link>
                 </li>
+                <li>
+                  <Link to="/admin/computers" className="flex items-center text-blue-600 no-underline p-2 rounded-lg transition-colors hover:bg-blue-50">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    Computer Management
+                  </Link>
+                </li>
               </>
             )}
           </ul>
         </div>
-
-        {/* System Status Card */}
-        {/* ...phần này không cần sửa vì không có <a> */}
       </div>
     </div>
   );

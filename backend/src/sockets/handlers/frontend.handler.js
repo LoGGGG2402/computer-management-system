@@ -157,7 +157,7 @@ const setupFrontendHandlers = (socket) => {
    * @param {function} ack - The Socket.IO acknowledgement callback.
    */
   socket.on('frontend:send_command', async (payload, ack) => { // Add ack parameter
-    const { computerId, command } = payload || {};
+    const { computerId, command, commandType = 'console' } = payload || {};
     const userId = socket.data.userId;
 
     // Ensure ack is a function before proceeding
@@ -203,20 +203,20 @@ const setupFrontendHandlers = (socket) => {
       websocketService.storePendingCommand(commandId, userId, computerId);
 
       // Attempt to send command to agent
-      const sent = websocketService.sendCommandToAgent(computerId, command, commandId);
+      const sent = websocketService.sendCommandToAgent(computerId, command, commandId, commandType);
 
       // --- Respond via Acknowledgement ---
       if (sent) {
-        console.info(`Command ${commandId} initiated by user ${userId} sent towards computer ${computerId} (Socket ${socket.id})`);
+        console.info(`Command ${commandId} (type: ${commandType}) initiated by user ${userId} sent towards computer ${computerId} (Socket ${socket.id})`);
         // Acknowledge success with commandId
-        ack({ status: 'success', computerId, commandId });
+        ack({ status: 'success', computerId, commandId, commandType });
         // NOTE: No separate 'command_sent' emit needed here for success
       } else {
-        console.warn(`Failed to send command ${commandId} from user ${userId} to computer ${computerId}: Agent not connected (Socket ${socket.id})`);
+        console.warn(`Failed to send command ${commandId} (type: ${commandType}) from user ${userId} to computer ${computerId}: Agent not connected (Socket ${socket.id})`);
         // Clean up pending command if send failed immediately
         websocketService.pendingCommands.delete(commandId); // Assuming delete method exists
         // Acknowledge failure
-        ack({ status: 'error', message: 'Agent is not connected', computerId, commandId }); // Include commandId even on error if generated
+        ack({ status: 'error', message: 'Agent is not connected', computerId, commandId, commandType }); // Include commandId even on error if generated
       }
 
     } catch (error) {

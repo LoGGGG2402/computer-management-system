@@ -75,7 +75,7 @@ class RoomController {
    *       - id {number} - Computer ID
    *       - name {string} - Computer name
    *       - status {string} - Computer status ('online'/'offline') 
-   *       - has_active_errors {boolean} - Whether computer has active errors
+   *       - have_active_errors {boolean} - Whether computer has active errors
    *       - last_update {Date} - When computer was last updated
    *       - room_id {number} - ID of the room this computer belongs to
    *       - pos_x {number} - X position in room grid

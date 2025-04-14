@@ -1,108 +1,100 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Transfer, Button, message } from 'antd';
 import roomService from '../../services/room.service';
 import userService from '../../services/user.service';
 import { LoadingComponent } from '../common';
+import { useSimpleFetch } from '../../hooks/useSimpleFetch';
 
 const AssignmentComponent = ({ type, id, onSuccess }) => {
   const [targetKeys, setTargetKeys] = useState([]);
-  const [availableItems, setAvailableItems] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [initialAssignments, setInitialAssignments] = useState([]);
-  const [assignedUsers, setAssignedUsers] = useState([]);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  useEffect(() => {
-    if (id) {
-      fetchData();
+  const fetchAvailableItems = useCallback(async () => {
+    if (type === 'room') {
+      return await userService.getAllUsers();
     }
+    return null;
+  }, [type]);
+
+  const { data: availableItemsData, loading: loadingAvailable } = useSimpleFetch(
+    fetchAvailableItems,
+    [fetchAvailableItems],
+    { errorMessage: `Failed to load available ${type === 'room' ? 'users' : 'items'}` }
+  );
+
+  const fetchAssignedItems = useCallback(async () => {
+    if (!id) return null;
+    if (type === 'room') {
+      return await roomService.getUsersInRoom(id);
+    }
+    return null;
   }, [id, type]);
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      if (type === 'room') {
-        // For a room, we need all users and the users assigned to this room
-        const [allUsers, assignedRoomUsers] = await Promise.all([
-          userService.getAllUsers(),
-          roomService.getUsersInRoom(id)
-        ]);
-        
-        // Format all users for the Transfer component
-        const formattedUsers = allUsers?.users?.map(user => ({
-          key: user.id,
-          title: `${user.firstName || ''} ${user.lastName || ''} (${user.username || 'User'})`,
-          description: user.email || '',
-        })) || [];
-        
-        setAvailableItems(formattedUsers);
-        
-        // Extract assigned user IDs
-        const assignedUserIds = assignedRoomUsers?.map(user => user.id) || [];
-        setAssignedUsers(assignedRoomUsers || []);
-        
-        setTargetKeys(assignedUserIds);
-        setInitialAssignments(assignedUserIds);
-      } else if (type === 'user') {
-        // For user-to-room assignments, we'd need similar functionality
-        // But it appears the user service doesn't have a getUserRooms method
-        // This would need to be implemented in the backend and user service
-        message.info('User-to-Room assignment functionality is not implemented yet');
-      }
-    } catch (error) {
-      message.error('Failed to load assignment data');
-      console.error('Error loading assignment data:', error);
-    } finally {
-      setLoading(false);
+  const { data: assignedItemsData, loading: loadingAssigned, refresh: refreshAssigned } = useSimpleFetch(
+    fetchAssignedItems,
+    [fetchAssignedItems],
+    { errorMessage: `Failed to load assigned ${type === 'room' ? 'users' : 'items'}` }
+  );
+
+  const availableItems = useMemo(() => {
+    const users = availableItemsData?.users || availableItemsData?.data?.users || availableItemsData?.data || availableItemsData || [];
+    return users.map(user => ({
+      key: user.id.toString(),
+      title: `${user.firstName || ''} ${user.lastName || ''} (${user.username || 'User'})`.trim(),
+      description: user.email || '',
+    })) || [];
+  }, [availableItemsData]);
+
+  useEffect(() => {
+    if (assignedItemsData) {
+      const assignedKeys = (assignedItemsData || []).map(item => item.id.toString());
+      setTargetKeys(assignedKeys);
+      setInitialAssignments(assignedKeys);
     }
-  };
+  }, [assignedItemsData]);
+
+  const loading = loadingAvailable || loadingAssigned;
 
   const handleChange = (newTargetKeys) => {
     setTargetKeys(newTargetKeys);
   };
 
   const handleSave = async () => {
+    setActionLoading(true);
     try {
-      setLoading(true);
-      
-      // Find items to add (in targetKeys but not in initialAssignments)
-      const itemsToAdd = targetKeys.filter(key => !initialAssignments.includes(key));
-      
-      // Find items to remove (in initialAssignments but not in targetKeys)
-      const itemsToRemove = initialAssignments.filter(key => !targetKeys.includes(key));
-      
+      const itemsToAdd = targetKeys.filter(key => !initialAssignments.includes(key)).map(key => parseInt(key));
+      const itemsToRemove = initialAssignments.filter(key => !targetKeys.includes(key)).map(key => parseInt(key));
+
+      let success = true;
       if (type === 'room') {
-        // For a room, we're assigning/unassigning users
-        let updatedUsers = [...assignedUsers];
-        
+        const promises = [];
         if (itemsToAdd.length > 0) {
-          await roomService.assignUsersToRoom(id, itemsToAdd);
-          // We'd need to fetch the updated user data to get complete user objects
+          promises.push(roomService.assignUsersToRoom(id, itemsToAdd));
         }
-        
         if (itemsToRemove.length > 0) {
-          await roomService.unassignUsersFromRoom(id, itemsToRemove);
-          updatedUsers = updatedUsers.filter(user => !itemsToRemove.includes(user.id));
+          promises.push(roomService.unassignUsersFromRoom(id, itemsToRemove));
         }
-        
-        // If any changes were made, fetch the updated list of users
-        if (itemsToAdd.length > 0 || itemsToRemove.length > 0) {
-          const refreshedUsers = await roomService.getUsersInRoom(id);
-          setAssignedUsers(refreshedUsers);
-          
-          // Update initial assignments to match current state after successful save
-          const refreshedUserIds = refreshedUsers.map(user => user.id);
-          setTargetKeys(refreshedUserIds);
-          setInitialAssignments(refreshedUserIds);
-        }
+        await Promise.all(promises);
+      } else {
+        success = false;
+        message.warn(`Save logic for type '${type}' not implemented.`);
       }
-      
-      message.success('Assignments updated successfully');
-      if (onSuccess) onSuccess(assignedUsers);
+
+      if (success) {
+        message.success('Assignments updated successfully');
+        const refreshedAssigned = await refreshAssigned();
+        const refreshedKeys = (refreshedAssigned || []).map(item => item.id.toString());
+        setInitialAssignments(refreshedKeys);
+        setTargetKeys(refreshedKeys);
+
+        if (onSuccess) onSuccess(refreshedAssigned || []);
+      }
     } catch (error) {
       message.error('Failed to update assignments');
       console.error('Error updating assignments:', error);
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
@@ -115,19 +107,25 @@ const AssignmentComponent = ({ type, id, onSuccess }) => {
           <Transfer
             dataSource={availableItems}
             titles={[
-              type === 'room' ? 'Available Users' : 'Available Rooms',
-              type === 'room' ? 'Assigned Users' : 'Assigned Rooms'
+              type === 'room' ? 'Available Users' : 'Available Items',
+              type === 'room' ? 'Assigned Users' : 'Assigned Items'
             ]}
             targetKeys={targetKeys}
             onChange={handleChange}
             render={item => item.title}
             listStyle={{
-              width: 350,
+              width: '45%',
               height: 300,
             }}
+            showSearch
+            filterOption={(inputValue, item) =>
+              item.title.toLowerCase().includes(inputValue.toLowerCase()) ||
+              item.description.toLowerCase().includes(inputValue.toLowerCase())
+            }
+            disabled={actionLoading}
           />
           <div style={{ marginTop: 16, textAlign: 'right' }}>
-            <Button type="primary" onClick={handleSave}>
+            <Button type="primary" onClick={handleSave} loading={actionLoading} disabled={loading}>
               Save Assignments
             </Button>
           </div>

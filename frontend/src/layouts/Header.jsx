@@ -1,23 +1,52 @@
+/**
+ * @fileoverview Main navigation header component
+ * 
+ * This component handles the top navigation bar of the application,
+ * providing links to main sections and user authentication controls.
+ * It has responsive design with mobile menu support.
+ * 
+ * @module Header
+ */
 import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { Link, useNavigate } from "react-router-dom";
 
+/**
+ * Header Component
+ * 
+ * Provides the main navigation header with:
+ * - Application logo and brand
+ * - Navigation links based on user role
+ * - User profile information display
+ * - Authentication controls (logout button)
+ * - Responsive mobile menu
+ * 
+ * @component
+ * @returns {React.ReactElement|null} The rendered Header component or null if user is not authenticated
+ */
 const Header = () => {
   const { user, isAuthenticated, isAdmin, logoutAction } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  /**
+   * Handles user logout action
+   * 
+   * @function
+   */
   const handleLogout = () => {
     logoutAction();
     navigate("/login");
   };
 
+  // Don't render header for unauthenticated users
   if (!isAuthenticated) return null;
 
   return (
     <header className="bg-white shadow-md sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
+          {/* Logo and Brand Section */}
           <div className="flex-shrink-0 flex items-center">
             <Link to="/dashboard" className="flex items-center no-underline">
               <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
@@ -40,7 +69,7 @@ const Header = () => {
             </Link>
           </div>
 
-          {/* Desktop Navigation */}
+          {/* Desktop Navigation Links */}
           <nav className="hidden md:flex space-x-6">
             <Link
               to="/dashboard"
@@ -48,8 +77,6 @@ const Header = () => {
             >
               Dashboard
             </Link>
-
-            {/* Add links for all users */}
 
             <Link
               to="/rooms"
@@ -65,11 +92,23 @@ const Header = () => {
                 >
                   Admin Panel
                 </Link>
+                <Link
+                  to="/admin/users"
+                  className="text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                >
+                  Users
+                </Link>
+                <Link
+                  to="/admin/computers"
+                  className="text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                >
+                  Computers
+                </Link>
               </>
             )}
           </nav>
 
-          {/* User Profile and Logout */}
+          {/* Desktop User Profile and Logout */}
           <div className="hidden md:flex items-center space-x-4">
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
@@ -126,7 +165,7 @@ const Header = () => {
             </button>
           </div>
 
-          {/* Mobile menu button */}
+          {/* Mobile Menu Button */}
           <div className="md:hidden flex items-center">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -171,7 +210,7 @@ const Header = () => {
         </div>
       </div>
 
-      {/* Mobile menu, show/hide based on menu state */}
+      {/* Mobile Menu */}
       {mobileMenuOpen && (
         <div className="md:hidden">
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white shadow-lg">
@@ -183,7 +222,6 @@ const Header = () => {
               Dashboard
             </Link>
 
-            {/* Add links for all users in mobile menu */}
             <Link
               to="/rooms"
               className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50"
@@ -191,14 +229,8 @@ const Header = () => {
             >
               Rooms
             </Link>
-            <Link
-              to="/computers"
-              className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Computers
-            </Link>
 
+            {/* Admin Links */}
             {isAdmin && (
               <>
                 <Link
@@ -209,11 +241,18 @@ const Header = () => {
                   Admin Panel
                 </Link>
                 <Link
-                  to="/rooms"
+                  to="/admin/users"
                   className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50"
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  Room Management
+                  User Management
+                </Link>
+                <Link
+                  to="/admin/computers"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Computer Management
                 </Link>
               </>
             )}

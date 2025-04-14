@@ -1,3 +1,13 @@
+/**
+ * @fileoverview Command Handle Context Provider for managing remote command execution
+ * 
+ * This context handles sending commands to remote computers through WebSocket connection,
+ * tracking command execution promises, storing command history, and managing command results.
+ * It provides a unified interface for executing commands on remote computers and handling
+ * their results in a consistent way.
+ * 
+ * @module CommandHandleContext
+ */
 import React, {
   createContext,
   useContext,
@@ -11,6 +21,17 @@ import { useSocket } from "./SocketContext";
 
 const CommandHandleContext = createContext(null);
 
+/**
+ * Command Handle Provider Component
+ * 
+ * Provides functionality to send commands to remote computers through WebSocket,
+ * track command results, manage command history, and handle timeouts.
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {React.ReactNode} props.children - Child components
+ * @returns {React.ReactElement} Command handle provider component
+ */
 export const CommandHandleProvider = ({ children }) => {
   const [commandResults, setCommandResults] = useState({});
   const commandPromisesRef = useRef({});
@@ -18,6 +39,18 @@ export const CommandHandleProvider = ({ children }) => {
 
   const { socket, isSocketReady } = useSocket();
 
+  /**
+   * Sets up event listeners for command completion events from WebSocket
+   * 
+   * When a command completes on a remote computer:
+   * 1. The result is stored in the commandResults state
+   * 2. The associated Promise is resolved with the command result
+   * 3. The command history is maintained for reference
+   * 
+   * @effect
+   * @listens socket - The Socket.IO instance from SocketContext
+   * @listens isSocketReady - Whether the socket is authenticated and ready
+   */
   useEffect(() => {
     if (socket && isSocketReady) {
       console.log(
@@ -33,14 +66,16 @@ export const CommandHandleProvider = ({ children }) => {
             // Get the original command text from our ref if available
             const commandText =
               commandsHistoryRef.current[data.commandId]?.command || null;
+            const commandType =
+              commandsHistoryRef.current[data.commandId]?.commandType || data.type || 'console';
 
             const newResult = {
-              stdout: data.stdout,
-              stderr: data.stderr,
-              exitCode: data.exitCode,
+              type: data.type || commandType || 'console',
+              success: data.success === true,
+              result: data.result,
               timestamp: Date.now(),
               commandId: data.commandId,
-              commandText: commandText, // Store the command text with the result
+              commandText: commandText,
             };
 
             return {
@@ -88,8 +123,30 @@ export const CommandHandleProvider = ({ children }) => {
     }
   }, [socket, isSocketReady]);
 
+  /**
+   * Sends a command to a remote computer and returns a Promise for the result
+   * 
+   * This function:
+   * 1. Validates socket connection and input parameters
+   * 2. Constructs and sends the command payload to the server
+   * 3. Creates a Promise that resolves when the command completes
+   * 4. Sets up timeout handling for commands that don't complete
+   * 5. Tracks command history for reference
+   * 
+   * @function
+   * @param {number} computerId - ID of the target computer
+   * @param {string} command - Command string to execute on the remote computer
+   * @param {string} [commandType='console'] - Type of command (e.g., 'console', 'script')
+   * @returns {Promise<Object>} Promise resolving to the command result
+   * @returns {string} return.commandId - Unique ID for the command
+   * @returns {boolean} return.success - Whether the command executed successfully
+   * @returns {string} return.result - Command output text
+   * @returns {string} return.type - Command type (e.g., 'console', 'script')
+   * @returns {string} return.commandText - Original command text
+   * @throws {Error} When socket is not ready or parameters are invalid
+   */
   const sendCommand = useCallback(
-    (computerId, command) => {
+    (computerId, command, commandType = 'console') => {
       if (!isSocketReady || !socket?.connected) {
         console.error(
           "[CMD] Cannot send command: Socket not ready or not connected."
@@ -106,11 +163,11 @@ export const CommandHandleProvider = ({ children }) => {
       }
 
       console.log(
-        `[CMD] Sending command to computer ${computerId}: "${command}"`
+        `[CMD] Sending command to computer ${computerId}: "${command}" (type: ${commandType})`
       );
 
       return new Promise((resolve, reject) => {
-        const payload = { computerId, command };
+        const payload = { computerId, command, commandType };
         const TIMEOUT_DURATION = 30000;
         let commandId = null;
         let timeoutId = null;
@@ -133,6 +190,7 @@ export const CommandHandleProvider = ({ children }) => {
           resolve({
             ...value,
             commandText: command, // Include the command text in the resolved value
+            commandType, // Include the command type in the resolved value
           });
         };
 
@@ -158,6 +216,7 @@ export const CommandHandleProvider = ({ children }) => {
             commandsHistoryRef.current[commandId] = {
               command: command,
               computerId: computerId,
+              commandType: commandType,
               timestamp: Date.now(),
             };
 
@@ -191,7 +250,13 @@ export const CommandHandleProvider = ({ children }) => {
     [socket, isSocketReady]
   );
 
-  // Clean up old command history entries periodically
+  /**
+   * Periodically cleans up old command history entries
+   * Prevents memory leaks by removing command history entries that are 
+   * older than the specified age threshold.
+   * 
+   * @effect
+   */
   useEffect(() => {
     const HISTORY_CLEANUP_INTERVAL = 30 * 60 * 1000; // 30 minutes
     const HISTORY_MAX_AGE = 2 * 60 * 60 * 1000; // 2 hours
@@ -218,6 +283,15 @@ export const CommandHandleProvider = ({ children }) => {
     return () => clearInterval(cleanupInterval);
   }, []);
 
+  /**
+   * Clears command results for a specific computer
+   * 
+   * @function
+   * @param {number} computerId - ID of the computer to clear results for
+   * @param {number|null} [resultIndex=null] - Optional index of specific result to clear
+   *                                          If null, clears all results for the computer
+   * @returns {void}
+   */
   const clearResult = useCallback((computerId, resultIndex = null) => {
     setCommandResults((prevResults) => {
       if (!prevResults[computerId]) return prevResults;
@@ -251,11 +325,24 @@ export const CommandHandleProvider = ({ children }) => {
     });
   }, []);
 
+  /**
+   * Clears all command results across all computers
+   * 
+   * @function
+   * @returns {void}
+   */
   const clearAllResults = useCallback(() => {
     console.log("[CMD] Clearing all command results.");
     setCommandResults({});
   }, []);
 
+  /**
+   * Periodically removes expired command results
+   * Results older than EXPIRY_TIME (30 minutes) are automatically removed
+   * 
+   * @effect
+   * @listens commandResults - The current state of command results
+   */
   useEffect(() => {
     const EXPIRY_TIME = 30 * 60 * 1000;
     const interval = setInterval(() => {
@@ -298,6 +385,19 @@ export const CommandHandleProvider = ({ children }) => {
     return () => clearInterval(interval);
   }, [commandResults]);
 
+  /**
+   * Gets the most recent command result for a specific computer
+   * 
+   * @function
+   * @param {number} computerId - ID of the computer to get results for
+   * @returns {Object|null} Most recent command result or null if none exists
+   * @returns {string} return.type - Command type (e.g., 'console', 'script')
+   * @returns {boolean} return.success - Whether the command executed successfully
+   * @returns {string} return.result - Command output text
+   * @returns {number} return.timestamp - Timestamp when the result was received
+   * @returns {string} return.commandId - Unique ID for the command
+   * @returns {string} return.commandText - Original command text
+   */
   const getLatestResult = useCallback(
     (computerId) => {
       const results = commandResults[computerId];
@@ -318,10 +418,34 @@ export const CommandHandleProvider = ({ children }) => {
 
   const contextValue = useMemo(
     () => ({
+      /**
+       * All command results organized by computer ID
+       * @type {Object.<number, Array<Object>>}
+       */
       commandResults,
+      
+      /**
+       * Get the most recent command result for a computer
+       * @type {function(number): Object|null}
+       */
       getLatestResult,
+      
+      /**
+       * Clear specific or all results for a computer
+       * @type {function(number, number=): void}
+       */
       clearResult,
+      
+      /**
+       * Clear all command results for all computers
+       * @type {function(): void}
+       */
       clearAllResults,
+      
+      /**
+       * Send a command to a remote computer
+       * @type {function(number, string, string=): Promise<Object>}
+       */
       sendCommand,
     }),
     [commandResults, getLatestResult, clearResult, clearAllResults, sendCommand]
@@ -334,6 +458,18 @@ export const CommandHandleProvider = ({ children }) => {
   );
 };
 
+/**
+ * Hook for accessing the command handle context
+ * 
+ * @function
+ * @returns {Object} Command handle context value
+ * @returns {Object.<number, Array<Object>>} return.commandResults - All command results organized by computer ID
+ * @returns {function(number): Object|null} return.getLatestResult - Get latest result for a computer
+ * @returns {function(number, number=): void} return.clearResult - Clear specific result(s) for a computer
+ * @returns {function(): void} return.clearAllResults - Clear all results for all computers
+ * @returns {function(number, string, string=): Promise<Object>} return.sendCommand - Send command to computer
+ * @throws {Error} If used outside of a CommandHandleProvider
+ */
 export const useCommandHandle = () => {
   const context = useContext(CommandHandleContext);
   if (!context) {

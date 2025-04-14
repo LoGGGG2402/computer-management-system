@@ -84,7 +84,11 @@ async function handleAgentStatusUpdate(socket, data) {
 /**
  * Handles command execution results received from an authenticated agent.
  * @param {import("socket.io").Socket} socket - The socket instance for the agent client.
- * @param {object} data - Command result data containing { commandId, stdout, stderr, exitCode }.
+ * @param {object} data - Command result data containing:
+ *  - commandId: string - unique ID of the executed command
+ *  - type: string - command type (e.g., 'console')
+ *  - success: boolean - whether the command was successful
+ *  - result: object - detailed result object with stdout, stderr, exitCode
  */
 function handleAgentCommandResult(socket, data) {
   const computerId = socket.data.computerId;
@@ -94,21 +98,25 @@ function handleAgentCommandResult(socket, data) {
     return;
   }
 
-  const { commandId, stdout, stderr, exitCode } = data || {};
+  const { commandId, type, success, result } = data || {};
 
   if (!commandId) {
     console.warn(`Command result missing commandId from computer ${computerId} (Socket ${socket.id}). Ignoring.`);
     return;
   }
 
-  console.debug(`Command result for ID ${commandId} received from computer ${computerId} (Socket ${socket.id})`);
+  console.debug(`Command result for ID ${commandId} received from computer ${computerId} (Socket ${socket.id}) - Type: ${type || 'unknown'}, Success: ${success}`);
 
   try {
-    websocketService.notifyCommandCompletion(commandId, {
-      stdout,
-      stderr,
-      exitCode
-    });
+    // Standardize the result format for the frontend
+    const standardizedResult = {
+      commandId,
+      type: type || 'console',
+      success: !!success,
+      result
+    };
+
+    websocketService.notifyCommandCompletion(commandId, standardizedResult);
 
   } catch (error) {
     console.error(`Command result handling error for command ${commandId}, computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
