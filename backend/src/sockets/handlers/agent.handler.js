@@ -69,7 +69,6 @@ async function handleAgentStatusUpdate(socket, data) {
 
   try {
     websocketService.updateRealtimeCache(computerId, {
-      status: 'online',
       cpuUsage: data.cpuUsage,
       ramUsage: data.ramUsage,
       diskUsage: data.diskUsage,

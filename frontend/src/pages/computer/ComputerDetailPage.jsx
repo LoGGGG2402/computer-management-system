@@ -125,34 +125,7 @@ const ComputerDetailPage = () => {
     newSearchParams.set('tab', key);
     navigate(`${location.pathname}?${newSearchParams.toString()}`, { replace: true });
   };
-
-  /**
-   * Renders the appropriate status tag based on computer status
-   * 
-   * @function
-   * @param {string} status - Computer status (online/offline)
-   * @returns {React.ReactNode} - Status tag component
-   */
-  const renderStatusTag = (status) => {
-    const displayStatus = isSocketReady ? status : (computer?.status || 'unknown');
-    switch (displayStatus) {
-      case "online":
-        return (
-          <Tag color="success" icon={<CheckCircleOutlined />}>
-            Online { !isSocketReady && computer?.status === 'online' ? '(cached)' : ''}
-          </Tag>
-        );
-      case "offline":
-        return (
-          <Tag color="error" icon={<CloseCircleOutlined />}>
-            Offline
-          </Tag>
-        );
-      default:
-        return <Tag color="default">Unknown</Tag>;
-    }
-  };
-
+  
   /**
    * Defines tab items for the tabbed interface
    * 
@@ -245,7 +218,6 @@ const ComputerDetailPage = () => {
               Back
             </Button>
             <span>{computer.name}</span>
-            {renderStatusTag(computerStatus?.status)}
           </Space>
         }
         extra={

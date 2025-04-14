@@ -19,7 +19,6 @@ class AuthController {
    *     - role {string} - User role ('admin' or 'user')
    *     - is_active {boolean} - Whether the user account is active
    *     - token {string} - JWT authentication token
-   *     - expires_at {string} - Token expiration timestamp
    *   - message {string} - Error message (only if status is 'error')
    */
   async handleLogin(req, res) {

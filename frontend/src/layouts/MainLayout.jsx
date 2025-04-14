@@ -101,6 +101,9 @@ const NotificationHandler = () => {
      */
     const handleAgentRegistered = (data) => {
       console.log('[NotificationHandler] Received agent registration notification:', data);
+      const positionInfoText = data.positionInfo ? 
+        `Location: ${data.positionInfo.roomName || 'Unknown'}\nPosition: Row ${data.positionInfo.posY || '?'}, Column ${data.positionInfo.posX || '?'}` : 
+        null;
       toast.success(
         (t) => (
           <div 
@@ -112,6 +115,14 @@ const NotificationHandler = () => {
           >
             <div className="font-bold">New Agent Registered</div>
             <div>A new agent has been registered.</div>
+            <div className="bg-gray-100 px-2 py-1 rounded my-1 font-mono">{data.computerId}</div>
+            {positionInfoText && (
+              <div className="text-sm text-gray-600 mt-1">
+                {positionInfoText.split('\n').map((line, i) => (
+                  <div key={i}>{line}</div>
+                ))}
+              </div>
+            )}
             <div className="text-xs text-gray-500 mt-1">Click to view computer details</div>
           </div>
         ),

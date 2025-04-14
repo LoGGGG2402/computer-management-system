@@ -6,43 +6,38 @@ Dưới đây là cấu trúc thư mục hiện tại của dự án, bao gồm 
 
 ```
 computer-management-system/
-├── build_instruction.md      # Hướng dẫn xây dựng và triển khai
 ├── package.json              # Package.json cấp root
 ├── readme.md                 # Thông tin tổng quan về dự án
 │
 ├── agent/                    # Thư mục gốc cho Agent (Python)
+│   ├── requirements.txt      # Các thư viện Python cần thiết
 │   ├── config/               # Cấu hình Agent
 │   │   └── agent_config.json # File cấu hình Agent
-│   ├── src/                  # Mã nguồn chính của Agent
-│   │   ├── __init__.py       # File khởi tạo
-│   │   ├── main.py           # Điểm vào của Agent
-│   │   ├── auth/             # Module xử lý xác thực
-│   │   │   ├── __init__.py
-│   │   │   ├── mfa_handler.py   # Xử lý MFA
-│   │   │   └── token_manager.py # Quản lý token xác thực
-│   │   ├── communication/    # Module giao tiếp
-│   │   │   ├── __init__.py
-│   │   │   ├── http_client.py   # Client HTTP
-│   │   │   └── ws_client.py     # Client WebSocket
-│   │   ├── config/           # Module quản lý cấu hình
-│   │   │   ├── __init__.py
-│   │   │   └── config_manager.py
-│   │   ├── core/             # Module xử lý chính
-│   │   │   ├── __init__.py
-│   │   │   └── agent.py         # Logic xử lý chính của Agent
-│   │   ├── monitoring/       # Module giám sát
-│   │   │   ├── __init__.py
-│   │   │   ├── process_monitor.py # Giám sát quy trình
-│   │   │   └── system_monitor.py  # Giám sát hệ thống
-│   │   └── utils/            # Tiện ích hỗ trợ
-│   │       ├── __init__.py
-│   │       ├── logger.py     # Xử lý logging
-│   │       └── utils.py      # Các hàm tiện ích
-│   ├── storage/              # Lưu trữ dữ liệu của Agent
-│   │   ├── device_id         # ID thiết bị
-│   │   ├── room_config.json  # Cấu hình phòng
-│   │   └── logs/             # Thư mục logs
-│   └── requirements.txt      # Các thư viện Python cần thiết
+│   └── src/                  # Mã nguồn chính của Agent
+│       ├── __init__.py       # File khởi tạo
+│       ├── main.py           # Điểm vào của Agent
+│       ├── communication/    # Module giao tiếp
+│       │   ├── __init__.py
+│       │   ├── http_client.py   # Client HTTP
+│       │   └── ws_client.py     # Client WebSocket
+│       ├── config/           # Module quản lý cấu hình
+│       │   ├── __init__.py
+│       │   ├── config_manager.py # Quản lý cấu hình
+│       │   └── state_manager.py  # Quản lý trạng thái
+│       ├── core/             # Module xử lý chính
+│       │   ├── __init__.py
+│       │   ├── agent.py         # Logic chính của Agent
+│       │   └── command_executor.py # Thực thi lệnh
+│       ├── monitoring/       # Module giám sát
+│       │   ├── __init__.py
+│       │   └── system_monitor.py # Giám sát hệ thống
+│       ├── ui/               # Module giao diện người dùng
+│       │   ├── __init__.py
+│       │   └── ui_console.py    # Giao diện console
+│       └── utils/            # Tiện ích hỗ trợ
+│           ├── __init__.py
+│           ├── logger.py     # Xử lý logging
+│           └── utils.py      # Các hàm tiện ích
 │
 ├── backend/                  # Thư mục gốc cho Backend (Node.js/Express)
 │   ├── package.json          # Quản lý dependencies của Backend
@@ -57,9 +52,13 @@ computer-management-system/
 │       │   ├── auth.controller.js     # Xử lý xác thực
 │       │   ├── computer.controller.js # Quản lý máy tính
 │       │   ├── room.controller.js     # Quản lý phòng
+│       │   ├── statics.controller.js  # Xử lý dữ liệu thống kê
 │       │   └── user.controller.js     # Quản lý người dùng
 │       ├── database/         # Tương tác với cơ sở dữ liệu
 │       │   ├── migrations/   # Database migrations
+│       │   │   ├── 20250407000001-create-users.js
+│       │   │   ├── 20250407000002-create-rooms.js
+│       │   │   └── ...
 │       │   ├── models/       # Định nghĩa các model
 │       │   └── seeders/      # Dữ liệu mẫu
 │       ├── middleware/       # Middleware
@@ -74,17 +73,19 @@ computer-management-system/
 │       │   ├── computer.routes.js
 │       │   ├── index.js      # Tổng hợp và export tất cả routes
 │       │   ├── room.routes.js
+│       │   ├── statics.routes.js
 │       │   └── user.routes.js
 │       ├── services/         # Logic nghiệp vụ
 │       │   ├── auth.service.js
 │       │   ├── computer.service.js
 │       │   ├── mfa.service.js
 │       │   ├── room.service.js
+│       │   ├── statics.service.js
 │       │   ├── user.service.js
 │       │   └── websocket.service.js
-│       ├── sockets/          # Xử lý WebSocket connections
-│       │   └── index.js
-│       └── utils/            # Tiện ích
+│       └── sockets/          # Xử lý WebSocket connections
+│           ├── index.js
+│           └── handlers/     # Xử lý các sự kiện WebSocket
 │
 ├── docs/                     # Tài liệu dự án
 │   ├── activity_flows.md     # Mô tả các luồng hoạt động
@@ -106,53 +107,62 @@ computer-management-system/
         ├── assets/           # Tài nguyên như hình ảnh, fonts
         │   └── react.svg     # Logo React
         ├── components/       # Các component tái sử dụng
-        │   ├── admin/
-        │   ├── computer/
-        │   └── room/
+        │   ├── admin/        # Component cho trang Admin
+        │   ├── common/       # Component dùng chung
+        │   ├── computer/     # Component quản lý máy tính
+        │   └── room/         # Component quản lý phòng
         ├── contexts/         # React Contexts
-        │   ├── AuthContext.jsx # Context quản lý trạng thái xác thực
-        │   └── SocketContext.jsx # Context quản lý kết nối Socket
+        │   ├── AuthContext.jsx       # Quản lý trạng thái xác thực
+        │   ├── CommandHandleContext.jsx # Quản lý xử lý lệnh
+        │   └── SocketContext.jsx     # Quản lý kết nối Socket
+        ├── hooks/            # Custom React hooks
+        │   ├── useCopyToClipboard.js # Hook sao chép vào clipboard
+        │   ├── useFormatting.js      # Hook định dạng dữ liệu
+        │   ├── useModalState.js      # Hook quản lý trạng thái modal
+        │   └── useSimpleFetch.js     # Hook gọi API đơn giản
         ├── layouts/          # Layout components
         │   ├── Header.jsx    # Component header
         │   └── MainLayout.jsx # Layout chính của ứng dụng
         ├── pages/            # Các trang chính
         │   ├── LoginPage.jsx # Trang đăng nhập
-        │   ├── Admin/
-        │   ├── dashboard/
-        │   └── room/
+        │   ├── Admin/        # Các trang quản trị
+        │   ├── computer/     # Các trang quản lý máy tính
+        │   ├── dashboard/    # Trang dashboard
+        │   ├── room/         # Các trang quản lý phòng
+        │   └── user/         # Các trang quản lý người dùng
         ├── router/           # Cấu hình routing
         │   ├── index.jsx     # Định nghĩa routes chính
         │   └── ProtectedRoute.jsx # Bảo vệ route cho người dùng đã đăng nhập
-        ├── services/         # Các service giao tiếp với Backend
+        └── services/         # Các service giao tiếp với Backend
             ├── api.js        # Cấu hình axios và các hàm xử lý HTTP chung
-            ├── auth.service.js # Service xác thực
+            ├── auth.service.js     # Service xác thực
             ├── computer.service.js # Service quản lý máy tính
-            ├── room.service.js # Service quản lý phòng
-            └── user.service.js # Service quản lý người dùng
+            ├── room.service.js     # Service quản lý phòng
+            ├── statics.service.js  # Service dữ liệu thống kê
+            └── user.service.js     # Service quản lý người dùng
 ```
 
 ## Đặc điểm cấu trúc:
 
+### Agent (Python)
+- Cấu trúc mô-đun hóa với điểm vào là `main.py`
+- Logic chính nằm trong `core/agent.py`
+- Module `communication/` xử lý giao tiếp HTTP và WebSocket
+- Module `monitoring/` thu thập thông tin hệ thống
+- Module `config/` quản lý cấu hình và trạng thái Agent
+- Module `utils/` cung cấp các tiện ích như logging
+
 ### Backend (Node.js/Express)
-- Sử dụng mô hình MVC (Model-View-Controller) với Sequelize ORM để tương tác với cơ sở dữ liệu.
-- Models được định nghĩa trong `database/models/`.
-- Controllers xử lý logic request trong `controllers/`.
-- Routes định nghĩa các endpoint API trong `routes/`.
-- Services chứa logic nghiệp vụ phức tạp trong `services/`.
-- WebSocket được xử lý trong `sockets/`.
+- Mô hình MVC với Sequelize ORM
+- Controllers trong `controllers/` xử lý các request API
+- Routes trong `routes/` định nghĩa các endpoint
+- Services trong `services/` chứa logic nghiệp vụ
+- WebSocket được xử lý trong `sockets/`
+- Database migrations trong `database/migrations/`
 
 ### Frontend (React/Vite)
-- Sử dụng React với Vite làm build tool.
-- Cấu trúc theo tính năng với các thư mục `components/`, `pages/`, `contexts/`, `hooks/`.
-- Sử dụng React Router để quản lý routing.
-- Services trong `services/` giúp giao tiếp với Backend API.
-
-### Agent (Python)
-- Cấu trúc mô-đun hóa với điểm vào là `main.py`.
-- Tổ chức theo chức năng với các modules: `auth/`, `communication/`, `config/`, `core/`, `monitoring/`, `utils/`.
-- Logic chính nằm trong `core/agent.py`.
-- `auth/` xử lý xác thực (MFA, token).
-- `communication/` quản lý giao tiếp HTTP và WebSocket.
-- `monitoring/` thu thập thông tin hệ thống.
-- Cấu hình được lưu trong `config/agent_config.json`.
-- Dữ liệu cục bộ được lưu trong `storage/`.
+- Cấu trúc theo tính năng với các thư mục `components/`, `pages/`, `contexts/`, `hooks/`
+- Sử dụng React Router cho quản lý routing
+- Services trong `services/` xử lý giao tiếp với Backend API
+- Contexts quản lý trạng thái toàn cục
+- Các trang được tổ chức theo chức năng (admin, phòng, máy tính)

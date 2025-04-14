@@ -91,12 +91,16 @@ class WebSocketService {
 
   /**
    * Notifies admin users when an agent has been successfully registered.
-   * @param {string} agentId - The unique agent ID.
    * @param {number} computerId - The computer ID in the database.
+   * @param {Object} positionInfo - Additional information about the agent's position.
+   * @param {number} positionInfo.roomId - Room ID where the agent is located.
+   * @param {number} positionInfo.posX - X position in the room grid.
+   * @param {number} positionInfo.posY - Y position in the room grid.
    */
-  notifyAdminsAgentRegistered(agentId, computerId) {
+  notifyAdminsAgentRegistered(computerId, positionInfo) {
      const eventData = {
       computerId,
+      positionInfo,
       timestamp: new Date(),
     };
     this._emitToRoom(ROOM_PREFIXES.ADMIN, EVENTS.ADMIN_AGENT_REGISTERED, eventData);
@@ -107,12 +111,9 @@ class WebSocketService {
    * Updates the realtime cache for a computer (uses Map).
    * @param {number} computerId - The computer ID.
    * @param {object} data - The status data to update.
-   * @param {string} [data.status] - Computer status (online/offline).
    * @param {number} [data.cpuUsage] - CPU usage percentage.
    * @param {number} [data.ramUsage] - RAM usage percentage.
    * @param {number} [data.diskUsage] - Disk usage percentage.
-   * @param {string} [data.osInfo] - Operating system information.
-   * @param {string} [data.error] - Any error message from the agent.
    */
   updateRealtimeCache(computerId, data) {
     if (!computerId || typeof computerId !== 'number') {
@@ -166,8 +167,6 @@ class WebSocketService {
    * - ramUsage: number - RAM usage percentage.
    * - diskUsage: number - Disk usage percentage.
    * - lastUpdated: Date - Timestamp of the last status update.
-   * - error: string - Any error message, if present.
-   * - osInfo: object - Information about the operating system.
    */
   getAgentRealtimeStatus(computerId) {
     if (!computerId) return null;
@@ -197,7 +196,6 @@ class WebSocketService {
           console.info(`Computer ${computerId} confirmed offline after delay.`);
 
           const offlineStatusData = {
-              computerId,
               status: 'offline',
               cpuUsage: 0,
               ramUsage: 0,
@@ -248,7 +246,7 @@ class WebSocketService {
 
       const eventData = {
         computerId,
-        status: statusData.status,
+        status: "online",
         cpuUsage: statusData.cpuUsage ?? 0,
         ramUsage: statusData.ramUsage ?? 0,
         diskUsage: statusData.diskUsage ?? 0,
