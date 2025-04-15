@@ -151,12 +151,11 @@ class CommandExecutor:
         if use_shell:
             logger.warning(f"Executing command '{command_id}' with shell=True. Ensure the command source is trusted and sanitized.")
 
-        # Determine appropriate encoding based on platform
-        # Use UTF-8 as a general default, but Windows might use others like 'cp1252' or 'cp437'
-        # Using 'utf-8' with 'replace' errors is often a safe compromise.
-        output_encoding = 'utf-8' #'locale' might be better sometimes but can fail
+        # Windows-specific encoding - use cp1252 for Windows console output
+        output_encoding = 'cp1252'
         
         try:
+            # Use CREATE_NO_WINDOW to hide console window when running commands
             process = subprocess.run(
                 command,
                 shell=use_shell, # !!! SECURITY RISK if command is untrusted !!!
@@ -166,7 +165,8 @@ class CommandExecutor:
                 encoding=output_encoding,
                 errors='replace', # Handle decoding errors gracefully
                 timeout=self.command_timeout, # Use configured timeout
-                check=False # Don't raise exception for non-zero exit code, handle it manually
+                check=False, # Don't raise exception for non-zero exit code, handle it manually
+                creationflags=subprocess.CREATE_NO_WINDOW # Windows-specific flag to hide console window
             )
 
             result["result"] = {

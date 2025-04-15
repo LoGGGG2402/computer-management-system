@@ -232,7 +232,7 @@ class StateManager:
                 self._remove_token_from_file(agent_id)
                 return True
             except Exception as e:
-                logger.error(f"Failed to save token to keyring for agent_id {agent_id}: {e}. Falling back to file.", exc_info=False) # Don't need full traceback usually
+                logger.error(f"Failed to save token to keyring for agent_id {agent_id}: {e}. Falling back to file.", exc_info=False)
 
         # --- Fallback to JSON File ---
         token_file_path = self._get_token_fallback_path()
@@ -253,11 +253,17 @@ class StateManager:
             token_data[agent_id] = token
             if save_json(token_data, token_file_path):
                 logger.info(f"Token saved to file for agent_id: {agent_id} (Keyring not used or failed)")
-                # Set appropriate file permissions (more secure on Linux/macOS)
+                # Windows doesn't use 0o600 permissions, use NTFS attributes instead
                 try:
-                    os.chmod(token_file_path, 0o600) # Read/write for owner only
-                except OSError as e:
-                    logger.warning(f"Could not set secure permissions (600) on token file {token_file_path}: {e}")
+                    # On Windows, can use attrib command to mark as hidden if needed
+                    # This is optional and only adds a minor security benefit
+                    import subprocess
+                    subprocess.run(["attrib", "+H", token_file_path], 
+                                  creationflags=subprocess.CREATE_NO_WINDOW,
+                                  check=False)
+                    logger.debug(f"Set token file {token_file_path} to hidden attribute")
+                except Exception as e:
+                    logger.warning(f"Could not set hidden attribute on token file {token_file_path}: {e}")
                 return True
             else:
                 logger.error(f"Failed to save token to file {token_file_path} for agent_id: {agent_id}")

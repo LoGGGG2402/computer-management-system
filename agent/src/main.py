@@ -3,10 +3,17 @@
 """
 Main entry point for the Computer Management System Agent.
 Initializes configuration, logging, dependencies, and starts the core Agent process.
+Includes logic to ensure only one instance runs using a lock file.
 """
 import os
 import sys
 import argparse
+import atexit  # To ensure lock release on exit
+import psutil  # For checking if PID exists
+
+# --- Global Lock File Variables ---
+_lock_file_handle = None
+_lock_file_path = None
 
 # --- Path Setup ---
 # Ensure the 'src' directory is in the Python path
@@ -93,10 +100,118 @@ def initialize_logging(config: ConfigManager, debug_mode: bool):
         log_file_path=log_file
     )
 
+def release_lock():
+    """Releases the lock file."""
+    global _lock_file_handle, _lock_file_path
+    logger = get_logger("agent.main") # Get logger instance
+    if _lock_file_handle:
+        try:
+            # Release lock and close file
+            _lock_file_handle.close()
+            _lock_file_handle = None
+            logger.debug(f"Closed lock file handle.")
+            # Attempt to remove the lock file
+            if _lock_file_path and os.path.exists(_lock_file_path):
+                os.remove(_lock_file_path)
+                logger.info(f"Removed lock file: {_lock_file_path}")
+        except OSError as e:
+            logger.error(f"Error releasing lock file {_lock_file_path}: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error releasing lock: {e}", exc_info=True)
+    elif _lock_file_path and os.path.exists(_lock_file_path):
+         # If handle is None but file exists, try removing it
+         try:
+             os.remove(_lock_file_path)
+             logger.info(f"Removed potentially stale lock file: {_lock_file_path}")
+         except OSError as e:
+             logger.error(f"Error removing stale lock file {_lock_file_path}: {e}")
+
+def acquire_lock(storage_path: str) -> bool:
+    """Attempts to acquire a lock file to ensure single instance."""
+    global _lock_file_handle, _lock_file_path
+    logger = get_logger("agent.main") # Get logger instance
+
+    if not storage_path or not os.path.isdir(storage_path):
+         logger.critical(f"Invalid storage path '{storage_path}' for lock file. Cannot ensure single instance.")
+         print(f"FATAL: Invalid storage path '{storage_path}' provided for lock file.", file=sys.stderr)
+         return False
+
+    _lock_file_path = os.path.join(storage_path, "agent.lock")
+    logger.debug(f"Attempting to acquire lock file: {_lock_file_path}")
+
+    try:
+        # Atomically create and open the file for writing
+        # O_EXCL ensures creation fails if file exists
+        fd = os.open(_lock_file_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        _lock_file_handle = os.fdopen(fd, 'w')
+
+        # Write current PID to the lock file
+        pid = str(os.getpid())
+        _lock_file_handle.write(pid)
+        _lock_file_handle.flush() # Ensure PID is written
+        logger.info(f"Acquired lock file: {_lock_file_path} with PID: {pid}")
+        # Register the release function to be called on exit
+        atexit.register(release_lock)
+        return True
+
+    except FileExistsError:
+        logger.warning(f"Lock file {_lock_file_path} already exists. Checking PID...")
+        try:
+            with open(_lock_file_path, 'r') as f:
+                existing_pid_str = f.read().strip()
+            if not existing_pid_str.isdigit():
+                 raise ValueError("Lock file does not contain a valid PID.")
+            
+            existing_pid = int(existing_pid_str)
+            
+            if psutil.pid_exists(existing_pid):
+                # Check if the process is actually the agent
+                try:
+                    proc = psutil.Process(existing_pid)
+                    # Basic check: is the process name similar?
+                    proc_name = proc.name().lower()
+                    is_agent = 'python' in proc_name or 'agent' in proc_name 
+                    
+                    if is_agent: # Assume it's our agent if PID exists and looks like python/agent
+                        logger.critical(f"Another agent instance (PID: {existing_pid}) appears to be running.")
+                        print(f"ERROR: Another instance of the agent (PID: {existing_pid}) seems to be running.", file=sys.stderr)
+                        return False
+                    else:
+                         logger.warning(f"PID {existing_pid} exists but doesn't look like the agent process ('{proc_name}'). Treating lock as potentially stale.")
+                         # Proceed to treat as stale lock
+                    
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                     # Process died between pid_exists and Process() or we lack permissions
+                     logger.warning(f"Process with PID {existing_pid} existed but is now gone or inaccessible. Treating lock as stale.")
+                     # Proceed to treat as stale lock
+            else:
+                 logger.warning(f"Process with PID {existing_pid} from lock file does not exist. Treating lock as stale.")
+
+            # --- Stale Lock Handling ---
+            logger.warning(f"Attempting to remove stale lock file: {_lock_file_path}")
+            os.remove(_lock_file_path)
+            # Retry acquiring the lock
+            return acquire_lock(storage_path)
+
+        except (IOError, ValueError, OSError) as e:
+            logger.error(f"Error checking existing lock file {_lock_file_path}: {e}. Assuming another instance is running.", exc_info=True)
+            print(f"ERROR: Could not verify existing lock file {_lock_file_path}. Please check manually. {e}", file=sys.stderr)
+            return False
+        except Exception as e: # Catch any other unexpected errors during check
+             logger.critical(f"Unexpected error checking lock file {_lock_file_path}: {e}", exc_info=True)
+             print(f"FATAL: Unexpected error checking lock file {_lock_file_path}. {e}", file=sys.stderr)
+             return False
+             
+    except Exception as e: # Catch other errors during initial os.open
+        logger.critical(f"Failed to create or lock file {_lock_file_path}: {e}", exc_info=True)
+        print(f"FATAL: Could not create lock file {_lock_file_path}. {e}", file=sys.stderr)
+        return False
+
 def main() -> int:
     """Main function to initialize and start the agent."""
     args = parse_arguments()
     logger = None # Initialize logger variable
+    agent_instance = None # Keep track of agent instance for cleanup
 
     try:
         # 1. Initialize Configuration Manager
@@ -108,10 +223,17 @@ def main() -> int:
         logger = get_logger("agent.main") # Get logger after initialization
         logger.info("Configuration and Logging initialized successfully.")
 
-        # 3. Initialize Core Components (Dependency Injection)
-        logger.info("Initializing core components...")
-        # State Manager (needs config)
+        # 3. Initialize State Manager (needed for lock file path)
+        logger.info("Initializing state manager...")
         state_manager = StateManager(config_manager)
+        storage_path = state_manager.storage_path # Get validated storage path
+
+        # --- Acquire Lock ---
+        if not acquire_lock(storage_path):
+             # Error message already printed by acquire_lock
+             return 1 # Exit if lock cannot be acquired
+        # --- Lock Acquired ---
+
         # Ensure device ID exists early (catches storage errors)
         state_manager.ensure_device_id()
 
@@ -127,7 +249,7 @@ def main() -> int:
 
         # 4. Initialize the Agent Core (Inject all dependencies)
         logger.info("Creating Agent instance...")
-        agent = Agent(
+        agent_instance = Agent( # Assign to agent_instance
             config_manager=config_manager,
             state_manager=state_manager,
             http_client=http_client,
@@ -138,7 +260,7 @@ def main() -> int:
 
         # 5. Start the Agent
         logger.info("Starting Agent main loop...")
-        agent.start() # This method blocks until stopped or error
+        agent_instance.start() # This method blocks until stopped or error
 
         logger.info("Agent has stopped.")
         return 0
@@ -149,8 +271,8 @@ def main() -> int:
          return 1
     except ValueError as e:
          # Invalid config, missing keys, storage path issues, etc.
+         # Logger might not be fully initialized here if error is early
          print(f"FATAL: Initialization error: {e}. Agent cannot start.", file=sys.stderr)
-         # Log if logger was initialized
          if logger:
               logger.critical(f"Initialization error: {e}", exc_info=True)
          return 1
@@ -161,11 +283,12 @@ def main() -> int:
               logger.critical(f"Agent runtime error during initialization: {e}", exc_info=True)
          return 1
     except KeyboardInterrupt:
-        # Handle Ctrl+C during initialization phase
+        # Handle Ctrl+C during initialization phase (before agent.start loop)
         print("\nAgent startup interrupted by user (Ctrl+C). Exiting.", file=sys.stderr)
         if logger:
              logger.info("Agent startup interrupted by user (Ctrl+C).")
-        return 0 # Clean exit code for user interruption
+        # Lock will be released by atexit handler
+        return 0 
     except Exception as e:
         # Catch any other unexpected critical errors during setup
         print(f"FATAL: An unexpected critical error occurred during initialization: {e}", file=sys.stderr)
@@ -176,6 +299,14 @@ def main() -> int:
              import traceback
              traceback.print_exc()
         return 1
+    finally:
+         # Explicitly release lock here as a fallback, though atexit should handle it
+         # release_lock() # atexit is generally preferred
+         # Ensure agent stop is called if instance was created but start loop failed/exited unexpectedly
+         if agent_instance and agent_instance._running.is_set():
+              logger.info("Ensuring agent is stopped in main finally block...")
+              agent_instance.stop()
+         logger.info("Main function exiting.")
 
 if __name__ == "__main__":
     exit_code = main()
