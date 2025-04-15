@@ -137,10 +137,7 @@ const SimpleComputerCard = ({ computer }) => {
   };
 
   const isOnline =
-    (isSocketReady && statusData?.status === "online") ||
-    (!isSocketReady && computer.status === "online") ||
-    (computer.last_update &&
-      new Date() - new Date(computer.last_update) < 5 * 60 * 1000);
+    (isSocketReady && statusData?.status === "online");
 
   const cpuUsage = statusData?.cpuUsage ?? 0;
   const ramUsage = statusData?.ramUsage ?? 0;

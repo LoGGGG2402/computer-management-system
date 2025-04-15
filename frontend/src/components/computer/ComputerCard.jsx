@@ -100,6 +100,12 @@ const ComputerCard = React.memo(({
     try {
       await computerService.deleteComputer(computer.id);
       message.success('Computer deleted successfully');
+      // Navigate back to the room page if room exists, otherwise go to computers list
+      if (computer.room?.id) {
+        navigate(`/rooms/${computer.room.id}`);
+      } else {
+        navigate('/computers');
+      }
       if (onRefresh) onRefresh(); 
     } catch (error) {
       message.error('Failed to delete computer');

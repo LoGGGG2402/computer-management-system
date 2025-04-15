@@ -107,6 +107,7 @@ const setupFrontendHandlers = (socket) => {
         if (currentStatus) {
              socket.emit(websocketService.EVENTS.COMPUTER_STATUS_UPDATED, {
                 computerId,
+                status: "online",
                 ...currentStatus,
              });
         }

@@ -104,7 +104,7 @@ class WebSocketService {
       timestamp: new Date(),
     };
     this._emitToRoom(ROOM_PREFIXES.ADMIN, EVENTS.ADMIN_AGENT_REGISTERED, eventData);
-    console.info(`Agent registration notification sent for agent ${agentId} (Computer ID: ${computerId})`);
+    console.info(`Agent registration notification for Computer ID: ${computerId} with position info sent to admin room.`);
   }
 
   /**
