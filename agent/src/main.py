@@ -45,9 +45,19 @@ from src.utils.logger import setup_logger, get_logger
 def parse_arguments() -> argparse.Namespace:
     """Parses command line arguments for configuration path and debug mode."""
     parser = argparse.ArgumentParser(description='Computer Management System Agent')
-    # Default config path relative to project root (agent directory)
+    
+    # Determine if running as PyInstaller executable
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # Running as executable - use executable directory as base
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        # Running as script - use project_root
+        base_dir = project_root
+    
+    # Default config path relative to appropriate base directory
     default_config_name = 'agent_config.json'
-    default_config_path = os.path.join(project_root, 'config', default_config_name)
+    default_config_path = os.path.join(base_dir, 'config', default_config_name)
+    
     parser.add_argument(
         '--config',
         type=str,
@@ -81,10 +91,17 @@ def initialize_logging(config: ConfigManager, debug_mode: bool):
 
     # Construct log file path using storage_path from config
     if log_storage_path:
-        # Ensure storage_path is absolute or resolve relative to project root?
-        # Assuming storage_path is relative to project root if not absolute
+        # Determine base directory based on whether we're running as executable or script
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # Running as executable - use executable directory as base
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            # Running as script - use project_root
+            base_dir = project_root
+            
+        # Ensure storage_path is absolute or resolve relative to base directory
         if not os.path.isabs(log_storage_path):
-             log_storage_path = os.path.join(project_root, log_storage_path)
+             log_storage_path = os.path.join(base_dir, log_storage_path)
              print(f"Resolved relative storage_path to: {log_storage_path}")
 
         log_dir = os.path.join(log_storage_path, 'logs')
@@ -131,6 +148,18 @@ def acquire_lock(storage_path: str) -> bool:
     global _lock_file_handle, _lock_file_path
     logger = get_logger("agent.main") # Get logger instance
 
+    # Make sure storage_path is an absolute path
+    if not os.path.isabs(storage_path):
+        # Determine base directory based on whether we're running as executable or script
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # Running as executable - use executable directory as base
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            # Running as script - use project_root
+            base_dir = project_root
+        
+        storage_path = os.path.join(base_dir, storage_path)
+    
     if not storage_path or not os.path.isdir(storage_path):
          logger.critical(f"Invalid storage path '{storage_path}' for lock file. Cannot ensure single instance.")
          print(f"FATAL: Invalid storage path '{storage_path}' provided for lock file.", file=sys.stderr)

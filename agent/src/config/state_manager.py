@@ -45,12 +45,28 @@ class StateManager:
             ValueError: If storage path is not configured or invalid.
         """
         self.config = config
-        self.storage_path = self.config.get('storage_path')
+        storage_path = self.config.get('storage_path')
         self.state_filename = self.config.get('agent.state_filename', 'agent_state.json')
 
-        if not self.storage_path:
+        if not storage_path:
             # This should have been caught by ConfigManager validation, but double-check
             raise ValueError("Storage path is not configured. StateManager cannot operate.")
+
+        # Handle relative storage paths - determine base directory
+        if not os.path.isabs(storage_path):
+            # Check if running as executable or as script
+            if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+                # Running as executable - use executable directory as base
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                # Running as script - use project root (relative to this file)
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            
+            # Resolve the absolute path
+            self.storage_path = os.path.join(base_dir, storage_path)
+            logger.debug(f"Resolved relative storage path to: {self.storage_path}")
+        else:
+            self.storage_path = storage_path
 
         # Ensure storage path exists
         try:
@@ -65,7 +81,6 @@ class StateManager:
         except OSError as e:
              logger.critical(f"Error creating storage directory {self.storage_path}: {e}")
              raise ValueError(f"Could not create storage directory: {e}")
-
 
         self.state_filepath = os.path.join(self.storage_path, self.state_filename)
         self._state_cache: Optional[Dict[str, Any]] = None # In-memory cache for state file

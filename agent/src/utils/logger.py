@@ -126,21 +126,20 @@ def setup_logger(
 
 def get_logger(name: str = "agent") -> logging.Logger:
     """
-    Retrieves a logger instance by name.
-
-    If the logger hasn't been set up via `setup_logger` yet, it returns
-    a basic logger instance associated with the name. It's recommended to
-    call `setup_logger` first in the main application entry point.
-
+    Get a configured logger instance by name.
+    
+    If a logger with this name has not been set up through setup_logger() yet,
+    this will automatically set it up with default settings.
+    
     Args:
-        name (str): The name of the logger.
-
+        name (str): The name of the logger to retrieve.
+        
     Returns:
-        logging.Logger: The logger instance.
+        logging.Logger: The configured logger instance.
     """
-    # Ensure a basic configuration exists if setup_logger hasn't been called
-    # This prevents "No handlers could be found for logger '...'" messages
-    # if logging.getLogger(name).level == logging.NOTSET and not logging.getLogger(name).handlers:
-    #     logging.basicConfig() # Sets up a default handler to stderr for the root logger
-
-    return logging.getLogger(name)
+    # If logger not already configured, set it up with defaults
+    if name not in _loggers:
+        return setup_logger(name)
+    
+    # Return the existing logger
+    return _loggers[name]
