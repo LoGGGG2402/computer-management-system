@@ -17,6 +17,17 @@ from src.config.config_manager import ConfigManager # Import class for type hint
 from src.utils.utils import load_json, save_json
 from src.system.windows_utils import is_running_as_admin # Added for privilege check
 
+# Imports for ACLs
+try:
+    import win32security
+    import win32api
+    import ntsecuritycon as win32con
+    import pywintypes
+    WINDOWS_ACL_SUPPORT = True
+except ImportError:
+    WINDOWS_ACL_SUPPORT = False
+    logger.warning("win32security or related modules not found. ACL setting will be skipped.")
+
 # Optional keyring support
 try:
     import keyring # type: ignore
@@ -91,19 +102,25 @@ class StateManager:
 
     def _ensure_storage_directory(self):
         """
-        Ensures the determined storage directory exists and is accessible.
+        Ensures the determined storage directory exists, is accessible,
+        and sets appropriate permissions if running as Admin.
         Raises ValueError on critical errors.
         """
+        is_admin = is_running_as_admin() # Check privileges once
         try:
             if not os.path.exists(self.storage_path):
                  logger.info(f"Storage path '{self.storage_path}' does not exist. Creating.")
+                 # Create directory with default permissions first
                  os.makedirs(self.storage_path, exist_ok=True)
                  logger.info(f"Successfully created storage directory: {self.storage_path}")
+                 # Set permissions AFTER creation if admin
+                 self._ensure_directory_permissions(is_admin)
             elif not os.path.isdir(self.storage_path):
                  logger.critical(f"Configured storage path '{self.storage_path}' exists but is not a directory.")
                  raise ValueError(f"Storage path '{self.storage_path}' is not a directory.")
             else:
-                 logger.debug(f"Storage directory '{self.storage_path}' already exists. Checking writability.")
+                 logger.debug(f"Storage directory '{self.storage_path}' already exists. Checking writability and permissions.")
+                 # Check writability first
                  test_file = os.path.join(self.storage_path, f".writetest_{uuid.uuid4()}")
                  try:
                       with open(test_file, 'w') as f:
@@ -113,6 +130,8 @@ class StateManager:
                  except (IOError, OSError) as write_err:
                       logger.critical(f"Storage directory '{self.storage_path}' is not writable: {write_err}")
                       raise ValueError(f"Storage path '{self.storage_path}' is not writable.")
+                 # Ensure permissions are correct if admin, even if directory existed
+                 self._ensure_directory_permissions(is_admin)
 
         except PermissionError:
              logger.critical(f"Permission denied creating/accessing storage directory: {self.storage_path}")
@@ -123,6 +142,56 @@ class StateManager:
         except Exception as e:
              logger.critical(f"Unexpected error ensuring storage directory {self.storage_path}: {e}", exc_info=True)
              raise ValueError(f"Unexpected error ensuring storage directory: {e}")
+
+    def _ensure_directory_permissions(self, is_admin: bool):
+        """
+        Sets strict permissions (SYSTEM:F, Administrators:F) on the storage directory
+        if running as Admin and win32security is available. Disables inheritance.
+        """
+        if not is_admin:
+            logger.debug("Not running as admin, skipping ACL modification.")
+            return
+        if not WINDOWS_ACL_SUPPORT:
+            logger.warning("win32security not available, cannot set directory ACLs.")
+            return
+
+        logger.info(f"Setting ACLs for admin storage directory: {self.storage_path}")
+        try:
+            # Get SIDs for well-known accounts
+            sid_system = win32security.LookupAccountName("", "SYSTEM")[0]
+            sid_admins = win32security.LookupAccountName("", "Administrators")[0]
+
+            # Create a new DACL (Discretionary Access Control List)
+            dacl = win32security.ACL()
+            dacl.AddAccessAllowedAceEx(win32security.ACL_REVISION_DS,
+                                       win32con.OBJECT_INHERIT_ACE | win32con.CONTAINER_INHERIT_ACE,
+                                       win32con.GENERIC_ALL, # Full Control
+                                       sid_system)
+            dacl.AddAccessAllowedAceEx(win32security.ACL_REVISION_DS,
+                                       win32con.OBJECT_INHERIT_ACE | win32con.CONTAINER_INHERIT_ACE,
+                                       win32con.GENERIC_ALL, # Full Control
+                                       sid_admins)
+
+            # Create a new Security Descriptor (SD)
+            sd = win32security.SECURITY_DESCRIPTOR()
+            sd.SetSecurityDescriptorOwner(sid_admins, False) # Set Administrators as owner
+            sd.SetSecurityDescriptorGroup(sid_system, False) # Set SYSTEM as group
+            # Apply the DACL, protecting it from inheritance (True means protected)
+            sd.SetSecurityDescriptorDacl(True, dacl, False) # True=DACL present, False=Defaulted
+
+            # Apply the security descriptor to the directory
+            # SE_FILE_OBJECT is used for files and directories
+            # DACL_SECURITY_INFORMATION indicates that the DACL is being set
+            # PROTECTED_DACL_SECURITY_INFORMATION ensures inheritance is blocked
+            security_info = win32security.DACL_SECURITY_INFORMATION | win32security.PROTECTED_DACL_SECURITY_INFORMATION | win32security.OWNER_SECURITY_INFORMATION | win32security.GROUP_SECURITY_INFORMATION
+            win32security.SetFileSecurity(self.storage_path, security_info, sd)
+
+            logger.info(f"Successfully applied strict ACLs to {self.storage_path}")
+
+        except pywintypes.error as e:
+            logger.error(f"Failed to set ACLs on {self.storage_path}: {e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"Unexpected error setting ACLs on {self.storage_path}: {e}", exc_info=True)
 
     # --- Internal State File Handling ---
 

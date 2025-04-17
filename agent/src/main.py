@@ -8,7 +8,6 @@ Includes logic to ensure only one instance runs using a lock file.
 import os
 import sys
 import argparse
-import atexit  # To ensure lock release on exit
 import shutil  # Added for file copying
 
 # --- Global Lock File Variables ---
@@ -222,8 +221,6 @@ def main() -> int:
             logger.critical("Failed to acquire instance lock. Exiting.")
             return 1
         logger.info("Instance lock acquired successfully.")
-        atexit.register(cleanup_resources)
-        logger.debug("Registered atexit handler for lock release.")
     except ValueError as e:
         logger.critical(f"Failed to initialize Lock Manager: {e}", exc_info=True)
         print(f"FATAL: Failed to initialize Lock Manager: {e}", file=sys.stderr)
