@@ -72,7 +72,7 @@ def setup_logger(
     logger.setLevel(lowest_level)
 
     # Prevent messages from propagating to the root logger if it has handlers
-    # logger.propagate = False # Only set if root logger configuration is complex
+    logger.propagate = False # Only set if root logger configuration is complex
 
     # Clear existing handlers for this logger name, in case of re-configuration attempts
     if logger.hasHandlers():

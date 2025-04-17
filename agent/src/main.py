@@ -9,20 +9,19 @@ import os
 import sys
 import argparse
 import atexit  # To ensure lock release on exit
-import psutil  # For checking if PID exists
+import shutil  # Added for file copying
 
 # --- Global Lock File Variables ---
-_lock_file_handle = None
-_lock_file_path = None
+_lock_manager_instance = None  # Keep track of the lock manager instance for atexit
 
 # --- Path Setup ---
 # Ensure the 'src' directory is in the Python path
-current_dir = os.path.dirname(os.path.abspath(__file__)) # src directory
-project_root = os.path.dirname(current_dir) # agent directory
+current_dir = os.path.dirname(os.path.abspath(__file__))  # src directory
+project_root = os.path.dirname(current_dir)  # agent directory
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 if current_dir not in sys.path:
-     sys.path.insert(0, current_dir) # Add src directory itself if needed
+    sys.path.insert(0, current_dir)  # Add src directory itself if needed
 # --- End Path Setup ---
 
 # --- Core Imports ---
@@ -39,30 +38,22 @@ from src.core.agent import Agent
 from src.core.command_executor import CommandExecutor
 # Utilities
 from src.utils.logger import setup_logger, get_logger
-# UI (No direct use in main, but Agent uses it)
+# System & Lock Management
+from src.system.lock_manager import LockManager
 # --- End Core Imports ---
 
 def parse_arguments() -> argparse.Namespace:
     """Parses command line arguments for configuration path and debug mode."""
     parser = argparse.ArgumentParser(description='Computer Management System Agent')
-    
-    # Determine if running as PyInstaller executable
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        # Running as executable - use executable directory as base
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        # Running as script - use project_root
-        base_dir = project_root
-    
-    # Default config path relative to appropriate base directory
+
+    # Default config *filename* (path is now determined dynamically)
     default_config_name = 'agent_config.json'
-    default_config_path = os.path.join(base_dir, 'config', default_config_name)
-    
+
     parser.add_argument(
-        '--config',
+        '--config-name',  # Changed from --config
         type=str,
-        default=default_config_path,
-        help=f'Path to the agent configuration file (default: {default_config_path})'
+        default=default_config_name,
+        help=f'Name of the agent configuration file within the storage directory (default: {default_config_name})'
     )
     parser.add_argument(
         '--debug',
@@ -71,17 +62,17 @@ def parse_arguments() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-def initialize_logging(config: ConfigManager, debug_mode: bool):
+def initialize_logging(config: ConfigManager, storage_path: str, debug_mode: bool):
     """
-    Initializes the logging system based on configuration.
-    Must be called *after* config_manager is initialized.
+    Initializes the logging system based on configuration and storage path.
+    Must be called *after* config_manager is initialized and storage_path is known.
     Reads log levels from config.
     """
     # Read log levels from config, providing fallbacks
-    console_level_name = config.get('log_level.console', 'INFO') # Default INFO
-    file_level_name = config.get('log_level.file', 'DEBUG')     # Default DEBUG
+    console_level_name = config.get('log_level.console', 'INFO')  # Default INFO
+    file_level_name = config.get('log_level.file', 'DEBUG')  # Default DEBUG
+    log_filename = config.get('log_filename', 'agent.log')  # Get log filename from config
 
-    log_storage_path = config.get('storage_path')
     log_file = None
 
     # Override console level if debug flag is set
@@ -89,259 +80,219 @@ def initialize_logging(config: ConfigManager, debug_mode: bool):
         console_level_name = 'DEBUG'
         print("Debug mode enabled via command line (Console Log Level: DEBUG).")
 
-    # Construct log file path using storage_path from config
-    if log_storage_path:
-        # Determine base directory based on whether we're running as executable or script
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            # Running as executable - use executable directory as base
-            base_dir = os.path.dirname(sys.executable)
-        else:
-            # Running as script - use project_root
-            base_dir = project_root
-            
-        # Ensure storage_path is absolute or resolve relative to base directory
-        if not os.path.isabs(log_storage_path):
-             log_storage_path = os.path.join(base_dir, log_storage_path)
-             print(f"Resolved relative storage_path to: {log_storage_path}")
-
-        log_dir = os.path.join(log_storage_path, 'logs')
-        log_file = os.path.join(log_dir, 'agent.log')
+    # Construct log file path using the determined storage_path
+    if storage_path:
+        log_dir = os.path.join(storage_path, 'logs')  # Logs subdirectory within storage_path
+        log_file = os.path.join(log_dir, log_filename)
+        print(f"Logging to file: {log_file}")  # Early print for visibility
     else:
-        print("Warning: 'storage_path' not defined in config. File logging disabled.")
+        # This case should ideally not happen if StateManager succeeded
+        print("Warning: Storage path not available. File logging disabled.")
 
     # Setup the root logger for the agent using values from config (or defaults)
     setup_logger(
-        name="agent", # Setup the root logger for the application
+        name="agent",  # Setup the root logger for the application
         console_level_name=console_level_name,
         file_level_name=file_level_name,
         log_file_path=log_file
     )
 
-def release_lock():
-    """Releases the lock file."""
-    global _lock_file_handle, _lock_file_path
-    logger = get_logger("agent.main") # Get logger instance
-    if _lock_file_handle:
-        try:
-            # Release lock and close file
-            _lock_file_handle.close()
-            _lock_file_handle = None
-            logger.debug(f"Closed lock file handle.")
-            # Attempt to remove the lock file
-            if _lock_file_path and os.path.exists(_lock_file_path):
-                os.remove(_lock_file_path)
-                logger.info(f"Removed lock file: {_lock_file_path}")
-        except OSError as e:
-            logger.error(f"Error releasing lock file {_lock_file_path}: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error releasing lock: {e}", exc_info=True)
-    elif _lock_file_path and os.path.exists(_lock_file_path):
-         # If handle is None but file exists, try removing it
-         try:
-             os.remove(_lock_file_path)
-             logger.info(f"Removed potentially stale lock file: {_lock_file_path}")
-         except OSError as e:
-             logger.error(f"Error removing stale lock file {_lock_file_path}: {e}")
-
-def acquire_lock(storage_path: str) -> bool:
-    """Attempts to acquire a lock file to ensure single instance."""
-    global _lock_file_handle, _lock_file_path
-    logger = get_logger("agent.main") # Get logger instance
-
-    # Make sure storage_path is an absolute path
-    if not os.path.isabs(storage_path):
-        # Determine base directory based on whether we're running as executable or script
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            # Running as executable - use executable directory as base
-            base_dir = os.path.dirname(sys.executable)
-        else:
-            # Running as script - use project_root
-            base_dir = project_root
-        
-        storage_path = os.path.join(base_dir, storage_path)
-    
-    if not storage_path or not os.path.isdir(storage_path):
-         logger.critical(f"Invalid storage path '{storage_path}' for lock file. Cannot ensure single instance.")
-         print(f"FATAL: Invalid storage path '{storage_path}' provided for lock file.", file=sys.stderr)
-         return False
-
-    _lock_file_path = os.path.join(storage_path, "agent.lock")
-    logger.debug(f"Attempting to acquire lock file: {_lock_file_path}")
-
-    try:
-        # Atomically create and open the file for writing
-        # O_EXCL ensures creation fails if file exists
-        fd = os.open(_lock_file_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        _lock_file_handle = os.fdopen(fd, 'w')
-
-        # Write current PID to the lock file
-        pid = str(os.getpid())
-        _lock_file_handle.write(pid)
-        _lock_file_handle.flush() # Ensure PID is written
-        logger.info(f"Acquired lock file: {_lock_file_path} with PID: {pid}")
-        # Register the release function to be called on exit
-        atexit.register(release_lock)
-        return True
-
-    except FileExistsError:
-        logger.warning(f"Lock file {_lock_file_path} already exists. Checking PID...")
-        try:
-            with open(_lock_file_path, 'r') as f:
-                existing_pid_str = f.read().strip()
-            if not existing_pid_str.isdigit():
-                 raise ValueError("Lock file does not contain a valid PID.")
-            
-            existing_pid = int(existing_pid_str)
-            
-            if psutil.pid_exists(existing_pid):
-                # Check if the process is actually the agent
-                try:
-                    proc = psutil.Process(existing_pid)
-                    # Basic check: is the process name similar?
-                    proc_name = proc.name().lower()
-                    is_agent = 'python' in proc_name or 'agent' in proc_name 
-                    
-                    if is_agent: # Assume it's our agent if PID exists and looks like python/agent
-                        logger.critical(f"Another agent instance (PID: {existing_pid}) appears to be running.")
-                        print(f"ERROR: Another instance of the agent (PID: {existing_pid}) seems to be running.", file=sys.stderr)
-                        return False
-                    else:
-                         logger.warning(f"PID {existing_pid} exists but doesn't look like the agent process ('{proc_name}'). Treating lock as potentially stale.")
-                         # Proceed to treat as stale lock
-                    
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                     # Process died between pid_exists and Process() or we lack permissions
-                     logger.warning(f"Process with PID {existing_pid} existed but is now gone or inaccessible. Treating lock as stale.")
-                     # Proceed to treat as stale lock
-            else:
-                 logger.warning(f"Process with PID {existing_pid} from lock file does not exist. Treating lock as stale.")
-
-            # --- Stale Lock Handling ---
-            logger.warning(f"Attempting to remove stale lock file: {_lock_file_path}")
-            os.remove(_lock_file_path)
-            # Retry acquiring the lock
-            return acquire_lock(storage_path)
-
-        except (IOError, ValueError, OSError) as e:
-            logger.error(f"Error checking existing lock file {_lock_file_path}: {e}. Assuming another instance is running.", exc_info=True)
-            print(f"ERROR: Could not verify existing lock file {_lock_file_path}. Please check manually. {e}", file=sys.stderr)
-            return False
-        except Exception as e: # Catch any other unexpected errors during check
-             logger.critical(f"Unexpected error checking lock file {_lock_file_path}: {e}", exc_info=True)
-             print(f"FATAL: Unexpected error checking lock file {_lock_file_path}. {e}", file=sys.stderr)
-             return False
-             
-    except Exception as e: # Catch other errors during initial os.open
-        logger.critical(f"Failed to create or lock file {_lock_file_path}: {e}", exc_info=True)
-        print(f"FATAL: Could not create lock file {_lock_file_path}. {e}", file=sys.stderr)
-        return False
+def cleanup_resources():
+    """Function registered with atexit to release the lock."""
+    global _lock_manager_instance
+    logger = get_logger("agent.main")  # Get logger instance
+    if _lock_manager_instance:
+        logger.info("Releasing lock via atexit handler...")
+        _lock_manager_instance.release()
+        logger.info("Lock released via atexit handler.")
+    else:
+        logger.debug("No lock manager instance found in atexit handler.")
 
 def main() -> int:
     """Main function to initialize and start the agent."""
+    global _lock_manager_instance  # Allow modification
     args = parse_arguments()
-    logger = None # Initialize logger variable
-    agent_instance = None # Keep track of agent instance for cleanup
+    logger = None  # Initialize logger variable
+    agent_instance = None  # Keep track of agent instance for cleanup
+    config_manager = None  # Initialize config manager variable
+    state_manager = None  # Initialize state manager variable
+
+    # --- Early Initialization Order ---
+    # 1. Dummy ConfigManager (needed by StateManager for app_name)
+    temp_config_path = None
+    source_config_path = None  # Store the path of the config used for initial setup
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = project_root
+    potential_temp_config = os.path.join(base_dir, 'config', args.config_name)
+    if os.path.exists(potential_temp_config):
+        temp_config_path = potential_temp_config
+        source_config_path = temp_config_path  # Found the source config
+        print(f"Using temporary config path for initial setup: {temp_config_path}")
+    else:
+        # If not found in config/, maybe it's directly in base_dir (less likely but possible)
+        potential_temp_config_alt = os.path.join(base_dir, args.config_name)
+        if os.path.exists(potential_temp_config_alt):
+            temp_config_path = potential_temp_config_alt
+            source_config_path = temp_config_path  # Found the source config
+            print(f"Using temporary config path (base dir) for initial setup: {temp_config_path}")
+
+    # Create a temporary config manager (might fail if file not found, uses defaults)
+    temp_config_manager = ConfigManager(temp_config_path) if temp_config_path else ConfigManager(None)
+
+    # 2. Initialize State Manager (determines storage_path)
+    try:
+        print("Initializing state manager...")
+        state_manager = StateManager(temp_config_manager)  # Pass temp config
+        storage_path = state_manager.storage_path  # Get determined storage path
+        print(f"Storage path determined: {storage_path}")
+    except ValueError as e:
+        print(f"FATAL: Failed to initialize State Manager: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"FATAL: Unexpected error initializing State Manager: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return 1
+
+    # 3. Initialize Real Configuration Manager (using path inside storage_path)
+    try:
+        config_file_path = os.path.join(storage_path, args.config_name)
+        print(f"Target configuration path: {config_file_path}")
+
+        # --- Copy config if it doesn't exist in storage_path --- START
+        if not os.path.exists(config_file_path):
+            logger_provisional = get_logger("agent.main")  # Get logger early for this message
+            if source_config_path and os.path.exists(source_config_path):
+                logger_provisional.info(f"Configuration file not found in storage path. Copying from {source_config_path}...")
+                print(f"Configuration file not found in storage path. Copying from {source_config_path}...")
+                try:
+                    # Ensure target directory exists (should have been created by StateManager, but double-check)
+                    os.makedirs(storage_path, exist_ok=True)
+                    shutil.copy2(source_config_path, config_file_path)  # copy2 preserves metadata
+                    logger_provisional.info(f"Successfully copied configuration to {config_file_path}")
+                except Exception as copy_err:
+                    print(f"FATAL: Failed to copy configuration file from {source_config_path} to {config_file_path}: {copy_err}", file=sys.stderr)
+                    if logger_provisional:
+                        logger_provisional.critical(f"Failed to copy configuration file: {copy_err}", exc_info=True)
+                    return 1  # Cannot proceed without config
+            else:
+                # Source config wasn't found either
+                print(f"FATAL: Configuration file '{args.config_name}' not found in storage path '{storage_path}' and no source configuration file could be located.", file=sys.stderr)
+                if logger_provisional:
+                    logger_provisional.critical(f"Config file missing in storage and source location.")
+                return 1  # Cannot proceed
+        # --- Copy config if it doesn't exist in storage_path --- END
+
+        print(f"Loading configuration from: {config_file_path}")
+        config_manager = ConfigManager(config_file_path)
+    except FileNotFoundError as e:
+        print(f"FATAL: Configuration file error: {e}. Agent cannot start.", file=sys.stderr)
+        print(f"Ensure '{args.config_name}' exists in '{storage_path}'.", file=sys.stderr)
+        return 1
+    except ValueError as e:
+        print(f"FATAL: Configuration error: {e}. Agent cannot start.", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"FATAL: Unexpected error loading configuration: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return 1
+
+    # 4. Initialize Logging (uses loaded configuration and storage_path)
+    try:
+        initialize_logging(config_manager, storage_path, args.debug)
+        logger = get_logger("agent.main")  # Get logger after initialization
+        logger.info("--- Agent Starting ---")
+        logger.info(f"Using storage path: {storage_path}")
+        logger.info(f"Using configuration file: {config_file_path}")
+        logger.info("Logging initialized successfully.")
+    except Exception as e:
+        print(f"FATAL: Failed to initialize logging: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return 1
+
+    # --- Acquire Lock ---
+    try:
+        logger.info("Acquiring instance lock...")
+        _lock_manager_instance = LockManager(storage_path)
+        if not _lock_manager_instance.acquire():
+            logger.critical("Failed to acquire instance lock. Exiting.")
+            return 1
+        logger.info("Instance lock acquired successfully.")
+        atexit.register(cleanup_resources)
+        logger.debug("Registered atexit handler for lock release.")
+    except ValueError as e:
+        logger.critical(f"Failed to initialize Lock Manager: {e}", exc_info=True)
+        print(f"FATAL: Failed to initialize Lock Manager: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        logger.critical(f"Unexpected error acquiring lock: {e}", exc_info=True)
+        print(f"FATAL: Unexpected error acquiring lock: {e}", file=sys.stderr)
+        return 1
 
     try:
-        # 1. Initialize Configuration Manager
-        print(f"Loading configuration from: {args.config}")
-        config_manager = ConfigManager(args.config)
+        # 5. Initialize Remaining Components
+        logger.info("Initializing remaining components...")
+        state_manager.ensure_device_id()  # Now uses the determined storage_path
 
-        # 2. Initialize Logging (uses loaded configuration)
-        initialize_logging(config_manager, args.debug)
-        logger = get_logger("agent.main") # Get logger after initialization
-        logger.info("Configuration and Logging initialized successfully.")
-
-        # 3. Initialize State Manager (needed for lock file path)
-        logger.info("Initializing state manager...")
-        state_manager = StateManager(config_manager)
-        storage_path = state_manager.storage_path # Get validated storage path
-
-        # --- Acquire Lock ---
-        if not acquire_lock(storage_path):
-             # Error message already printed by acquire_lock
-             return 1 # Exit if lock cannot be acquired
-        # --- Lock Acquired ---
-
-        # Ensure device ID exists early (catches storage errors)
-        state_manager.ensure_device_id()
-
-        # HTTP Client (needs config)
         http_client = HttpClient(config_manager)
-        # WebSocket Client (needs config)
         ws_client = WSClient(config_manager)
-        # System Monitor (no direct dependencies needed at init)
         system_monitor = SystemMonitor()
-        # Command Executor (needs ws_client and config)
         command_executor = CommandExecutor(ws_client, config_manager)
-        # UI Console functions are used directly by Agent, no instance needed here
 
-        # 4. Initialize the Agent Core (Inject all dependencies)
+        # 6. Initialize the Agent Core (Inject all dependencies)
         logger.info("Creating Agent instance...")
-        agent_instance = Agent( # Assign to agent_instance
+        agent_instance = Agent(
             config_manager=config_manager,
             state_manager=state_manager,
             http_client=http_client,
             ws_client=ws_client,
             system_monitor=system_monitor,
-            command_executor=command_executor
+            command_executor=command_executor,
+            lock_manager=_lock_manager_instance
         )
 
-        # 5. Start the Agent
+        # 7. Start the Agent
         logger.info("Starting Agent main loop...")
-        agent_instance.start() # This method blocks until stopped or error
+        agent_instance.start()
 
-        logger.info("Agent has stopped.")
+        logger.info("Agent has stopped normally.")
         return 0
 
     except FileNotFoundError as e:
-         # Config file not found error from ConfigManager
-         print(f"FATAL: Configuration file error: {e}. Agent cannot start.", file=sys.stderr)
-         return 1
+        print(f"FATAL: Configuration file error: {e}. Agent cannot start.", file=sys.stderr)
+        logger.critical(f"Configuration file error: {e}", exc_info=True)
+        return 1
     except ValueError as e:
-         # Invalid config, missing keys, storage path issues, etc.
-         # Logger might not be fully initialized here if error is early
-         print(f"FATAL: Initialization error: {e}. Agent cannot start.", file=sys.stderr)
-         if logger:
-              logger.critical(f"Initialization error: {e}", exc_info=True)
-         return 1
+        print(f"FATAL: Initialization error: {e}. Agent cannot start.", file=sys.stderr)
+        logger.critical(f"Initialization error: {e}", exc_info=True)
+        return 1
     except RuntimeError as e:
-         # Agent specific init errors (e.g., couldn't get room config/device ID)
-         print(f"FATAL: Agent runtime error during initialization: {e}. Agent cannot start.", file=sys.stderr)
-         if logger:
-              logger.critical(f"Agent runtime error during initialization: {e}", exc_info=True)
-         return 1
+        print(f"FATAL: Agent runtime error during initialization: {e}. Agent cannot start.", file=sys.stderr)
+        logger.critical(f"Agent runtime error during initialization: {e}", exc_info=True)
+        return 1
     except KeyboardInterrupt:
-        # Handle Ctrl+C during initialization phase (before agent.start loop)
         print("\nAgent startup interrupted by user (Ctrl+C). Exiting.", file=sys.stderr)
         if logger:
-             logger.info("Agent startup interrupted by user (Ctrl+C).")
-        # Lock will be released by atexit handler
-        return 0 
+            logger.info("Agent startup interrupted by user (Ctrl+C).")
+        return 0
     except Exception as e:
-        # Catch any other unexpected critical errors during setup
         print(f"FATAL: An unexpected critical error occurred during initialization: {e}", file=sys.stderr)
         if logger:
             logger.critical(f"An unexpected critical error occurred during initialization: {e}", exc_info=True)
         else:
-             # If logging failed, print traceback to stderr
-             import traceback
-             traceback.print_exc()
+            import traceback
+            traceback.print_exc()
         return 1
     finally:
-         # Explicitly release lock here as a fallback, though atexit should handle it
-         # release_lock() # atexit is generally preferred
-         # Ensure agent stop is called if instance was created but start loop failed/exited unexpectedly
-         if agent_instance and agent_instance._running.is_set():
-              logger.info("Ensuring agent is stopped in main finally block...")
-              agent_instance.stop()
-         logger.info("Main function exiting.")
+        if agent_instance and agent_instance._running.is_set():
+            logger.info("Ensuring agent is stopped in main finally block...")
+            agent_instance.stop()
 
 if __name__ == "__main__":
     exit_code = main()
-    # Optional: Add a small delay or final log message before exiting
-    # if exit_code != 0:
-    #     print(f"Agent exited with error code: {exit_code}", file=sys.stderr)
-    # else:
-    #     print("Agent exited normally.")
+    print(f"Agent process exiting with code {exit_code}.")
     sys.exit(exit_code)

@@ -6,6 +6,8 @@
         "file": "DEBUG"
     },
     "agent": {
+        "app_name": "agent",
+        "app_version": "1.0.0",
         "status_report_interval_sec": 30,
         "state_filename": "agent_state.json"
     },

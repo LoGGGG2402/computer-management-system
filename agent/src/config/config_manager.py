@@ -14,22 +14,29 @@ logger = logging.getLogger(__name__)
 class ConfigManager:
     """Loads and manages agent configuration from a file."""
 
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: Optional[str]): # Allow None for temp instance
         """
         Initializes the ConfigManager by loading the configuration file.
 
         Args:
-            config_path (str): The path to the agent configuration JSON file.
+            config_path (Optional[str]): The path to the agent configuration JSON file.
+                                         If None, initializes with an empty config (for temp usage).
 
         Raises:
-            FileNotFoundError: If the configuration file does not exist.
-            ValueError: If the configuration file is invalid JSON or essential keys are missing.
+            FileNotFoundError: If the configuration file path is provided but does not exist.
+            ValueError: If the configuration file is invalid JSON or essential keys are missing (unless config_path is None).
         """
         self._config_path = config_path
         self._config_data: Optional[Dict[str, Any]] = None
-        self._load_config()
-        self._validate_config()
-        logger.info(f"Configuration loaded successfully from: {self._config_path}")
+
+        if self._config_path is None:
+             logger.debug("ConfigManager initialized without a config path (temporary instance).")
+             self._config_data = {} # Initialize with empty dict
+             # No validation needed for temp instance
+        else:
+             self._load_config()
+             self._validate_config() # Validate only if path was provided
+             logger.info(f"Configuration loaded successfully from: {self._config_path}")
 
     def _load_config(self):
         """Loads the configuration data from the JSON file."""
@@ -57,7 +64,8 @@ class ConfigManager:
         if not self._config_data: # Should not happen if _load_config succeeded
              raise ValueError("Internal error: Config data not loaded after successful load.")
 
-        required_keys = ['server_url', 'storage_path']
+        # Reduced required keys for Phase 1, storage_path is now handled by StateManager
+        required_keys = ['server_url']
         missing_keys = [key for key in required_keys if self.get(key) is None]
 
         if missing_keys:
@@ -65,12 +73,8 @@ class ConfigManager:
             logger.critical(msg)
             raise ValueError(msg)
 
-        storage_path = self.get('storage_path')
-        if not isinstance(storage_path, str) or not storage_path:
-             msg = f"Invalid 'storage_path' configuration: Must be a non-empty string."
-             logger.critical(msg)
-             raise ValueError(msg)
-        # Note: Directory existence/creation is handled by components needing it (e.g., StateManager, Logger)
+        # storage_path validation removed - handled by StateManager
+        # if not isinstance(storage_path, str) or not storage_path: ...
 
         server_url = self.get('server_url')
         if not isinstance(server_url, str) or not server_url:
@@ -79,7 +83,6 @@ class ConfigManager:
              raise ValueError(msg)
 
         logger.debug("Basic configuration validation passed.")
-
 
     def get(self, key_path: str, default: Any = None) -> Any:
         """
