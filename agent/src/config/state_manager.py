@@ -7,7 +7,6 @@ Accepts ConfigManager instance for configuration values.
 """
 import os
 import sys
-import logging
 import uuid
 import socket
 from typing import Dict, Any, Optional
@@ -16,6 +15,10 @@ from typing import Dict, Any, Optional
 from src.config.config_manager import ConfigManager # Import class for type hinting
 from src.utils.utils import load_json, save_json
 from src.system.windows_utils import is_running_as_admin # Added for privilege check
+from src.utils.logger import get_logger
+
+# Get a properly configured logger instance
+logger = get_logger(__name__)
 
 # Imports for ACLs
 try:
@@ -35,8 +38,6 @@ try:
 except ImportError:
     KEYRING_AVAILABLE = False
     keyring = None # Define keyring as None if not available
-
-logger = logging.getLogger(__name__)
 
 # Constants for keyring service and token filename (fallback)
 TOKEN_SERVICE_NAME = "ComputerManagementSystemAgent"

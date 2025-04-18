@@ -4,12 +4,11 @@ General utility functions for the Computer Management System Agent.
 """
 import json
 import os
-import logging
 from typing import Dict, Any, Optional
+from src.utils.logger import get_logger
 
-# Use get_logger to ensure logger exists even if setup isn't called first elsewhere
-# Use logger name consistent with the module hierarchy
-logger = logging.getLogger("agent.utils.utils")
+# Use get_logger to get a properly configured logger
+logger = get_logger("agent.utils.utils")
 
 def save_json(data: Dict[str, Any], filepath: str) -> bool:
     """

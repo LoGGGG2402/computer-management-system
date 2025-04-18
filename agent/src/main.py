@@ -269,7 +269,12 @@ def main() -> int:
             logger.error("Cannot process '--force': IPC is not supported (win32 modules missing). Exiting.")
             return 1
 
-        ipc_response = send_force_command(is_admin, sys.argv)
+        # Get the agent token from state manager
+        device_id = state_manager.get_device_id()
+        agent_token = state_manager.load_token(device_id) if device_id else None
+        logger.info(f"Using agent token for IPC authentication: {'Found' if agent_token else 'None'}")
+
+        ipc_response = send_force_command(is_admin, sys.argv, agent_token)
         status = ipc_response.get("status")
 
         if status == "acknowledged":

@@ -6,14 +6,16 @@ Accepts ConfigManager instance for configuration.
 """
 import json
 import requests
-import logging
 from typing import Dict, Any, Tuple, Optional
 
 # Configuration
 # from src.config.config_manager import config_manager # No longer using global instance
 from src.config.config_manager import ConfigManager # Import class for type hinting
+# Use the centralized logger
+from src.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+# Get a properly configured logger instance
+logger = get_logger(__name__)
 
 class HttpClient:
     """HTTP client for making API calls to the backend server."""

@@ -7,7 +7,6 @@ Accepts WSClient and ConfigManager instances.
 """
 import subprocess
 import threading
-import logging
 import time
 from typing import Dict, Any, Tuple, List, Optional
 from queue import Queue, Empty, Full
@@ -18,7 +17,11 @@ from src.config.config_manager import ConfigManager
 if TYPE_CHECKING:
     from src.communication.ws_client import WSClient
 
-logger = logging.getLogger(__name__)
+# Use the get_logger function from logger module
+from src.utils.logger import get_logger
+
+# Get a properly configured logger instance
+logger = get_logger(__name__)
 
 class CommandExecutor:
     """

@@ -4,7 +4,6 @@ Manages the agent's lock file to ensure only one instance runs.
 Phase 2: Uses file locking, PID, and timestamp checks.
 """
 import os
-import logging
 import sys
 import time
 import atexit
@@ -12,13 +11,14 @@ import msvcrt  # For file locking on Windows
 import threading
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Tuple
+from src.utils.logger import get_logger
 
 try:
     import psutil  # For checking if PID exists
 except ImportError:
     psutil = None  # Handle case where psutil might not be installed initially
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 LOCK_STALE_TIMEOUT_SECONDS = 120  # How old timestamp can be before considered stale
 

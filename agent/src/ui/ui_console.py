@@ -3,7 +3,6 @@
 Console User Interface module for the Computer Management System Agent.
 Handles interactions like prompting for MFA codes and room configuration.
 """
-import logging
 from typing import Optional, Dict, Any
 
 # Import StateManager for type hinting, will be passed as argument
@@ -11,7 +10,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from src.config.state_manager import StateManager
 
-logger = logging.getLogger(__name__)
+# Import get_logger from the centralized logger
+from src.utils.logger import get_logger
+
+# Get a properly configured logger instance
+logger = get_logger(__name__)
 
 # --- MFA Related Functions ---
 

@@ -8,12 +8,15 @@ import psutil
 import platform
 import socket
 import subprocess
-import logging
 import json
 from typing import Dict, Any
 import os
 
-logger = logging.getLogger(__name__)
+# Import the get_logger function instead of using logging directly
+from src.utils.logger import get_logger
+
+# Use the centralized logger configuration
+logger = get_logger(__name__)
 
 class SystemMonitor:
     """

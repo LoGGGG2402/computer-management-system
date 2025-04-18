@@ -5,12 +5,14 @@ Allows a new agent instance (--force) to request the running instance to shut do
 """
 
 import threading
-import logging
 import json
 import time
 import sys
 import os
 from typing import TYPE_CHECKING, Optional, Callable
+
+# Use the centralized logger
+from src.utils.logger import get_logger
 
 # Windows specific imports
 try:
@@ -23,17 +25,18 @@ try:
     WINDOWS_PIPE_SUPPORT = True
 except ImportError:
     WINDOWS_PIPE_SUPPORT = False
-    logging.getLogger(__name__).warning("win32pipe or related modules not found. IPC functionality will be disabled.")
+    get_logger(__name__).warning("win32pipe or related modules not found. IPC functionality will be disabled.")
 
 # Local imports
-from src.system.windows_utils import get_user_sid_string, manage_ipc_secret, is_running_as_admin
-from src.core.agent_state import AgentState # Assuming AgentState enum exists
+from src.system.windows_utils import get_user_sid_string, is_running_as_admin, WINDOWS_ACL_SUPPORT
+from src.core.agent_state import AgentState # Added for state check
 
 # Type hint for Agent class without circular import
 if TYPE_CHECKING:
     from src.core.agent import Agent
 
-logger = logging.getLogger(__name__)
+# Get a properly configured logger instance
+logger = get_logger(__name__)
 
 # Pipe name format
 PIPE_NAME_TEMPLATE_SYSTEM = r'\\.\pipe\CMSAgentIPC_System'
@@ -45,38 +48,39 @@ class NamedPipeIPCServer(threading.Thread):
     """
     Runs a Named Pipe server in a separate thread to listen for force restart commands.
     """
-    def __init__(self, agent_instance: 'Agent', is_admin: bool):
+    def __init__(self, agent_instance: 'Agent', is_admin: bool, agent_token: Optional[str]):
         """
-        Initializes the Named Pipe server.
+        Initializes the Named Pipe IPC Server.
 
         Args:
-            agent_instance (Agent): Reference to the main Agent instance.
-            is_admin (bool): Whether the agent is running with admin privileges.
+            agent_instance: The main Agent instance (used for callbacks like restart).
+            is_admin (bool): Indicates if the agent is running with admin privileges.
+            agent_token (Optional[str]): The agent's authentication token to use as the IPC secret.
         """
-        super().__init__(name="NamedPipeIPCServerThread", daemon=True)
+        # Initialize the parent Thread class FIRST
+        super().__init__(name="IPCServerListener")
+        self.daemon = True # Make the thread a daemon thread
+
         if not WINDOWS_PIPE_SUPPORT:
-            raise ImportError("Cannot start NamedPipeIPCServer: win32 modules not available.")
+            raise ImportError("Named Pipe IPC Server requires 'pywin32' module.")
 
         self.agent = agent_instance
         self.is_admin = is_admin
-        self._stop_event = threading.Event()
-        self._pipe_handle = None
-
-        # Determine pipe name
         self.pipe_name = self._determine_pipe_name()
         if not self.pipe_name:
-            raise ValueError("Could not determine pipe name.")
+             raise ValueError("Could not determine pipe name for IPC server.")
 
-        # Get IPC secret (should have been created by main process)
-        self.ipc_secret = manage_ipc_secret(action='get', is_admin=self.is_admin)
-        if not self.ipc_secret:
-            # Attempt to create it if missing - this might happen in rare cases
-            logger.warning("IPC secret not found by server thread, attempting creation.")
-            self.ipc_secret = manage_ipc_secret(action='create', is_admin=self.is_admin)
-            if not self.ipc_secret:
-                 raise ValueError("Could not get or create IPC secret.")
+        self.pipe_handle = None
+        self._stop_event = threading.Event()
+        self.agent_token = agent_token # Store the agent token
 
-        logger.info(f"Named Pipe IPC Server initialized. Pipe: {self.pipe_name}, Context: {'Admin' if is_admin else 'User'}")
+        if not self.agent_token:
+            logger.warning("Agent token is missing. IPC functionality will be disabled.")
+        else:
+            logger.debug("Using agent token for IPC authentication.")
+
+        self.active_connections = {} # Store client handles and their threads
+        self.connections_lock = threading.Lock()
 
     def _determine_pipe_name(self) -> Optional[str]:
         """Determines the pipe name based on admin privileges."""
@@ -128,8 +132,24 @@ class NamedPipeIPCServer(threading.Thread):
             logger.error(f"Failed to create security attributes for pipe: {e}", exc_info=True)
             return None
 
+    def start(self):
+        """Starts the IPC server listener thread by calling the parent start method."""
+        if not self.agent_token:
+            logger.warning("Cannot start IPC server: Agent token is missing.")
+            return # Do not start if token wasn't provided
+
+        # Check if already running (is_alive is inherited from Thread)
+        if self.is_alive():
+            logger.warning("IPC server listener thread already running.")
+            return
+
+        self._stop_event.clear()
+        # Call the start() method of the parent Thread class, which executes run()
+        super().start()
+        logger.info(f"Named Pipe IPC Server thread started, listening on {self.pipe_name}")
+
     def run(self):
-        """Main loop for the named pipe server thread."""
+        """Main loop for the named pipe server thread. This is executed by Thread.start()."""
         logger.info(f"Named Pipe IPC Server thread started. Listening on {self.pipe_name}")
 
         sa = self._create_pipe_security_attributes()
@@ -153,56 +173,42 @@ class NamedPipeIPCServer(threading.Thread):
                 )
                 logger.debug(f"Pipe {self.pipe_name} created. Waiting for client connection...")
 
-                # Wait for a client to connect. This blocks until a client connects or an error occurs.
-                # Add a timeout mechanism using overlapped I/O or check stop event periodically?
-                # For simplicity, let's rely on ConnectNamedPipe blocking but check stop event before/after.
                 if self._stop_event.is_set(): break # Check before blocking connect
 
-                # This blocks until a client connects
                 win32pipe.ConnectNamedPipe(self._pipe_handle, None)
 
                 if self._stop_event.is_set(): break # Check after connect before processing
 
                 logger.info(f"Client connected to pipe {self.pipe_name}.")
 
-                # Process the client request
                 self._handle_client_request()
 
             except pywintypes.error as e:
-                # Common errors:
-                # 2: ERROR_FILE_NOT_FOUND (shouldn't happen with CreateNamedPipe?)
-                # 232: ERROR_NO_DATA (Pipe closing)
-                # 536: ERROR_PIPE_CONNECTED (Already connected? Should be handled by loop)
                 if e.winerror == 232: # ERROR_NO_DATA (Pipe closing)
                      logger.warning(f"Pipe {self.pipe_name} closing or client disconnected prematurely (Error 232).")
                 elif e.winerror == 536: # ERROR_PIPE_CONNECTED
                      logger.debug(f"Pipe {self.pipe_name} already connected, likely race condition. Continuing.")
-                     # Ensure handle is closed if needed before next loop iteration
                      self._close_pipe_handle()
                      time.sleep(0.1) # Small delay
                      continue
                 else:
                      logger.error(f"Named pipe error (winerror {e.winerror}): {e}", exc_info=True)
-                # Break the loop on significant errors? Or just log and retry?
-                # Let's retry after a short delay unless it's a critical setup error.
                 if self._pipe_handle:
-                    self._close_pipe_handle() # Ensure handle is closed
-                time.sleep(1) # Wait a bit before recreating the pipe
+                    self._close_pipe_handle()
+                time.sleep(1)
 
             except Exception as e:
                 logger.error(f"Unexpected error in Named Pipe server loop: {e}", exc_info=True)
                 if self._pipe_handle:
                     self._close_pipe_handle()
-                time.sleep(1) # Wait before retrying
+                time.sleep(1)
 
             finally:
-                # Ensure the handle is closed and disconnected after handling a client or error
                 if self._pipe_handle:
                     try:
                         win32pipe.DisconnectNamedPipe(self._pipe_handle)
                         logger.debug("Disconnected client.")
                     except pywintypes.error as disc_e:
-                         # Error 232 (ERROR_NO_DATA) can happen if client already disconnected
                          if disc_e.winerror != 232:
                               logger.warning(f"Error disconnecting pipe client: {disc_e}")
                     finally:
@@ -216,7 +222,6 @@ class NamedPipeIPCServer(threading.Thread):
         response = {"status": "error", "message": "Internal server error"} # Default error response
 
         try:
-            # Read the request from the pipe
             logger.debug("Reading data from pipe...")
             hr, data_bytes = win32file.ReadFile(self._pipe_handle, PIPE_BUFFER_SIZE)
             if hr != 0: # Error reading
@@ -229,10 +234,16 @@ class NamedPipeIPCServer(threading.Thread):
             request_data = json.loads(request_str)
 
             # --- Authentication ---
-            client_secret = request_data.get('secret')
-            if not client_secret or client_secret != self.ipc_secret:
-                logger.warning("IPC request received with invalid or missing secret.")
-                response = {"status": "invalid_secret"}
+            client_token = request_data.get('token') # Expect 'token' instead of 'secret'
+            if not client_token or client_token != self.agent_token:
+                logger.warning("IPC request received with invalid or missing agent token.")
+                response = {"status": "invalid_token"} # Changed status message
+                try:
+                    response_str = json.dumps(response)
+                    logger.debug(f"Sending auth failure response: {response_str}")
+                    win32file.WriteFile(self._pipe_handle, response_str.encode('utf-8'))
+                except Exception as e_resp:
+                    logger.error(f"Failed to send auth failure response: {e_resp}", exc_info=True)
                 return
 
             # --- Command Processing ---
@@ -240,8 +251,7 @@ class NamedPipeIPCServer(threading.Thread):
             if command == 'force_restart':
                 logger.info("Received valid 'force_restart' command via IPC.")
 
-                # Check agent state
-                current_state = self.agent.get_state() # Assumes Agent has get_state()
+                current_state = self.agent.get_state()
                 if current_state in [AgentState.UPDATING_STARTING, AgentState.UPDATING_DOWNLOADING,
                                      AgentState.UPDATING_VERIFYING, AgentState.UPDATING_EXTRACTING_UPDATER,
                                      AgentState.UPDATING_PREPARING_SHUTDOWN]:
@@ -250,10 +260,7 @@ class NamedPipeIPCServer(threading.Thread):
                 else:
                     logger.info("Acknowledging force_restart command. Initiating shutdown.")
                     response = {"status": "acknowledged"}
-                    # Trigger agent shutdown asynchronously (don't block pipe communication)
-                    # Use a callback or schedule it in the agent's event loop if available.
-                    # For simplicity here, we'll call a method directly, assuming it handles async shutdown.
-                    threading.Timer(0.1, self.agent.request_restart).start() # Small delay before triggering
+                    threading.Timer(0.1, self.agent.request_restart).start()
 
             else:
                 logger.warning(f"Received unknown IPC command: {command}")
@@ -267,23 +274,20 @@ class NamedPipeIPCServer(threading.Thread):
              response = {"status": "error", "message": f"Missing key: {e}"}
         except Exception as e:
             logger.error(f"Error processing client request: {e}", exc_info=True)
-            # Keep default error response
 
         finally:
-            # Send the response back to the client
-            try:
-                response_str = json.dumps(response)
-                logger.debug(f"Sending response: {response_str}")
-                win32file.WriteFile(self._pipe_handle, response_str.encode('utf-8'))
-            except pywintypes.error as e:
-                 # Error 232 (ERROR_NO_DATA) can happen if client disconnected after sending request
-                 if e.winerror == 232:
-                      logger.warning("Client disconnected before response could be sent (Error 232).")
-                 else:
-                      logger.error(f"Failed to write response to pipe: {e}", exc_info=True)
-            except Exception as e:
-                 logger.error(f"Unexpected error sending response: {e}", exc_info=True)
-
+            if response.get("status") != "invalid_token":
+                try:
+                    response_str = json.dumps(response)
+                    logger.debug(f"Sending response: {response_str}")
+                    win32file.WriteFile(self._pipe_handle, response_str.encode('utf-8'))
+                except pywintypes.error as e:
+                     if e.winerror == 232:
+                          logger.warning("Client disconnected before response could be sent (Error 232).")
+                     else:
+                          logger.error(f"Failed to write response to pipe: {e}", exc_info=True)
+                except Exception as e:
+                     logger.error(f"Unexpected error sending response: {e}", exc_info=True)
 
     def _close_pipe_handle(self):
         """Safely closes the current pipe handle."""
@@ -301,10 +305,7 @@ class NamedPipeIPCServer(threading.Thread):
         logger.info("Stopping Named Pipe IPC Server...")
         self._stop_event.set()
 
-        # To unblock ConnectNamedPipe, we need to connect to the pipe ourselves briefly.
-        # This is a common pattern for stopping blocking pipe servers.
         if self.pipe_name:
-             # Use a separate thread for the dummy connection to avoid deadlock
              def dummy_connect():
                   try:
                        logger.debug("Attempting dummy connection to unblock server...")
@@ -315,23 +316,18 @@ class NamedPipeIPCServer(threading.Thread):
                             win32file.OPEN_EXISTING,
                             0, None
                        )
-                       # Keep connection open briefly? Or just close? Close immediately.
                        win32file.CloseHandle(handle)
                        logger.debug("Dummy connection successful and closed.")
                   except pywintypes.error as e:
-                       # Error 2 (File not found) is expected if server already shut down pipe
-                       # Error 231 (All pipe instances are busy) might happen
                        if e.winerror not in [2, 231]:
                             logger.warning(f"Error during dummy pipe connection: {e}")
                   except Exception as e:
                        logger.warning(f"Unexpected error during dummy pipe connection: {e}")
 
-             # Run dummy connect in a thread so it doesn't block 'stop'
              dummy_thread = threading.Thread(target=dummy_connect, daemon=True)
              dummy_thread.start()
-             dummy_thread.join(timeout=1.0) # Wait briefly for it
+             dummy_thread.join(timeout=1.0)
 
-        # Close the handle if it's still open (e.g., if stop was called while connected)
         self._close_pipe_handle()
         logger.info("Named Pipe IPC Server stop sequence initiated.")
 

@@ -6,13 +6,14 @@ Designed to be instantiated and passed around (Dependency Injection).
 """
 import json
 import os
-import logging
 import sys
 import datetime
 import shutil
 from typing import Any, Optional, Dict
+from src.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+# Get a properly configured logger instance
+logger = get_logger(__name__)
 
 class ConfigManager:
     """Loads and manages agent configuration from a file."""

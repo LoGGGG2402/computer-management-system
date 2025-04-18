@@ -7,7 +7,6 @@ Accepts ConfigManager instance for configuration parameters like reconnect delay
 **Change:** Ensures authentication is confirmed by the server before allowing emits.
 """
 import socketio
-import logging
 import threading
 import time
 import json # Added for logging data in debug
@@ -15,8 +14,11 @@ from typing import Dict, Any, Callable, Optional
 
 # Configuration
 from src.config.config_manager import ConfigManager # Import class for type hinting
+# Use the centralized logger
+from src.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+# Get a properly configured logger instance
+logger = get_logger(__name__)
 
 class WSClient:
     """

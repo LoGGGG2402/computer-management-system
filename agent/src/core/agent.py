@@ -10,7 +10,7 @@ Relies solely on WSClient's auto-reconnect mechanism.
 import time
 import sys
 import threading
-import logging
+import logging  # Added import for logging
 from typing import Dict, Any, Optional
 
 # Configuration
@@ -31,8 +31,16 @@ from src.core.agent_state import AgentState  # Import the enum
 from src.system.lock_manager import LockManager  # Import for type hint
 # IPC
 from src.ipc.named_pipe_server import NamedPipeIPCServer, WINDOWS_PIPE_SUPPORT  # Added for IPC
+# Use the centralized logger
+from src.utils.logger import get_logger
 
-logger = logging.getLogger("agent")
+try:
+    import pywintypes  # Added import
+except ImportError:
+    pywintypes = None  # Define as None if import fails
+
+# Get a properly configured logger instance
+logger = get_logger("agent")
 
 class Agent:
     """
@@ -60,7 +68,7 @@ class Agent:
 
         self._running = threading.Event()
         self._status_timer: Optional[threading.Timer] = None
-        self._ipc_server: Optional[NamedPipeIPCServer] = None  # Added for IPC
+        self._ipc_server: Optional[NamedPipeIPCServer] = None  # Initialize _ipc_server to None
 
         # Store Injected Dependencies
         self.config = config_manager
@@ -92,17 +100,7 @@ class Agent:
         # Register WS message handler
         self.ws_client.register_message_handler(self.command_executor.handle_incoming_command)
 
-        # Initialize IPC Server (if supported)
-        if WINDOWS_PIPE_SUPPORT:
-            try:
-                self._ipc_server = NamedPipeIPCServer(self, self.is_admin)
-            except (ImportError, ValueError, pywintypes.error) as e:
-                logger.error(f"Failed to initialize Named Pipe IPC Server: {e}", exc_info=True)
-                self._ipc_server = None  # Ensure it's None on failure
-        else:
-            logger.warning("Named Pipe IPC Server not supported on this platform or win32 modules missing.")
-
-        logger.info(f"Agent initialized. Device ID: {self.device_id}, Room: {self.room_config.get('room', 'N/A')}")
+        logger.info(f"Agent initialized (pre-auth). Device ID: {self.device_id}, Room: {self.room_config.get('room', 'N/A')}")
 
     # --- State Management Method (Phase 1) ---
     def _set_state(self, new_state: AgentState):
@@ -343,19 +341,28 @@ class Agent:
                 self.graceful_shutdown()
                 return
 
+            # --- Initialize and Start IPC Server (AFTER getting agent_token) ---
+            if WINDOWS_PIPE_SUPPORT and self.agent_token:
+                logger.info("Initializing Named Pipe IPC Server...")
+                try:
+                    self._ipc_server = NamedPipeIPCServer(self, self.is_admin, self.agent_token)
+                    logger.info("Starting Named Pipe IPC Server...")
+                    self._ipc_server.start()
+                except (ImportError, ValueError, pywintypes.error if pywintypes else Exception) as e:
+                    logger.error(f"Failed to initialize or start Named Pipe IPC Server: {e}", exc_info=True)
+                    self._ipc_server = None  # Ensure it's None on failure
+            elif not self.agent_token:
+                logger.warning("Cannot start IPC Server: Agent token is missing after authentication.")
+            else:  # WINDOWS_PIPE_SUPPORT is False
+                logger.warning("IPC Server not supported or win32 modules missing.")
+            # --- End IPC Server Initialization ---
+
             self._send_hardware_info()
 
             if not self._connect_websocket():
                 logger.warning("Failed to establish and authenticate initial WebSocket connection. Will rely on auto-reconnect.")
             else:
                 logger.info("Initial WebSocket connection and authentication successful.")
-
-            # Start IPC Server
-            if self._ipc_server:
-                logger.info("Starting Named Pipe IPC Server...")
-                self._ipc_server.start()
-            else:
-                logger.warning("IPC Server was not initialized, cannot start.")
 
             self.command_executor.start_workers()
 
