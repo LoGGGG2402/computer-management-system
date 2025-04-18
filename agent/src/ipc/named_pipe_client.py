@@ -1,0 +1,159 @@
+# -*- coding: utf-8 -*-
+"""
+Named Pipe client for Inter-Process Communication (IPC).
+Sends the --force command to a running agent instance.
+"""
+import logging
+import json
+import time
+import sys
+from typing import List, Dict, Any, Optional
+
+# Windows specific imports
+try:
+    import win32pipe
+    import win32file
+    import win32api
+    import pywintypes
+    WINDOWS_PIPE_SUPPORT = True
+except ImportError:
+    WINDOWS_PIPE_SUPPORT = False
+    logging.getLogger(__name__).warning("win32pipe or related modules not found. IPC client functionality will be disabled.")
+
+# Local imports
+from src.system.windows_utils import get_user_sid_string, manage_ipc_secret, is_running_as_admin
+
+logger = logging.getLogger(__name__)
+
+# Pipe name format (must match server)
+PIPE_NAME_TEMPLATE_SYSTEM = r'\\.\pipe\CMSAgentIPC_System'
+PIPE_NAME_TEMPLATE_USER = r'\\.\pipe\CMSAgentIPC_User_{user_sid}'
+PIPE_CONNECT_TIMEOUT_MS = 3000 # 3 seconds to connect
+PIPE_READ_TIMEOUT_MS = 5000 # 5 seconds to read response
+PIPE_BUFFER_SIZE = 4096
+
+def _determine_pipe_name(is_admin: bool) -> Optional[str]:
+    """Determines the pipe name based on admin privileges."""
+    if is_admin:
+        return PIPE_NAME_TEMPLATE_SYSTEM
+    else:
+        user_sid = get_user_sid_string()
+        if user_sid:
+            return PIPE_NAME_TEMPLATE_USER.format(user_sid=user_sid)
+        else:
+            logger.error("Failed to get user SID for non-admin pipe name.")
+            return None
+
+def send_force_command(is_admin: bool, new_args: List[str]) -> Dict[str, Any]:
+    """
+    Connects to the running agent's named pipe and sends a force restart command.
+
+    Args:
+        is_admin (bool): Whether the *target* agent is expected to be running as admin.
+        new_args (List[str]): The command line arguments intended for the new instance.
+
+    Returns:
+        Dict[str, Any]: A dictionary containing the status from the server
+                       (e.g., {"status": "acknowledged"}, {"status": "busy_updating"},
+                        {"status": "invalid_secret"}, {"status": "agent_not_running"},
+                        {"status": "error", "message": "..."}).
+    """
+    if not WINDOWS_PIPE_SUPPORT:
+        return {"status": "error", "message": "IPC unsupported (win32 modules missing)"}
+
+    pipe_name = _determine_pipe_name(is_admin)
+    if not pipe_name:
+        return {"status": "error", "message": "Could not determine target pipe name"}
+
+    ipc_secret = manage_ipc_secret(action='get', is_admin=is_admin)
+    if not ipc_secret:
+        logger.warning(f"IPC secret not found for {'Admin' if is_admin else 'User'} context. Sending request without secret (will likely fail).")
+        # Proceeding without secret might be desired in some recovery scenarios,
+        # but server will reject it. Let's send an empty one for now.
+        ipc_secret = "" # Or handle this case more explicitly?
+
+    pipe_handle = None
+    try:
+        logger.info(f"Attempting to connect to IPC pipe: {pipe_name}")
+
+        # Wait for the named pipe to become available
+        # win32pipe.WaitNamedPipe(pipe_name, PIPE_CONNECT_TIMEOUT_MS) # This can block
+
+        # Connect to the pipe
+        pipe_handle = win32file.CreateFile(
+            pipe_name,
+            win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+            0, # No sharing
+            None, # Default security attributes
+            win32file.OPEN_EXISTING,
+            0, # Default attributes
+            None # No template file
+        )
+        logger.info(f"Connected to pipe {pipe_name}.")
+
+        # Set pipe mode to message mode (must match server)
+        # This might not be strictly necessary for client if server uses PIPE_TYPE_MESSAGE
+        # but doesn't hurt.
+        # mode = win32pipe.PIPE_READMODE_MESSAGE
+        # win32pipe.SetNamedPipeHandleState(pipe_handle, mode, None, None)
+
+        # Prepare request payload
+        request_payload = {
+            "command": "force_restart",
+            "secret": ipc_secret,
+            "new_args": new_args # Pass current args for potential future use by server
+        }
+        request_str = json.dumps(request_payload)
+        logger.debug(f"Sending IPC request: {request_str}")
+
+        # Send the request
+        win32file.WriteFile(pipe_handle, request_str.encode('utf-8'))
+        logger.debug("Request sent. Waiting for response...")
+
+        # Read the response (with timeout?) - ReadFile can block
+        # Using ReadFile without overlapped I/O means it blocks until data arrives or pipe closes.
+        # Adding a timeout requires more complex overlapped I/O or checking pipe state.
+        # For simplicity, rely on server responding promptly or closing pipe.
+        hr, response_bytes = win32file.ReadFile(pipe_handle, PIPE_BUFFER_SIZE)
+        if hr != 0:
+             logger.error(f"ReadFile failed with error code: {hr}")
+             return {"status": "error", "message": f"Pipe read error {hr}"}
+
+        response_str = response_bytes.decode('utf-8')
+        logger.debug(f"Received raw response: {response_str}")
+
+        response_data = json.loads(response_str)
+        logger.info(f"Received IPC response: {response_data}")
+        return response_data
+
+    except pywintypes.error as e:
+        # Common errors:
+        # 2: ERROR_FILE_NOT_FOUND -> Agent pipe doesn't exist (agent not running or wrong context)
+        # 231: ERROR_PIPE_BUSY -> All pipe instances are busy (shouldn't happen with 1 server instance?)
+        # 232: ERROR_NO_DATA -> Pipe closed by server during read/write
+        if e.winerror == 2:
+            logger.warning(f"IPC pipe {pipe_name} not found. Agent likely not running or in different context.")
+            return {"status": "agent_not_running"}
+        elif e.winerror == 231:
+             logger.error(f"IPC pipe {pipe_name} is busy (Error 231). This is unexpected.")
+             return {"status": "error", "message": "Pipe busy (unexpected)"}
+        elif e.winerror == 232:
+             logger.error(f"IPC pipe {pipe_name} closed prematurely by server (Error 232).")
+             return {"status": "error", "message": "Pipe closed by server"}
+        else:
+            logger.error(f"Named pipe connection/communication error (winerror {e.winerror}): {e}", exc_info=True)
+            return {"status": "error", "message": f"Pipe error: {e.strerror}"}
+    except json.JSONDecodeError:
+        logger.error("Failed to decode JSON response from IPC server.")
+        return {"status": "error", "message": "Invalid JSON response from server"}
+    except Exception as e:
+        logger.error(f"Unexpected error during IPC communication: {e}", exc_info=True)
+        return {"status": "error", "message": f"Unexpected client error: {e}"}
+    finally:
+        if pipe_handle:
+            try:
+                win32file.CloseHandle(pipe_handle)
+                logger.debug("Closed pipe handle.")
+            except pywintypes.error as e:
+                 logger.warning(f"Error closing pipe handle: {e}")
+

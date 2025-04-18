@@ -9,9 +9,8 @@ import os
 import sys
 import argparse
 import shutil  # Added for file copying
-
-# --- Global Lock File Variables ---
-_lock_manager_instance = None  # Keep track of the lock manager instance for atexit
+import time  # Added for force restart wait
+from src.ipc.named_pipe_client import send_force_command, WINDOWS_PIPE_SUPPORT  # Added for IPC client
 
 # --- Path Setup ---
 # Ensure the 'src' directory is in the Python path
@@ -74,6 +73,14 @@ def parse_arguments() -> argparse.Namespace:
     )
     # --- Autostart Arguments --- END
 
+    # --- Force Restart Argument --- START
+    parser.add_argument(
+        '--force',
+        action='store_true',
+        help='Request the currently running agent instance (if any) to shut down and then start this instance. Uses IPC.'
+    )
+    # --- Force Restart Argument --- END
+
     return parser.parse_args()
 
 def initialize_logging(config: ConfigManager, storage_path: str, debug_mode: bool):
@@ -111,25 +118,14 @@ def initialize_logging(config: ConfigManager, storage_path: str, debug_mode: boo
         log_file_path=log_file
     )
 
-def cleanup_resources():
-    """Function registered with atexit to release the lock."""
-    global _lock_manager_instance
-    logger = get_logger("agent.main")  # Get logger instance
-    if _lock_manager_instance:
-        logger.info("Releasing lock via atexit handler...")
-        _lock_manager_instance.release()
-        logger.info("Lock released via atexit handler.")
-    else:
-        logger.debug("No lock manager instance found in atexit handler.")
-
 def main() -> int:
     """Main function to initialize and start the agent."""
-    global _lock_manager_instance  # Allow modification
     args = parse_arguments()
     logger = None  # Initialize logger variable
     agent_instance = None  # Keep track of agent instance for cleanup
     config_manager = None  # Initialize config manager variable
     state_manager = None  # Initialize state manager variable
+    lock_manager = None  # Initialize lock_manager variable
 
     # --- Determine Executable Path --- START
     # This is needed early for autostart registration
@@ -145,6 +141,12 @@ def main() -> int:
             return 1
     print(f"Determined executable path: {executable_path}")
     # --- Determine Executable Path --- END
+
+    # --- Determine Admin Context --- START
+    # Needed early for autostart and IPC
+    is_admin = is_running_as_admin()
+    print(f"Running with admin privileges: {is_admin}")
+    # --- Determine Admin Context --- END
 
     # Create a temporary config manager (might fail if file not found, uses defaults)
     temp_config_path = None
@@ -188,7 +190,6 @@ def main() -> int:
     # This needs to run *before* logging is fully initialized and *before* the lock
     # because these actions should be quick and exit immediately.
     if args.enable_autostart or args.disable_autostart:
-        is_admin = is_running_as_admin()
         print(f"Running with admin privileges: {is_admin}")
         if args.enable_autostart:
             print(f"Attempting to enable autostart for: {executable_path} with name {app_name_for_registry}")
@@ -260,21 +261,83 @@ def main() -> int:
         traceback.print_exc()
         return 1
 
-    # --- Acquire Lock ---
-    try:
-        logger.info("Acquiring instance lock...")
-        _lock_manager_instance = LockManager(storage_path)
-        if not _lock_manager_instance.acquire():
-            logger.critical("Failed to acquire instance lock. Exiting.")
+    # --- Handle Force Restart --- START
+    proceed_normally = True
+    if args.force:
+        logger.info("'--force' argument detected. Attempting IPC request to running instance.")
+        if not WINDOWS_PIPE_SUPPORT:
+            logger.error("Cannot process '--force': IPC is not supported (win32 modules missing). Exiting.")
             return 1
-        logger.info("Instance lock acquired successfully.")
-    except ValueError as e:
-        logger.critical(f"Failed to initialize Lock Manager: {e}", exc_info=True)
-        print(f"FATAL: Failed to initialize Lock Manager: {e}", file=sys.stderr)
-        return 1
-    except Exception as e:
-        logger.critical(f"Unexpected error acquiring lock: {e}", exc_info=True)
-        print(f"FATAL: Unexpected error acquiring lock: {e}", file=sys.stderr)
+
+        ipc_response = send_force_command(is_admin, sys.argv)
+        status = ipc_response.get("status")
+
+        if status == "acknowledged":
+            logger.info("Running agent acknowledged restart request. Waiting for lock release (up to 60s)...")
+            proceed_normally = False  # Don't try immediate lock acquire
+            wait_start_time = time.monotonic()
+            lock_acquired_after_wait = False
+            while time.monotonic() - wait_start_time < 60:
+                # Need a lock manager instance here temporarily
+                if not lock_manager:
+                    try:
+                        lock_manager = LockManager(storage_path)
+                    except ValueError as e:
+                        logger.critical(f"Failed to initialize Lock Manager while waiting for forced restart: {e}")
+                        return 1
+
+                if lock_manager.acquire():
+                    logger.info("Successfully acquired lock after waiting for forced restart.")
+                    lock_acquired_after_wait = True
+                    break  # Acquired lock, exit wait loop
+                else:
+                    logger.debug("Lock still held by previous instance. Waiting...")
+                    time.sleep(1)  # Wait 1 second before retrying
+
+            if not lock_acquired_after_wait:
+                logger.critical("Timed out waiting for previous agent instance to release the lock after --force request. Exiting.")
+                return 1
+            # If lock acquired, proceed to normal startup using the existing lock_manager instance
+
+        elif status == "agent_not_running":
+            logger.info("No running agent detected via IPC. Proceeding with normal startup.")
+            proceed_normally = True
+        elif status == "busy_updating":
+            logger.warning("Running agent is busy updating. Cannot force restart now. Exiting.")
+            return 1  # Exit gracefully, don't proceed
+        elif status == "invalid_secret":
+            logger.error("IPC request failed: Invalid secret. Check if secrets are corrupted or mismatched. Exiting.")
+            return 1
+        elif status == "error":
+            error_msg = ipc_response.get("message", "Unknown IPC error")
+            logger.error(f"IPC request failed: {error_msg}. Exiting.")
+            return 1
+        else:
+            logger.error(f"Received unexpected IPC status: {status}. Exiting.")
+            return 1
+    # --- Handle Force Restart --- END
+
+    # --- Acquire Lock (if not already acquired during --force wait) ---
+    if proceed_normally:
+        try:
+            logger.info("Acquiring instance lock...")
+            lock_manager = LockManager(storage_path)
+            if not lock_manager.acquire():
+                # Check if --force should have been used
+                logger.critical("Failed to acquire instance lock. Another instance might be running. Use --force to attempt restart. Exiting.")
+                return 1
+            logger.info("Instance lock acquired successfully.")
+        except ValueError as e:
+            logger.critical(f"Failed to initialize Lock Manager: {e}", exc_info=True)
+            print(f"FATAL: Failed to initialize Lock Manager: {e}", file=sys.stderr)
+            return 1
+        except Exception as e:
+            logger.critical(f"Unexpected error acquiring lock: {e}", exc_info=True)
+            print(f"FATAL: Unexpected error acquiring lock: {e}", file=sys.stderr)
+            return 1
+    elif not lock_manager:
+        # This should not happen if --force logic worked correctly
+        logger.critical("Internal error: Lock should have been acquired during --force wait, but manager is None. Exiting.")
         return 1
 
     try:
@@ -296,7 +359,8 @@ def main() -> int:
             ws_client=ws_client,
             system_monitor=system_monitor,
             command_executor=command_executor,
-            lock_manager=_lock_manager_instance
+            lock_manager=lock_manager,  # Pass the acquired lock manager
+            is_admin=is_admin  # Pass admin status
         )
 
         # 7. Start the Agent
@@ -332,9 +396,9 @@ def main() -> int:
             traceback.print_exc()
         return 1
     finally:
-        if agent_instance and agent_instance._running.is_set():
-            logger.info("Ensuring agent is stopped in main finally block...")
-            agent_instance.stop()
+        # Graceful shutdown is now handled within Agent.start's finally block
+        # and triggered by KeyboardInterrupt or errors.
+        pass
 
 if __name__ == "__main__":
     exit_code = main()

@@ -29,6 +29,8 @@ from src.ui import ui_console
 # Added for Phase 1
 from src.core.agent_state import AgentState  # Import the enum
 from src.system.lock_manager import LockManager  # Import for type hint
+# IPC
+from src.ipc.named_pipe_server import NamedPipeIPCServer, WINDOWS_PIPE_SUPPORT  # Added for IPC
 
 logger = logging.getLogger("agent")
 
@@ -44,7 +46,8 @@ class Agent:
                  ws_client: WSClient,
                  system_monitor: SystemMonitor,
                  command_executor: CommandExecutor,
-                 lock_manager: LockManager):  # Added lock_manager
+                 lock_manager: LockManager,
+                 is_admin: bool):  # Added is_admin
         """
         Initialize the agent with its dependencies.
         """
@@ -57,6 +60,7 @@ class Agent:
 
         self._running = threading.Event()
         self._status_timer: Optional[threading.Timer] = None
+        self._ipc_server: Optional[NamedPipeIPCServer] = None  # Added for IPC
 
         # Store Injected Dependencies
         self.config = config_manager
@@ -66,6 +70,7 @@ class Agent:
         self.system_monitor = system_monitor
         self.command_executor = command_executor
         self.lock_manager = lock_manager  # Store lock manager instance
+        self.is_admin = is_admin  # Store is_admin
 
         # Essential Configuration Values
         self.status_report_interval = self.config.get('agent.status_report_interval_sec', 30)
@@ -87,6 +92,16 @@ class Agent:
         # Register WS message handler
         self.ws_client.register_message_handler(self.command_executor.handle_incoming_command)
 
+        # Initialize IPC Server (if supported)
+        if WINDOWS_PIPE_SUPPORT:
+            try:
+                self._ipc_server = NamedPipeIPCServer(self, self.is_admin)
+            except (ImportError, ValueError, pywintypes.error) as e:
+                logger.error(f"Failed to initialize Named Pipe IPC Server: {e}", exc_info=True)
+                self._ipc_server = None  # Ensure it's None on failure
+        else:
+            logger.warning("Named Pipe IPC Server not supported on this platform or win32 modules missing.")
+
         logger.info(f"Agent initialized. Device ID: {self.device_id}, Room: {self.room_config.get('room', 'N/A')}")
 
     # --- State Management Method (Phase 1) ---
@@ -106,6 +121,14 @@ class Agent:
         with self._state_lock:
             return self._state
     # --- End State Management Method ---
+
+    # --- IPC Request Handling ---
+    def request_restart(self):
+        """Called by the IPC server when a valid force_restart command is received."""
+        logger.info("Restart requested via IPC. Initiating graceful shutdown.")
+        self._set_state(AgentState.FORCE_RESTARTING)  # Set state before shutdown
+        # Call graceful_shutdown asynchronously to avoid blocking the IPC server thread
+        threading.Thread(target=self.graceful_shutdown, name="GracefulShutdownThread").start()
 
     # --- Authentication Flow ---
     def _handle_mfa_verification(self) -> bool:
@@ -317,7 +340,7 @@ class Agent:
         try:
             if not self.authenticate():
                 logger.critical("Authentication failed. Agent cannot start.")
-                self.stop()
+                self.graceful_shutdown()
                 return
 
             self._send_hardware_info()
@@ -326,6 +349,13 @@ class Agent:
                 logger.warning("Failed to establish and authenticate initial WebSocket connection. Will rely on auto-reconnect.")
             else:
                 logger.info("Initial WebSocket connection and authentication successful.")
+
+            # Start IPC Server
+            if self._ipc_server:
+                logger.info("Starting Named Pipe IPC Server...")
+                self._ipc_server.start()
+            else:
+                logger.warning("IPC Server was not initialized, cannot start.")
 
             self.command_executor.start_workers()
 
@@ -345,34 +375,78 @@ class Agent:
             logger.critical(f"Critical error in agent main loop: {e}", exc_info=True)
             self._set_state(AgentState.STOPPED)
         finally:
-            self.stop()
+            self.graceful_shutdown()
 
-    def stop(self):
-        """Stops the agent gracefully."""
-        if not self._running.is_set() and self.get_state() == AgentState.SHUTTING_DOWN:
-            logger.debug("Stop called but agent already stopping/stopped.")
+    def graceful_shutdown(self):
+        """Stops the agent gracefully, including IPC server and lock release."""
+        if not self._running.is_set() and self.get_state() in [AgentState.SHUTTING_DOWN, AgentState.STOPPED, AgentState.FORCE_RESTARTING]:
+            logger.debug("Graceful shutdown called but agent already stopping/stopped.")
             return
 
-        self._set_state(AgentState.SHUTTING_DOWN)
+        # Set state only if not already force restarting
+        current_state = self.get_state()
+        if current_state != AgentState.FORCE_RESTARTING:
+            self._set_state(AgentState.SHUTTING_DOWN)
+        else:
+            logger.info("Proceeding with shutdown due to force restart request.")
 
-        logger.info("================ Stopping Agent ================")
+        logger.info("================ Initiating Graceful Shutdown ================")
         self._running.clear()
 
+        # 1. Stop accepting new commands (Stop IPC Server first)
+        if self._ipc_server and self._ipc_server.is_alive():
+            logger.debug("Stopping Named Pipe IPC server...")
+            self._ipc_server.stop()
+            # Don't join immediately, allow other things to shut down concurrently
+
+        # 2. Stop background tasks (timers, command workers)
         logger.debug("Cancelling timers...")
         if self._status_timer and self._status_timer.is_alive():
             self._status_timer.cancel()
             logger.debug("Status timer cancelled.")
+        # Add cancellation for other timers (e.g., polling) here if they exist
 
         if self.command_executor:
-            logger.debug("Stopping command executor...")
+            logger.debug("Stopping command executor workers...")
             self.command_executor.stop()
-            logger.debug("Command executor stopped.")
+            logger.debug("Command executor workers stopped.")
 
+        # 3. Disconnect communications
         if self.ws_client:
             logger.debug("Disconnecting WebSocket client...")
             self.ws_client.disconnect()
             logger.debug("WebSocket client disconnected.")
 
-        time.sleep(0.5)
-        logger.info("Agent stop sequence complete.")
+        # 4. Wait for IPC server thread to finish
+        if self._ipc_server and self._ipc_server.is_alive():
+            logger.debug("Waiting for IPC server thread to join...")
+            self._ipc_server.join(timeout=5.0)  # Wait with timeout
+            if self._ipc_server.is_alive():
+                logger.warning("IPC server thread did not join within timeout.")
+            else:
+                logger.debug("IPC server thread joined.")
+
+        # 5. Flush logs (optional, depends on logging setup)
+        try:
+            logging.shutdown()
+            logger.debug("Logging shutdown requested.")  # This logger might not work after shutdown
+        except Exception as log_e:
+            print(f"Error during logging shutdown: {log_e}", file=sys.stderr)
+
+        # 6. Release the lock (CRITICAL: Do this *before* exiting)
+        if self.lock_manager:
+            logger.info("Releasing agent lock file...")
+            self.lock_manager.release()  # LockManager handles actual file release
+            logger.info("Agent lock file released.")
+        else:
+            logger.warning("Lock manager instance not found, cannot release lock explicitly.")
+
+        self._set_state(AgentState.STOPPED)
+        logger.info("================ Agent Shutdown Complete ================")
+
+        # 7. Exit the process (optional, depends on how main loop is structured)
+        # If start() runs in the main thread, this might not be needed,
+        # but if start() is threaded, sys.exit() might be required here.
+        # For now, assume main loop handles exit after start() returns.
+        # sys.exit(0)
 
