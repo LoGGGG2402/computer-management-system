@@ -69,27 +69,27 @@ class HttpClient:
 
         except requests.exceptions.Timeout:
             logger.error(f"Request timed out after {request_timeout}s: {method} {url}")
-            return None, f"Yêu cầu hết hạn sau {request_timeout} giây."
+            return None, f"Request timed out after {request_timeout} seconds."
         except requests.exceptions.ConnectionError as e:
             logger.error(f"Connection error: {method} {url} - {e}")
-            return None, f"Không thể kết nối đến máy chủ tại {self.base_url}."
+            return None, f"Unable to connect to the server at {self.base_url}."
         except requests.exceptions.HTTPError as e:
             status_code = e.response.status_code
             try:
                 error_data = e.response.json()
                 error_message = error_data.get('message', json.dumps(error_data))
                 logger.error(f"HTTP error {status_code}: {method} {url}. Server response: {error_message}")
-                return error_data, f"Lỗi máy chủ {status_code}: {error_message}"
+                return error_data, f"Server error {status_code}: {error_message}"
             except json.JSONDecodeError:
                  error_text = e.response.text[:200]
                  logger.error(f"HTTP error {status_code}: {method} {url}. Response: {error_text}...")
-                 return None, f"Máy chủ trả về lỗi {status_code} (không phải JSON)."
+                 return None, f"Server returned error {status_code} (non-JSON response)."
         except requests.exceptions.RequestException as e:
             logger.error(f"An unexpected request error occurred: {method} {url} - {e}", exc_info=True)
-            return None, f"Lỗi mạng không mong muốn: {e}"
+            return None, f"Unexpected network error: {e}"
         except Exception as e:
              logger.critical(f"An unexpected internal error occurred during HTTP request: {method} {url} - {e}", exc_info=True)
-             return None, f"Lỗi nội bộ không mong muốn khi thực hiện yêu cầu: {e}"
+             return None, f"Unexpected internal error while processing request: {e}"
 
     def identify_agent(self, unique_agent_id: str, room_config: Optional[Dict[str, Any]] = None, force_renew: bool = False) -> Tuple[bool, Dict[str, Any]]:
         """

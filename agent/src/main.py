@@ -20,6 +20,7 @@ from src.config.config_manager import ConfigManager
 from src.config.state_manager import StateManager
 from src.communication.http_client import HttpClient
 from src.communication.ws_client import WSClient
+from src.communication.server_connector import ServerConnector
 from src.monitoring.system_monitor import SystemMonitor
 from src.core.agent import Agent
 from src.core.command_executor import CommandExecutor
@@ -215,7 +216,13 @@ def main() -> int:
 
         device_id = state_manager.get_device_id()
         agent_token = state_manager.load_token(device_id) if device_id else None
-        logger.info(f"Using agent token for IPC authentication: {'Found' if agent_token else 'None'}")
+        
+        # Use default token "123" if no token is found
+        if agent_token is None:
+            agent_token = "123"
+            logger.info("No agent token found, using default token for IPC authentication")
+        else:
+            logger.info(f"Using agent token for IPC authentication: {'Found' if agent_token else 'None'}")
 
         ipc_response = send_force_command(is_admin, sys.argv, agent_token)
         status = ipc_response.get("status")
@@ -287,17 +294,25 @@ def main() -> int:
         http_client = HttpClient(config_manager)
         ws_client = WSClient(config_manager)
         system_monitor = SystemMonitor()
+
+        server_connector = ServerConnector(
+            config_manager=config_manager,
+            state_manager=state_manager,
+            http_client=http_client,
+            ws_client=ws_client,
+            system_monitor=system_monitor
+        )
+
         command_executor = CommandExecutor(ws_client, config_manager)
 
         logger.info("Creating Agent instance...")
         agent_instance = Agent(
             config_manager=config_manager,
             state_manager=state_manager,
-            http_client=http_client,
             ws_client=ws_client,
-            system_monitor=system_monitor,
             command_executor=command_executor,
             lock_manager=lock_manager,
+            server_connector=server_connector,
             is_admin=is_admin
         )
 
@@ -323,7 +338,9 @@ def main() -> int:
         logger.critical(f"An unexpected critical error occurred during initialization: {e}", exc_info=True)
         return 1
     finally:
-        pass
+        if lock_manager:
+            lock_manager.release()
+        logger.info("--- Agent Exiting ---")
 
 if __name__ == "__main__":
     exit_code = main()

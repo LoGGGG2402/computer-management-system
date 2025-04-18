@@ -231,6 +231,15 @@ class LockManager:
         logger.debug("Release lock requested.")
         self._stop_timestamp_updater()
 
+        # Unregister from atexit to prevent double-release
+        try:
+            atexit.unregister(self.release)
+            logger.debug("Unregistered lock release from atexit.")
+        except (AttributeError, ValueError):
+            # Either atexit.unregister doesn't exist (Python < 3.8) or
+            # the function wasn't registered
+            pass
+
         if self._lock_fd is not None:
             fd = self._lock_fd
             self._lock_fd = None

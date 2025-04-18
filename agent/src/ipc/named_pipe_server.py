@@ -71,6 +71,22 @@ class NamedPipeIPCServer(threading.Thread):
         self.active_connections = {}
         self.connections_lock = threading.Lock()
 
+    def update_token(self, new_token: str):
+        """
+        Updates the agent token used for IPC authentication.
+        
+        :param new_token: The new agent token to use for authentication
+        :type new_token: str
+        """
+        if not new_token:
+            logger.warning("Attempted to update agent token with empty value.")
+            return False
+        
+        logger.debug("Updating IPC server agent token...")
+        self.agent_token = new_token
+        logger.info("IPC server token updated successfully.")
+        return True
+
     def _determine_pipe_name(self) -> Optional[str]:
         """
         Determines the pipe name based on admin privileges.

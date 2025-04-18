@@ -7,9 +7,8 @@ import logging
 from typing import Dict, Any, Optional
 
 from src.config.config_manager import ConfigManager
-from src.communication.http_client import HttpClient
 from src.communication.ws_client import WSClient
-from src.monitoring.system_monitor import SystemMonitor
+from src.communication.server_connector import ServerConnector
 from src.core.command_executor import CommandExecutor
 from src.config.state_manager import StateManager
 from src.ui import ui_console
@@ -50,31 +49,21 @@ class Agent:
     def __init__(self,
                  config_manager: ConfigManager,
                  state_manager: StateManager,
-                 http_client: HttpClient,
                  ws_client: WSClient,
-                 system_monitor: SystemMonitor,
                  command_executor: CommandExecutor,
                  lock_manager: LockManager,
+                 server_connector: ServerConnector,
                  is_admin: bool):
         """
         Initialize the agent with its dependencies.
 
         :param config_manager: Configuration manager instance
-        :type config_manager: ConfigManager
         :param state_manager: State manager for persistence
-        :type state_manager: StateManager
-        :param http_client: HTTP client for API calls
-        :type http_client: HttpClient
         :param ws_client: WebSocket client for real-time communication
-        :type ws_client: WSClient
-        :param system_monitor: System monitoring component
-        :type system_monitor: SystemMonitor
         :param command_executor: Command execution component
-        :type command_executor: CommandExecutor
         :param lock_manager: Lock manager for single instance control
-        :type lock_manager: LockManager
+        :param server_connector: Handles server communication logic
         :param is_admin: Whether agent is running with admin privileges
-        :type is_admin: bool
         :raises: RuntimeError if device ID or room configuration can't be determined
         """
         logger.info("Initializing Agent...")
@@ -88,11 +77,10 @@ class Agent:
 
         self.config = config_manager
         self.state_manager = state_manager
-        self.http_client = http_client
         self.ws_client = ws_client
-        self.system_monitor = system_monitor
         self.command_executor = command_executor
         self.lock_manager = lock_manager
+        self.server_connector = server_connector
         self.is_admin = is_admin
 
         self.status_report_interval = self.config.get('agent.status_report_interval_sec', 30)
@@ -101,14 +89,12 @@ class Agent:
         self.device_id = self.state_manager.get_device_id()
         if not self.device_id:
             self._set_state(AgentState.STOPPED)
-            raise RuntimeError("Could not determine Device ID.")
+            raise RuntimeError("Could not determine Device ID via StateManager.")
 
         self.room_config = ui_console.get_or_prompt_room_config(self.state_manager)
         if not self.room_config:
             self._set_state(AgentState.STOPPED)
             raise RuntimeError("Could not determine Room Configuration.")
-
-        self.agent_token: Optional[str] = None
 
         self.ws_client.register_message_handler(self.command_executor.handle_incoming_command)
 
@@ -148,178 +134,23 @@ class Agent:
         self._set_state(AgentState.FORCE_RESTARTING)
         threading.Thread(target=self.graceful_shutdown, name="GracefulShutdownThread").start()
 
-    def _handle_mfa_verification(self) -> bool:
-        """
-        Handles the MFA prompt and verification process.
-        
-        :return: True if MFA verification successful, False otherwise
-        :rtype: bool
-        """
-        logger.info("MFA required for registration.")
-        mfa_code = ui_console.prompt_for_mfa()
-        if not mfa_code:
-            logger.warning("MFA prompt cancelled by user.")
-            return False
-
-        api_call_success, response = self.http_client.verify_mfa(self.device_id, mfa_code)
-
-        if not api_call_success:
-            error_msg = response.get('message', 'Lỗi kết nối hoặc lỗi máy chủ không xác định')
-            logger.error(f"MFA verification API call failed. Error: {error_msg}")
-            return False
-
-        if response.get('status') == 'success' and 'agentToken' in response:
-            self.agent_token = response['agentToken']
-            if self.state_manager.save_token(self.device_id, self.agent_token):
-                logger.info("MFA verification successful. Agent registered, token saved.")
-                ui_console.display_registration_success()
-                return True
-            else:
-                logger.critical("MFA successful but FAILED TO SAVE TOKEN LOCALLY! Agent may not work after restart.")
-                ui_console.display_registration_success()
-                return True
-        else:
-            mfa_error = response.get('message', 'Mã MFA không hợp lệ hoặc đã hết hạn.')
-            logger.error(f"MFA verification failed: {mfa_error}")
-            return False
-
-    def _process_identification_response(self, response: Dict[str, Any]) -> bool:
-        """
-        Processes the logical response from a successful /identify API call.
-        
-        :param response: Response data from API
-        :type response: Dict[str, Any]
-        :return: True if identification successful, False otherwise
-        :rtype: bool
-        """
-        status = response.get('status')
-        message = response.get('message', 'No message from server.')
-
-        if status == 'success':
-            if 'agentToken' in response:
-                self.agent_token = response['agentToken']
-                if self.state_manager.save_token(self.device_id, self.agent_token):
-                    logger.info("Agent registered/identified successfully, new token saved.")
-                    return True
-                else:
-                    logger.critical("Agent identified but FAILED TO SAVE TOKEN LOCALLY! Agent may not work after restart.")
-                    return True
-            else:
-                logger.info(f"Agent already registered on server: {message}. Attempting to load existing token.")
-                self.agent_token = self.state_manager.load_token(self.device_id)
-                if self.agent_token:
-                    logger.info("Successfully loaded existing token after server confirmation.")
-                    return True
-                else:
-                    logger.error("Server indicates agent is registered, but no local token found via StateManager. Authentication failed.")
-                    return False
-
-        elif status == 'mfa_required':
-            return self._handle_mfa_verification()
-
-        elif status == 'position_error':
-            logger.error(f"Server rejected agent due to position conflict: {message}")
-            pos_x = self.room_config.get('position', {}).get('x', 'N/A')
-            pos_y = self.room_config.get('position', {}).get('y', 'N/A')
-            room_name = self.room_config.get('room', 'N/A')
-            return False
-
-        else:
-            logger.error(f"Failed to identify/register agent. Unknown server status: '{status}', Message: '{message}'")
-            return False
-
-    def authenticate(self) -> bool:
-        """
-        Authenticates the agent with the backend server.
-        
-        :return: True if authentication successful, False otherwise
-        :rtype: bool
-        """
-        logger.info("--- Starting Authentication Process ---")
-        self.agent_token = self.state_manager.load_token(self.device_id)
-        if self.agent_token:
-            logger.info("Found existing agent token. Assuming authenticated.")
-            logger.info("--- Authentication Successful (Used Existing Token) ---")
-            return True
-
-        logger.info("No existing token found. Attempting identification with server...")
-        try:
-            api_call_success, response = self.http_client.identify_agent(
-                self.device_id,
-                self.room_config,
-                force_renew=False
-            )
-            if not api_call_success:
-                error_msg = response.get('message', 'Lỗi kết nối hoặc lỗi máy chủ không xác định')
-                logger.error(f"Agent identification API call failed. Error: {error_msg}")
-                logger.info("--- Authentication Failed (API Call Error) ---")
-                return False
-
-            auth_logic_success = self._process_identification_response(response)
-            if auth_logic_success:
-                logger.info("--- Authentication Successful ---")
-            else:
-                logger.info("--- Authentication Failed (Server Logic/MFA/Error) ---")
-            return auth_logic_success
-        except Exception as e:
-            logger.critical(f"An unexpected error occurred during the authentication process: {e}", exc_info=True)
-            logger.info("--- Authentication Failed (Unexpected Error) ---")
-            return False
-
-    def _connect_websocket(self) -> bool:
-        """
-        Establishes and waits for authenticated WebSocket connection.
-        
-        :return: True if connection successful, False otherwise
-        :rtype: bool
-        """
-        if not self.agent_token:
-            logger.error("Cannot connect WebSocket: Agent token is missing.")
-            return False
-
-        logger.info("Attempting to connect and authenticate WebSocket...")
-        if not self.ws_client.connect_and_authenticate(self.device_id, self.agent_token):
-            return False
-
-        if not self.ws_client.wait_for_authentication(timeout=20.0):
-            logger.error("WebSocket connection and authentication attempt timed out or failed.")
-            self.ws_client.disconnect()
-            return False
-
-        logger.info("WebSocket connection established and authenticated.")
-        return True
-
     def _send_status_update(self):
         """
-        Fetches system stats and sends them via WebSocket.
+        Sends a status update using the ServerConnector. Schedules the next one.
         """
         if not self._running.is_set(): return
 
-        if not self.ws_client.connected:
-            logger.warning("Cannot send status update: WebSocket not connected/authenticated.")
-            if self._running.is_set():
-                self._schedule_next_status_report()
-            return
+        logger.debug("Requesting ServerConnector to send status update.")
+        if not self.server_connector.send_status_update():
+            pass
 
-        try:
-            stats = self.system_monitor.get_usage_stats()
-            status_data = {
-                "cpuUsage": stats.get("cpu", 0.0),
-                "ramUsage": stats.get("ram", 0.0),
-                "diskUsage": stats.get("disk", 0.0),
-            }
-            logger.debug(f"Sending status update: {status_data}")
-            if not self.ws_client.send_status_update(status_data):
-                pass
-        except Exception as e:
-            logger.error(f"Error during status update collection or sending: {e}", exc_info=True)
-        finally:
-            if self._running.is_set():
-                self._schedule_next_status_report()
+        if self._running.is_set():
+            self._schedule_next_status_report()
 
     def _schedule_next_status_report(self):
         """
         Schedules the next status report using a Timer thread.
+        The timer calls _send_status_update which uses the ServerConnector.
         """
         if not self._running.is_set(): return
         if self._status_timer and self._status_timer.is_alive():
@@ -329,39 +160,9 @@ class Agent:
         self._status_timer.start()
         logger.debug(f"Next status report scheduled in {self.status_report_interval} seconds.")
 
-    def _send_hardware_info(self):
-        """
-        Collects and sends detailed hardware information via HTTP.
-        
-        :return: True if hardware info sent successfully, False otherwise
-        :rtype: bool
-        """
-        if not self.agent_token:
-            logger.error("Cannot send hardware info: Agent token is missing.")
-            return False
-
-        logger.info("Collecting and sending hardware information...")
-        try:
-            hardware_info = self.system_monitor.get_hardware_info()
-            api_call_success, response = self.http_client.send_hardware_info(
-                self.agent_token,
-                self.device_id,
-                hardware_info
-            )
-            if api_call_success:
-                logger.info("Hardware information sent successfully.")
-                return True
-            else:
-                error_msg = response.get('message', 'Lỗi không xác định từ máy chủ')
-                logger.error(f"Failed to send hardware information. Server response: {error_msg}")
-                return False
-        except Exception as e:
-            logger.error(f"Error collecting or sending hardware info: {e}", exc_info=True)
-            return False
-
     def start(self):
         """
-        Starts the agent's main lifecycle.
+        Starts the agent's main lifecycle. Uses ServerConnector for communication tasks.
         """
         if self._running.is_set():
             logger.warning("Agent start requested but already running.")
@@ -373,51 +174,74 @@ class Agent:
         self._running.set()
 
         try:
-            if not self.authenticate():
-                logger.critical("Authentication failed. Agent cannot start.")
-                self.graceful_shutdown()
-                return
-
-            if WINDOWS_PIPE_SUPPORT and self.agent_token:
-                logger.info("Initializing Named Pipe IPC Server...")
+            # --- IPC Server Setup ---
+            # Use default token "123" for initial IPC server setup
+            default_token = "123"
+            if WINDOWS_PIPE_SUPPORT:
+                logger.info("Initializing Named Pipe IPC Server with default token...")
                 try:
-                    self._ipc_server = NamedPipeIPCServer(self, self.is_admin, self.agent_token)
+                    # Initialize IPC server with default token first
+                    self._ipc_server = NamedPipeIPCServer(self, self.is_admin, default_token)
                     logger.info("Starting Named Pipe IPC Server...")
                     self._ipc_server.start()
                 except (ImportError, ValueError, pywintypes.error if pywintypes else Exception) as e:
                     logger.error(f"Failed to initialize or start Named Pipe IPC Server: {e}", exc_info=True)
-                    self._ipc_server = None
-            elif not self.agent_token:
-                logger.warning("Cannot start IPC Server: Agent token is missing after authentication.")
-            else:
+                    self._ipc_server = None # Ensure it's None if setup fails
+            else: # Not WINDOWS_PIPE_SUPPORT
                 logger.warning("IPC Server not supported or win32 modules missing.")
+            # --- IPC Server End ---
 
-            self._send_hardware_info()
+            # --- Authentication with Retry Logic ---
+            auth_successful = False
+            while not auth_successful and self._running.is_set():
+                logger.info("Attempting to authenticate with server...")
+                if self.server_connector.authenticate_agent(self.room_config):
+                    auth_successful = True
+                    logger.info("Authentication successful!")
+                    
+                    # Get token after successful authentication
+                    agent_token_for_ipc = self.server_connector.get_agent_token()
+                    
+                    # Update IPC server with real token
+                    if self._ipc_server and agent_token_for_ipc:
+                        logger.info("Updating IPC Server with real authentication token...")
+                        self._ipc_server.update_token(agent_token_for_ipc)
+                        logger.info("IPC Server token updated successfully.")
+                else:
+                    logger.warning("Authentication failed, retrying in 10 seconds...")
+                    time.sleep(10)
+            
+            if not auth_successful:
+                # This would happen if _running was set to False during auth attempts
+                logger.critical("Authentication process aborted. Agent is shutting down.")
+                self.graceful_shutdown()
+                return
+            # --- Authentication End ---
 
-            if not self._connect_websocket():
-                logger.warning("Failed to establish and authenticate initial WebSocket connection. Will rely on auto-reconnect.")
-            else:
-                logger.info("Initial WebSocket connection and authentication successful.")
-
+            # Start command executor workers (still managed by Agent)
             self.command_executor.start_workers()
 
+            # --- Start Status Reporting ---
+            # Schedule the first status report (which uses the connector)
             self._send_status_update()
+            # --- Status Reporting End ---
 
             self._set_state(AgentState.IDLE)
-
             logger.info("Agent started successfully. Monitoring for commands and reporting status.")
-            logger.info("Nhấn Ctrl+C để dừng agent.")
 
+            # Main loop
             while self._running.is_set():
-                time.sleep(5)
+                # Check WebSocket connection periodically? WSClient handles reconnects.
+                # Maybe add a check here: if not self.ws_client.connected: logger.warning("WS disconnected...")
+                time.sleep(5) # Main loop sleep
 
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt received (Ctrl+C). Stopping agent...")
         except Exception as e:
             logger.critical(f"Critical error in agent main loop: {e}", exc_info=True)
-            self._set_state(AgentState.STOPPED)
+            self._set_state(AgentState.STOPPED) # Ensure state is updated on critical failure
         finally:
-            self.graceful_shutdown()
+            self.graceful_shutdown() # Ensure cleanup happens
 
     def graceful_shutdown(self):
         """
