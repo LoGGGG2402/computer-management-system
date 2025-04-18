@@ -39,6 +39,7 @@ from src.core.command_executor import CommandExecutor
 from src.utils.logger import setup_logger, get_logger
 # System & Lock Management
 from src.system.lock_manager import LockManager
+from src.system.windows_utils import is_running_as_admin, register_autostart, unregister_autostart  # Added autostart functions
 # --- End Core Imports ---
 
 def parse_arguments() -> argparse.Namespace:
@@ -59,6 +60,20 @@ def parse_arguments() -> argparse.Namespace:
         action='store_true',
         help='Enable debug logging to console (overrides config file setting).'
     )
+
+    # --- Autostart Arguments --- START
+    parser.add_argument(
+        '--enable-autostart',
+        action='store_true',
+        help='Register the agent to start automatically with Windows (requires appropriate privileges) and exit.'
+    )
+    parser.add_argument(
+        '--disable-autostart',
+        action='store_true',
+        help='Unregister the agent from starting automatically with Windows (requires appropriate privileges) and exit.'
+    )
+    # --- Autostart Arguments --- END
+
     return parser.parse_args()
 
 def initialize_logging(config: ConfigManager, storage_path: str, debug_mode: bool):
@@ -116,8 +131,22 @@ def main() -> int:
     config_manager = None  # Initialize config manager variable
     state_manager = None  # Initialize state manager variable
 
-    # --- Early Initialization Order ---
-    # 1. Dummy ConfigManager (needed by StateManager for app_name)
+    # --- Determine Executable Path --- START
+    # This is needed early for autostart registration
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # Running as a bundled executable (PyInstaller)
+        executable_path = sys.executable
+    else:
+        # Running as a script
+        try:
+            executable_path = os.path.abspath(sys.argv[0])
+        except IndexError:
+            print("FATAL: Cannot determine executable path from sys.argv.", file=sys.stderr)
+            return 1
+    print(f"Determined executable path: {executable_path}")
+    # --- Determine Executable Path --- END
+
+    # Create a temporary config manager (might fail if file not found, uses defaults)
     temp_config_path = None
     source_config_path = None  # Store the path of the config used for initial setup
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
@@ -137,8 +166,8 @@ def main() -> int:
             source_config_path = temp_config_path  # Found the source config
             print(f"Using temporary config path (base dir) for initial setup: {temp_config_path}")
 
-    # Create a temporary config manager (might fail if file not found, uses defaults)
     temp_config_manager = ConfigManager(temp_config_path) if temp_config_path else ConfigManager(None)
+    app_name_for_registry = temp_config_manager.get('agent.app_name', 'CMSAgent')  # Get app name early
 
     # 2. Initialize State Manager (determines storage_path)
     try:
@@ -154,6 +183,24 @@ def main() -> int:
         import traceback
         traceback.print_exc()
         return 1
+
+    # --- Handle Autostart Arguments --- START
+    # This needs to run *before* logging is fully initialized and *before* the lock
+    # because these actions should be quick and exit immediately.
+    if args.enable_autostart or args.disable_autostart:
+        is_admin = is_running_as_admin()
+        print(f"Running with admin privileges: {is_admin}")
+        if args.enable_autostart:
+            print(f"Attempting to enable autostart for: {executable_path} with name {app_name_for_registry}")
+            success = register_autostart(app_name_for_registry, executable_path, is_admin)  # Pass app_name
+            print(f"Enable autostart result: {'Success' if success else 'Failed'}")
+            return 0 if success else 1
+        elif args.disable_autostart:
+            print(f"Attempting to disable autostart for name {app_name_for_registry}...")
+            success = unregister_autostart(app_name_for_registry, is_admin)  # Pass app_name
+            print(f"Disable autostart result: {'Success' if success else 'Failed'}")
+            return 0 if success else 1
+    # --- Handle Autostart Arguments --- END
 
     # 3. Initialize Real Configuration Manager (using path inside storage_path)
     try:

@@ -7,12 +7,16 @@ Designed to be instantiated and passed around (Dependency Injection).
 import json
 import os
 import logging
+import sys
+import datetime
+import shutil
 from typing import Any, Optional, Dict
 
 logger = logging.getLogger(__name__)
 
 class ConfigManager:
     """Loads and manages agent configuration from a file."""
+    CURRENT_CONFIG_VERSION = 1 # Define the latest version this code supports
 
     def __init__(self, config_path: Optional[str]): # Allow None for temp instance
         """
@@ -28,6 +32,7 @@ class ConfigManager:
         """
         self._config_path = config_path
         self._config_data: Optional[Dict[str, Any]] = None
+        self._migration_performed = False # Track if migration happened
 
         if self._config_path is None:
              logger.debug("ConfigManager initialized without a config path (temporary instance).")
@@ -35,8 +40,14 @@ class ConfigManager:
              # No validation needed for temp instance
         else:
              self._load_config()
-             self._validate_config() # Validate only if path was provided
+             # --- Migration Check --- START
+             self._check_and_migrate_config()
+             # --- Migration Check --- END
+             self._validate_config() # Validate after potential migration
              logger.info(f"Configuration loaded successfully from: {self._config_path}")
+             if self._migration_performed:
+                 logger.info("Configuration migration was performed.")
+             logger.info(f"Using configuration version: {self.get('agent.config_version', 'N/A')}")
 
     def _load_config(self):
         """Loads the configuration data from the JSON file."""
@@ -82,7 +93,143 @@ class ConfigManager:
              logger.critical(msg)
              raise ValueError(msg)
 
+        # Add check for config_version after migration/load
+        config_version = self.get('agent.config_version')
+        if not isinstance(config_version, int) or config_version <= 0:
+             msg = f"Invalid or missing 'agent.config_version' in configuration: Must be a positive integer."
+             logger.critical(msg)
+
         logger.debug("Basic configuration validation passed.")
+
+    def _backup_config(self) -> Optional[str]:
+        """Creates a timestamped backup of the current config file."""
+        if not self._config_path or not os.path.exists(self._config_path):
+            logger.error("Cannot backup config: Config path is invalid or file does not exist.")
+            return None
+
+        backup_dir = os.path.dirname(self._config_path)
+        base_name = os.path.basename(self._config_path)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_filename = f"{base_name}.backup_{timestamp}"
+        backup_path = os.path.join(backup_dir, backup_filename)
+
+        try:
+            shutil.copy2(self._config_path, backup_path) # copy2 preserves metadata
+            logger.info(f"Configuration backed up successfully to: {backup_path}")
+            return backup_path
+        except Exception as e:
+            logger.error(f"Failed to create configuration backup at {backup_path}: {e}", exc_info=True)
+            return None
+
+    def _save_config(self, config_data: Dict[str, Any]) -> bool:
+        """Saves the provided configuration data back to the config file."""
+        if not self._config_path:
+            logger.error("Cannot save config: Config path is not set.")
+            return False
+
+        try:
+            # Create a temporary file path
+            temp_path = self._config_path + ".tmp"
+
+            # Write to the temporary file first
+            with open(temp_path, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, indent=4) # Use indent for readability
+
+            # Atomically replace the original file with the temporary file
+            # On Windows, os.replace might fail if the target exists. Remove first.
+            try:
+                if os.path.exists(self._config_path):
+                    os.remove(self._config_path)
+                os.rename(temp_path, self._config_path)
+            except OSError as e:
+                 # Fallback to simple copy if rename fails (less atomic)
+                 logger.warning(f"Atomic rename failed ({e}), falling back to copy for saving config.")
+                 shutil.copy2(temp_path, self._config_path)
+                 os.remove(temp_path) # Clean up temp file
+
+            logger.info(f"Configuration saved successfully to: {self._config_path}")
+            return True
+        except (IOError, OSError, json.JSONDecodeError) as e:
+            logger.error(f"Failed to save configuration to {self._config_path}: {e}", exc_info=True)
+            # Attempt to remove temporary file if it exists
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass # Ignore error during cleanup
+            return False
+
+    def _check_and_migrate_config(self):
+        """Checks the config version and applies migrations if necessary."""
+        if not self._config_data or not self._config_path:
+            logger.debug("Skipping config migration check: No config data or path.")
+            return
+
+        loaded_version = self.get('agent.config_version', 0) # Default to 0 if missing
+
+        if not isinstance(loaded_version, int) or loaded_version < 0:
+            logger.warning(f"Invalid 'agent.config_version' ({loaded_version}) found. Attempting migration from version 0.")
+            loaded_version = 0
+
+        if loaded_version < self.CURRENT_CONFIG_VERSION:
+            logger.info(f"Configuration version mismatch: Found v{loaded_version}, expected v{self.CURRENT_CONFIG_VERSION}. Starting migration...")
+            backup_path = self._backup_config()
+            if not backup_path:
+                # If backup fails, should we proceed? For now, log critical and stop migration.
+                logger.critical("Configuration backup failed. Aborting migration process to prevent data loss.")
+                raise ValueError("Configuration backup failed. Cannot proceed with migration.")
+
+            try:
+                current_data = self._config_data.copy() # Work on a copy
+
+                # --- Migration Steps ---
+                # Add migration steps sequentially
+                # if loaded_version < 1:
+                #    current_data = self._migrate_config_v0_to_v1(current_data)
+                #    loaded_version = 1 # Update version after successful step
+                # if loaded_version < 2:
+                #    current_data = self._migrate_config_v1_to_v2(current_data)
+                #    loaded_version = 2
+                # ... and so on
+
+                # Example: If CURRENT_CONFIG_VERSION is 1 and loaded is 0
+                if loaded_version < 1:
+                     # No actual migration needed from v0 to v1 based on current structure,
+                     # but we need to ensure the version number is set correctly.
+                     if 'agent' not in current_data: current_data['agent'] = {}
+                     current_data['agent']['config_version'] = 1
+                     logger.info("Migrated config data structure to v1 (set version number).")
+                     loaded_version = 1
+
+
+                # --- End Migration Steps ---
+
+                # Final check if migration reached the current version
+                if loaded_version == self.CURRENT_CONFIG_VERSION:
+                    logger.info(f"Migration to v{self.CURRENT_CONFIG_VERSION} appears successful. Saving updated configuration...")
+                    if self._save_config(current_data):
+                        self._config_data = current_data # Update in-memory config
+                        self._migration_performed = True
+                        logger.info("Configuration successfully migrated and saved.")
+                    else:
+                        logger.critical("Failed to save migrated configuration! Agent might use old config or fail.")
+                        # Consider restoring backup? Or raising a critical error?
+                        raise ValueError("Failed to save migrated configuration.")
+                else:
+                    # This should not happen if migration logic is correct
+                    logger.critical(f"Configuration migration finished, but ended at v{loaded_version} instead of v{self.CURRENT_CONFIG_VERSION}. Migration logic might be incomplete.")
+                    raise ValueError("Configuration migration failed to reach the current version.")
+
+            except Exception as e:
+                logger.critical(f"Error during configuration migration: {e}", exc_info=True)
+                # Attempt to restore backup? This is risky. Log and raise.
+                logger.critical(f"Migration failed. Original config backed up at: {backup_path}. Agent startup aborted.")
+                raise ValueError(f"Configuration migration failed: {e}") from e
+        elif loaded_version > self.CURRENT_CONFIG_VERSION:
+            logger.warning(f"Configuration file version (v{loaded_version}) is newer than agent's supported version (v{self.CURRENT_CONFIG_VERSION}). Agent may not function correctly.")
+            # Do not attempt downgrade. Proceed with caution.
+        else:
+            logger.debug(f"Configuration version (v{loaded_version}) matches agent's expected version (v{self.CURRENT_CONFIG_VERSION}). No migration needed.")
 
     def get(self, key_path: str, default: Any = None) -> Any:
         """

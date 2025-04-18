@@ -209,7 +209,8 @@ class LockManager:
 
     def release(self):
         """
-        Releases the lock by stopping the updater, unlocking, closing, and deleting the lock file.
+        Releases the lock by stopping the updater, closing, and deleting the lock file.
+        Relies on os.close() to implicitly release the msvcrt lock.
         Safe to call even if the lock wasn't acquired or already released.
         """
         logger.debug("Release lock requested.")
@@ -218,15 +219,10 @@ class LockManager:
         if self._lock_fd is not None:
             fd = self._lock_fd
             self._lock_fd = None
-            try:
-                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-                logger.debug(f"Unlocked file descriptor for {self.lock_file_path}.")
-            except (IOError, OSError) as e:
-                logger.error(f"Error unlocking lock file descriptor {self.lock_file_path}: {e}")
 
             try:
                 os.close(fd)
-                logger.debug(f"Closed lock file descriptor for {self.lock_file_path}.")
+                logger.debug(f"Closed lock file descriptor for {self.lock_file_path}. Lock should be implicitly released.")
             except OSError as e:
                 logger.error(f"Error closing lock file descriptor {self.lock_file_path}: {e}")
         else:
