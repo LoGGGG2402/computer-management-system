@@ -1,40 +1,37 @@
-# -*- coding: utf-8 -*-
 """
 Named Pipe client for Inter-Process Communication (IPC).
-Sends the --force command to a running agent instance.
 """
 import json
-import time
-import sys
 from typing import List, Dict, Any, Optional
 from src.utils.logger import get_logger
 
-# Get a properly configured logger instance
 logger = get_logger(__name__)
 
-# Windows specific imports
 try:
-    import win32pipe
     import win32file
-    import win32api
     import pywintypes
     WINDOWS_PIPE_SUPPORT = True
 except ImportError:
     WINDOWS_PIPE_SUPPORT = False
     logger.warning("win32pipe or related modules not found. IPC client functionality will be disabled.")
 
-# Local imports
 from src.system.windows_utils import get_user_sid_string, is_running_as_admin
 
-# Pipe name format (must match server)
 PIPE_NAME_TEMPLATE_SYSTEM = r'\\.\pipe\CMSAgentIPC_System'
 PIPE_NAME_TEMPLATE_USER = r'\\.\pipe\CMSAgentIPC_User_{user_sid}'
-PIPE_CONNECT_TIMEOUT_MS = 3000 # 3 seconds to connect
-PIPE_READ_TIMEOUT_MS = 5000 # 5 seconds to read response
+PIPE_CONNECT_TIMEOUT_MS = 3000
+PIPE_READ_TIMEOUT_MS = 5000
 PIPE_BUFFER_SIZE = 4096
 
 def _determine_pipe_name(is_admin: bool) -> Optional[str]:
-    """Determines the pipe name based on admin privileges."""
+    """
+    Determines the pipe name based on admin privileges.
+    
+    :param is_admin: Whether target agent is expected to be running as admin
+    :type is_admin: bool
+    :return: Appropriate pipe name or None if it cannot be determined
+    :rtype: Optional[str]
+    """
     if is_admin:
         return PIPE_NAME_TEMPLATE_SYSTEM
     else:
@@ -49,16 +46,14 @@ def send_force_command(is_admin: bool, new_args: List[str], agent_token: Optiona
     """
     Connects to the running agent's named pipe and sends a force restart command.
 
-    Args:
-        is_admin (bool): Whether the *target* agent is expected to be running as admin.
-        new_args (List[str]): The command line arguments intended for the new instance.
-        agent_token (Optional[str]): The agent token to use for authentication.
-
-    Returns:
-        Dict[str, Any]: A dictionary containing the status from the server
-                       (e.g., {"status": "acknowledged"}, {"status": "busy_updating"},
-                        {"status": "invalid_token"}, {"status": "agent_not_running"},
-                        {"status": "error", "message": "..."}).
+    :param is_admin: Whether the target agent is expected to be running as admin
+    :type is_admin: bool
+    :param new_args: Command line arguments intended for the new instance
+    :type new_args: List[str]
+    :param agent_token: The agent token to use for authentication
+    :type agent_token: Optional[str]
+    :return: A dictionary containing the status from the server
+    :rtype: Dict[str, Any]
     """
     if not WINDOWS_PIPE_SUPPORT:
         return {"status": "error", "message": "IPC unsupported (win32 modules missing)"}
@@ -75,19 +70,17 @@ def send_force_command(is_admin: bool, new_args: List[str], agent_token: Optiona
     try:
         logger.info(f"Attempting to connect to IPC pipe: {pipe_name}")
 
-        # Connect to the pipe
         pipe_handle = win32file.CreateFile(
             pipe_name,
             win32file.GENERIC_READ | win32file.GENERIC_WRITE,
-            0, # No sharing
-            None, # Default security attributes
+            0,
+            None,
             win32file.OPEN_EXISTING,
-            0, # Default attributes
-            None # No template file
+            0,
+            None
         )
         logger.info(f"Connected to pipe {pipe_name}.")
 
-        # Prepare request payload
         request_payload = {
             "command": "force_restart",
             "token": agent_token,
@@ -96,11 +89,9 @@ def send_force_command(is_admin: bool, new_args: List[str], agent_token: Optiona
         request_str = json.dumps(request_payload)
         logger.debug(f"Sending IPC request: {request_str}")
 
-        # Send the request
         win32file.WriteFile(pipe_handle, request_str.encode('utf-8'))
         logger.debug("Request sent. Waiting for response...")
 
-        # Read the response
         hr, response_bytes = win32file.ReadFile(pipe_handle, PIPE_BUFFER_SIZE)
         if hr != 0:
              logger.error(f"ReadFile failed with error code: {hr}")

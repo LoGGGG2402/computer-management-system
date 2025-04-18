@@ -1,50 +1,50 @@
-# -*- coding: utf-8 -*-
 """
 Core Agent module for the Computer Management System.
-Manages the agent's lifecycle, authentication, communication, monitoring,
-and command execution coordination. Uses Dependency Injection.
-
-**Change:** Removed periodic WebSocket connection check (_check_ws_connection).
-Relies solely on WSClient's auto-reconnect mechanism.
 """
 import time
-import sys
 import threading
-import logging  # Added import for logging
+import logging
 from typing import Dict, Any, Optional
 
-# Configuration
 from src.config.config_manager import ConfigManager
-# Communication
 from src.communication.http_client import HttpClient
 from src.communication.ws_client import WSClient
-# Monitoring
 from src.monitoring.system_monitor import SystemMonitor
-# Command Execution
 from src.core.command_executor import CommandExecutor
-# State Management
 from src.config.state_manager import StateManager
-# Console UI Interactions
 from src.ui import ui_console
-# Added for Phase 1
-from src.core.agent_state import AgentState  # Import the enum
-from src.system.lock_manager import LockManager  # Import for type hint
-# IPC
-from src.ipc.named_pipe_server import NamedPipeIPCServer, WINDOWS_PIPE_SUPPORT  # Added for IPC
-# Use the centralized logger
+from src.core.agent_state import AgentState
+from src.system.lock_manager import LockManager
+from src.ipc.named_pipe_server import NamedPipeIPCServer, WINDOWS_PIPE_SUPPORT
 from src.utils.logger import get_logger
 
 try:
-    import pywintypes  # Added import
+    import pywintypes
 except ImportError:
-    pywintypes = None  # Define as None if import fails
+    pywintypes = None
 
-# Get a properly configured logger instance
 logger = get_logger("agent")
 
 class Agent:
     """
-    The main Agent class orchestrating all components via dependency injection.
+    The main Agent class orchestrating all components of the Computer Management System.
+    
+    This class serves as the central controller that coordinates all agent activities including:
+    - Authentication with the management server using device identification
+    - Establishing and maintaining secure WebSocket connections for real-time communication
+    - Sending regular status updates about system resource usage (CPU, RAM, disk)
+    - Handling IPC for agent restart commands and inter-process coordination
+    - Managing the agent's lifecycle through various operational states
+    - Transmitting detailed system hardware information for inventory purposes
+    - Coordinating command execution received from the management server
+    
+    The Agent implements a robust state management system using thread-safe operations
+    and ensures proper resource cleanup during shutdown or restart scenarios.
+    It also handles various error conditions including authentication failures,
+    network connectivity issues, and unexpected exceptions.
+    
+    The class uses a singleton pattern enforced through file locking to prevent
+    multiple agent instances from running simultaneously on the same machine.
     """
 
     def __init__(self,
@@ -55,56 +55,72 @@ class Agent:
                  system_monitor: SystemMonitor,
                  command_executor: CommandExecutor,
                  lock_manager: LockManager,
-                 is_admin: bool):  # Added is_admin
+                 is_admin: bool):
         """
         Initialize the agent with its dependencies.
+
+        :param config_manager: Configuration manager instance
+        :type config_manager: ConfigManager
+        :param state_manager: State manager for persistence
+        :type state_manager: StateManager
+        :param http_client: HTTP client for API calls
+        :type http_client: HttpClient
+        :param ws_client: WebSocket client for real-time communication
+        :type ws_client: WSClient
+        :param system_monitor: System monitoring component
+        :type system_monitor: SystemMonitor
+        :param command_executor: Command execution component
+        :type command_executor: CommandExecutor
+        :param lock_manager: Lock manager for single instance control
+        :type lock_manager: LockManager
+        :param is_admin: Whether agent is running with admin privileges
+        :type is_admin: bool
+        :raises: RuntimeError if device ID or room configuration can't be determined
         """
         logger.info("Initializing Agent...")
-        # --- State Management (Phase 1) ---
         self._state = AgentState.STARTING
         self._state_lock = threading.Lock()
-        self._set_state(AgentState.STARTING)  # Explicitly set initial state with logging
-        # --- End State Management ---
+        self._set_state(AgentState.STARTING)
 
         self._running = threading.Event()
         self._status_timer: Optional[threading.Timer] = None
-        self._ipc_server: Optional[NamedPipeIPCServer] = None  # Initialize _ipc_server to None
+        self._ipc_server: Optional[NamedPipeIPCServer] = None
 
-        # Store Injected Dependencies
         self.config = config_manager
         self.state_manager = state_manager
         self.http_client = http_client
         self.ws_client = ws_client
         self.system_monitor = system_monitor
         self.command_executor = command_executor
-        self.lock_manager = lock_manager  # Store lock manager instance
-        self.is_admin = is_admin  # Store is_admin
+        self.lock_manager = lock_manager
+        self.is_admin = is_admin
 
-        # Essential Configuration Values
         self.status_report_interval = self.config.get('agent.status_report_interval_sec', 30)
         logger.info(f"Agent Config: Status Interval={self.status_report_interval}s")
 
-        # Agent Identification & State
         self.device_id = self.state_manager.get_device_id()
         if not self.device_id:
-            self._set_state(AgentState.STOPPED)  # Set state before raising error
+            self._set_state(AgentState.STOPPED)
             raise RuntimeError("Could not determine Device ID.")
 
         self.room_config = ui_console.get_or_prompt_room_config(self.state_manager)
         if not self.room_config:
-            self._set_state(AgentState.STOPPED)  # Set state before raising error
+            self._set_state(AgentState.STOPPED)
             raise RuntimeError("Could not determine Room Configuration.")
 
         self.agent_token: Optional[str] = None
 
-        # Register WS message handler
         self.ws_client.register_message_handler(self.command_executor.handle_incoming_command)
 
         logger.info(f"Agent initialized (pre-auth). Device ID: {self.device_id}, Room: {self.room_config.get('room', 'N/A')}")
 
-    # --- State Management Method (Phase 1) ---
     def _set_state(self, new_state: AgentState):
-        """Sets the agent's state thread-safely and logs the transition."""
+        """
+        Sets the agent's state thread-safely and logs the transition.
+        
+        :param new_state: New state to set
+        :type new_state: AgentState
+        """
         if not isinstance(new_state, AgentState):
             logger.warning(f"Attempted to set invalid state type: {type(new_state)}")
             return
@@ -115,22 +131,30 @@ class Agent:
                 self._state = new_state
 
     def get_state(self) -> AgentState:
-        """Gets the current agent state thread-safely."""
+        """
+        Gets the current agent state thread-safely.
+        
+        :return: Current agent state
+        :rtype: AgentState
+        """
         with self._state_lock:
             return self._state
-    # --- End State Management Method ---
 
-    # --- IPC Request Handling ---
     def request_restart(self):
-        """Called by the IPC server when a valid force_restart command is received."""
+        """
+        Called by the IPC server when a valid force_restart command is received.
+        """
         logger.info("Restart requested via IPC. Initiating graceful shutdown.")
-        self._set_state(AgentState.FORCE_RESTARTING)  # Set state before shutdown
-        # Call graceful_shutdown asynchronously to avoid blocking the IPC server thread
+        self._set_state(AgentState.FORCE_RESTARTING)
         threading.Thread(target=self.graceful_shutdown, name="GracefulShutdownThread").start()
 
-    # --- Authentication Flow ---
     def _handle_mfa_verification(self) -> bool:
-        """Handles the MFA prompt and verification process."""
+        """
+        Handles the MFA prompt and verification process.
+        
+        :return: True if MFA verification successful, False otherwise
+        :rtype: bool
+        """
         logger.info("MFA required for registration.")
         mfa_code = ui_console.prompt_for_mfa()
         if not mfa_code:
@@ -142,7 +166,6 @@ class Agent:
         if not api_call_success:
             error_msg = response.get('message', 'Lỗi kết nối hoặc lỗi máy chủ không xác định')
             logger.error(f"MFA verification API call failed. Error: {error_msg}")
-            print(f"\nLỗi khi xác thực MFA với máy chủ: {error_msg}\n")
             return False
 
         if response.get('status') == 'success' and 'agentToken' in response:
@@ -153,17 +176,22 @@ class Agent:
                 return True
             else:
                 logger.critical("MFA successful but FAILED TO SAVE TOKEN LOCALLY! Agent may not work after restart.")
-                print("\nCẢNH BÁO NGHIÊM TRỌNG: Xác thực MFA thành công nhưng không thể lưu token cục bộ. Agent có thể cần đăng ký lại sau khi khởi động lại.", file=sys.stderr)
                 ui_console.display_registration_success()
                 return True
         else:
             mfa_error = response.get('message', 'Mã MFA không hợp lệ hoặc đã hết hạn.')
             logger.error(f"MFA verification failed: {mfa_error}")
-            print(f"\nXác thực MFA thất bại: {mfa_error}\n")
             return False
 
     def _process_identification_response(self, response: Dict[str, Any]) -> bool:
-        """Processes the logical response from a successful /identify API call."""
+        """
+        Processes the logical response from a successful /identify API call.
+        
+        :param response: Response data from API
+        :type response: Dict[str, Any]
+        :return: True if identification successful, False otherwise
+        :rtype: bool
+        """
         status = response.get('status')
         message = response.get('message', 'No message from server.')
 
@@ -175,7 +203,6 @@ class Agent:
                     return True
                 else:
                     logger.critical("Agent identified but FAILED TO SAVE TOKEN LOCALLY! Agent may not work after restart.")
-                    print("\nCẢNH BÁO NGHIÊM TRỌNG: Xác định agent thành công nhưng không thể lưu token cục bộ. Agent có thể cần đăng ký lại sau khi khởi động lại.", file=sys.stderr)
                     return True
             else:
                 logger.info(f"Agent already registered on server: {message}. Attempting to load existing token.")
@@ -185,7 +212,6 @@ class Agent:
                     return True
                 else:
                     logger.error("Server indicates agent is registered, but no local token found via StateManager. Authentication failed.")
-                    print("\nLỗi: Máy chủ báo agent đã đăng ký nhưng không tìm thấy token cục bộ. Vui lòng thử xóa file trạng thái hoặc liên hệ quản trị viên.", file=sys.stderr)
                     return False
 
         elif status == 'mfa_required':
@@ -193,21 +219,22 @@ class Agent:
 
         elif status == 'position_error':
             logger.error(f"Server rejected agent due to position conflict: {message}")
-            print(f"\nLỗi đăng ký: Xung đột vị trí tại máy chủ.")
             pos_x = self.room_config.get('position', {}).get('x', 'N/A')
             pos_y = self.room_config.get('position', {}).get('y', 'N/A')
             room_name = self.room_config.get('room', 'N/A')
-            print(f"Vị trí ({pos_x}, {pos_y}) trong phòng '{room_name}' có thể đã được sử dụng.")
-            print(f"Vui lòng kiểm tra cấu hình phòng hoặc liên hệ quản trị viên.\nChi tiết từ máy chủ: {message}\n")
             return False
 
         else:
             logger.error(f"Failed to identify/register agent. Unknown server status: '{status}', Message: '{message}'")
-            print(f"\nLỗi đăng ký không xác định từ máy chủ. Status: {status}, Message: {message}\n")
             return False
 
     def authenticate(self) -> bool:
-        """Authenticates the agent with the backend server."""
+        """
+        Authenticates the agent with the backend server.
+        
+        :return: True if authentication successful, False otherwise
+        :rtype: bool
+        """
         logger.info("--- Starting Authentication Process ---")
         self.agent_token = self.state_manager.load_token(self.device_id)
         if self.agent_token:
@@ -225,7 +252,6 @@ class Agent:
             if not api_call_success:
                 error_msg = response.get('message', 'Lỗi kết nối hoặc lỗi máy chủ không xác định')
                 logger.error(f"Agent identification API call failed. Error: {error_msg}")
-                print(f"\nKhông thể kết nối hoặc xác định agent với máy chủ: {error_msg}\n")
                 logger.info("--- Authentication Failed (API Call Error) ---")
                 return False
 
@@ -237,13 +263,16 @@ class Agent:
             return auth_logic_success
         except Exception as e:
             logger.critical(f"An unexpected error occurred during the authentication process: {e}", exc_info=True)
-            print(f"\nĐã xảy ra lỗi không mong muốn trong quá trình xác thực: {e}\n", file=sys.stderr)
             logger.info("--- Authentication Failed (Unexpected Error) ---")
             return False
 
-    # --- WebSocket Communication ---
     def _connect_websocket(self) -> bool:
-        """Establishes and waits for authenticated WebSocket connection."""
+        """
+        Establishes and waits for authenticated WebSocket connection.
+        
+        :return: True if connection successful, False otherwise
+        :rtype: bool
+        """
         if not self.agent_token:
             logger.error("Cannot connect WebSocket: Agent token is missing.")
             return False
@@ -260,9 +289,10 @@ class Agent:
         logger.info("WebSocket connection established and authenticated.")
         return True
 
-    # --- Periodic Tasks ---
     def _send_status_update(self):
-        """Fetches system stats and sends them via WebSocket."""
+        """
+        Fetches system stats and sends them via WebSocket.
+        """
         if not self._running.is_set(): return
 
         if not self.ws_client.connected:
@@ -288,7 +318,9 @@ class Agent:
                 self._schedule_next_status_report()
 
     def _schedule_next_status_report(self):
-        """Schedules the next status report using a Timer thread."""
+        """
+        Schedules the next status report using a Timer thread.
+        """
         if not self._running.is_set(): return
         if self._status_timer and self._status_timer.is_alive():
             self._status_timer.cancel()
@@ -297,9 +329,13 @@ class Agent:
         self._status_timer.start()
         logger.debug(f"Next status report scheduled in {self.status_report_interval} seconds.")
 
-    # --- Hardware Information ---
     def _send_hardware_info(self):
-        """Collects and sends detailed hardware information via HTTP."""
+        """
+        Collects and sends detailed hardware information via HTTP.
+        
+        :return: True if hardware info sent successfully, False otherwise
+        :rtype: bool
+        """
         if not self.agent_token:
             logger.error("Cannot send hardware info: Agent token is missing.")
             return False
@@ -323,9 +359,10 @@ class Agent:
             logger.error(f"Error collecting or sending hardware info: {e}", exc_info=True)
             return False
 
-    # --- Agent Lifecycle ---
     def start(self):
-        """Starts the agent's main lifecycle."""
+        """
+        Starts the agent's main lifecycle.
+        """
         if self._running.is_set():
             logger.warning("Agent start requested but already running.")
             return
@@ -341,7 +378,6 @@ class Agent:
                 self.graceful_shutdown()
                 return
 
-            # --- Initialize and Start IPC Server (AFTER getting agent_token) ---
             if WINDOWS_PIPE_SUPPORT and self.agent_token:
                 logger.info("Initializing Named Pipe IPC Server...")
                 try:
@@ -350,12 +386,11 @@ class Agent:
                     self._ipc_server.start()
                 except (ImportError, ValueError, pywintypes.error if pywintypes else Exception) as e:
                     logger.error(f"Failed to initialize or start Named Pipe IPC Server: {e}", exc_info=True)
-                    self._ipc_server = None  # Ensure it's None on failure
+                    self._ipc_server = None
             elif not self.agent_token:
                 logger.warning("Cannot start IPC Server: Agent token is missing after authentication.")
-            else:  # WINDOWS_PIPE_SUPPORT is False
+            else:
                 logger.warning("IPC Server not supported or win32 modules missing.")
-            # --- End IPC Server Initialization ---
 
             self._send_hardware_info()
 
@@ -385,12 +420,13 @@ class Agent:
             self.graceful_shutdown()
 
     def graceful_shutdown(self):
-        """Stops the agent gracefully, including IPC server and lock release."""
+        """
+        Stops the agent gracefully, including IPC server and lock release.
+        """
         if not self._running.is_set() and self.get_state() in [AgentState.SHUTTING_DOWN, AgentState.STOPPED, AgentState.FORCE_RESTARTING]:
             logger.debug("Graceful shutdown called but agent already stopping/stopped.")
             return
 
-        # Set state only if not already force restarting
         current_state = self.get_state()
         if current_state != AgentState.FORCE_RESTARTING:
             self._set_state(AgentState.SHUTTING_DOWN)
@@ -400,60 +436,46 @@ class Agent:
         logger.info("================ Initiating Graceful Shutdown ================")
         self._running.clear()
 
-        # 1. Stop accepting new commands (Stop IPC Server first)
         if self._ipc_server and self._ipc_server.is_alive():
             logger.debug("Stopping Named Pipe IPC server...")
             self._ipc_server.stop()
-            # Don't join immediately, allow other things to shut down concurrently
 
-        # 2. Stop background tasks (timers, command workers)
         logger.debug("Cancelling timers...")
         if self._status_timer and self._status_timer.is_alive():
             self._status_timer.cancel()
             logger.debug("Status timer cancelled.")
-        # Add cancellation for other timers (e.g., polling) here if they exist
 
         if self.command_executor:
             logger.debug("Stopping command executor workers...")
             self.command_executor.stop()
             logger.debug("Command executor workers stopped.")
 
-        # 3. Disconnect communications
         if self.ws_client:
             logger.debug("Disconnecting WebSocket client...")
             self.ws_client.disconnect()
             logger.debug("WebSocket client disconnected.")
 
-        # 4. Wait for IPC server thread to finish
         if self._ipc_server and self._ipc_server.is_alive():
             logger.debug("Waiting for IPC server thread to join...")
-            self._ipc_server.join(timeout=5.0)  # Wait with timeout
+            self._ipc_server.join(timeout=5.0)
             if self._ipc_server.is_alive():
                 logger.warning("IPC server thread did not join within timeout.")
             else:
                 logger.debug("IPC server thread joined.")
 
-        # 5. Flush logs (optional, depends on logging setup)
         try:
             logging.shutdown()
-            logger.debug("Logging shutdown requested.")  # This logger might not work after shutdown
+            logger.debug("Logging shutdown requested.")
         except Exception as log_e:
-            print(f"Error during logging shutdown: {log_e}", file=sys.stderr)
+            logger.error(f"Error during logging shutdown: {log_e}", exc_info=True)
 
-        # 6. Release the lock (CRITICAL: Do this *before* exiting)
         if self.lock_manager:
             logger.info("Releasing agent lock file...")
-            self.lock_manager.release()  # LockManager handles actual file release
+            self.lock_manager.release()
             logger.info("Agent lock file released.")
         else:
             logger.warning("Lock manager instance not found, cannot release lock explicitly.")
 
         self._set_state(AgentState.STOPPED)
         logger.info("================ Agent Shutdown Complete ================")
-
-        # 7. Exit the process (optional, depends on how main loop is structured)
-        # If start() runs in the main thread, this might not be needed,
-        # but if start() is threaded, sys.exit() might be required here.
-        # For now, assume main loop handles exit after start() returns.
-        # sys.exit(0)
 

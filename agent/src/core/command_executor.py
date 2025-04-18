@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Command execution module for the agent.
-Receives commands via WebSocket, executes them in separate threads,
-manages a queue for concurrency control, and sends results back.
-Accepts WSClient and ConfigManager instances.
 """
 import subprocess
 import threading
@@ -11,16 +8,13 @@ import time
 from typing import Dict, Any, Tuple, List, Optional
 from queue import Queue, Empty, Full
 
-# Import WSClient type hint and ConfigManager class
 from typing import TYPE_CHECKING
 from src.config.config_manager import ConfigManager
 if TYPE_CHECKING:
     from src.communication.ws_client import WSClient
 
-# Use the get_logger function from logger module
 from src.utils.logger import get_logger
 
-# Get a properly configured logger instance
 logger = get_logger(__name__)
 
 class CommandExecutor:
@@ -32,57 +26,54 @@ class CommandExecutor:
         """
         Initialize the command executor.
 
-        Args:
-            ws_client (WSClient): WebSocket client instance for sending results.
-            config (ConfigManager): Configuration manager instance.
-
-        Raises:
-             ValueError: If ws_client is None.
+        :param ws_client: WebSocket client instance for sending results
+        :type ws_client: WSClient
+        :param config: Configuration manager instance
+        :type config: ConfigManager
+        :raises: ValueError if ws_client is None
         """
         if not ws_client:
              raise ValueError("WSClient instance is required for CommandExecutor.")
         if not config:
              raise ValueError("ConfigManager instance is required for CommandExecutor.")
 
-
         self.ws_client = ws_client
         self.config = config
 
-        # --- Read configuration ---
         self.max_parallel_commands = self.config.get('command_executor.max_parallel_commands', 2)
         self.command_timeout = self.config.get('command_executor.default_timeout_sec', 300)
         logger.info(f"CommandExecutor Config: Max Parallel={self.max_parallel_commands}, Timeout={self.command_timeout}s")
-        # --------------------------
 
-        self._command_queue: Queue[Tuple[str, str, str]] = Queue(maxsize=self.max_parallel_commands * 5) # Limit queue size
+        self._command_queue: Queue[Tuple[str, str, str]] = Queue(maxsize=self.max_parallel_commands * 5)
         self._stop_event = threading.Event()
         self._worker_threads: List[threading.Thread] = []
 
         logger.info(f"CommandExecutor initialized")
 
-        # Registration of the handler is now done by the Agent class after initializing both
-
     def start_workers(self):
-        """Starts worker threads to process the command queue."""
+        """
+        Starts worker threads to process the command queue.
+        """
         if self._worker_threads:
              logger.warning("Worker threads already started.")
              return
 
         logger.info(f"Starting {self.max_parallel_commands} command execution worker threads...")
-        self._stop_event.clear() # Ensure stop event is clear before starting
+        self._stop_event.clear()
         for i in range(self.max_parallel_commands):
             thread = threading.Thread(target=self._worker_loop, name=f"CmdExecWorker-{i}", daemon=True)
             thread.start()
             self._worker_threads.append(thread)
 
     def _worker_loop(self):
-        """The main loop for each worker thread."""
+        """
+        The main loop for each worker thread.
+        """
         thread_name = threading.current_thread().name
         logger.debug(f"Worker thread {thread_name} started.")
         while not self._stop_event.is_set():
             command_info: Optional[Tuple[str, str, str]] = None
             try:
-                # Wait for a command with a timeout to allow checking stop_event periodically
                 command_info = self._command_queue.get(block=True, timeout=1.0)
                 command, command_id, command_type = command_info
 
@@ -91,12 +82,9 @@ class CommandExecutor:
                 self._command_queue.task_done()
 
             except Empty:
-                # Queue is empty, loop continues to check stop_event
                 continue
             except Exception as e:
-                 # Catch unexpected errors within the loop itself
                  logger.error(f"Unexpected error in worker thread {thread_name}: {e}", exc_info=True)
-                 # If a command was dequeued but failed before execution, try to notify server
                  if command_info:
                       _, cmd_id_err, _ = command_info
                       self._send_result(cmd_id_err, {
@@ -108,20 +96,27 @@ class CommandExecutor:
                                "exitCode": -1
                            }
                       })
-                      self._command_queue.task_done() # Mark as done even on error
-                 # Avoid busy-waiting on continuous errors
+                      self._command_queue.task_done()
                  time.sleep(1)
 
         logger.debug(f"Worker thread {thread_name} stopping.")
 
     def _execute_and_send_result(self, command: str, command_id: str, command_type: str):
-        """Executes a single command and sends the result back via WebSocket."""
+        """
+        Executes a single command and sends the result back via WebSocket.
+        
+        :param command: The command to execute
+        :type command: str
+        :param command_id: The ID of the command
+        :type command_id: str
+        :param command_type: The type of command
+        :type command_type: str
+        """
         logger.info(f"Executing command: '{command}' (ID: {command_id}, Type: {command_type})")
         
-        # Initialize standard result format
         result = {
-            "type": command_type,  # Include command type in result
-            "success": False,      # Default to false, set to true on success
+            "type": command_type,
+            "success": False,
             "result": {
                 "stdout": "", 
                 "stderr": "", 
@@ -129,47 +124,44 @@ class CommandExecutor:
             }
         }
 
-        # Handle different command types
         if command_type == 'console':
-            # Execute console commands using shell
             self._execute_console_command(command, command_id, result)
         else:
-            # For future command types, currently unsupported
             logger.warning(f"Command type '{command_type}' is not yet implemented")
             result["result"]["stderr"] = f"Lỗi: Loại lệnh '{command_type}' chưa được hỗ trợ."
             result["result"]["exitCode"] = -2
         
-        # Always attempt to send a result back
         self._send_result(command_id, result)
 
     def _execute_console_command(self, command: str, command_id: str, result: Dict[str, Any]):
-        """Execute a console command using shell and update the result dict."""
-        # --- Security Note ---
-        # Using shell=True is potentially dangerous if 'command' comes from an untrusted source.
-        # If possible, avoid shell=True and pass arguments as a list after splitting
-        # using shlex.split(command) if appropriate for the command structure.
-        # If shell=True is absolutely necessary, the source providing the command
-        # (the server) MUST rigorously sanitize it.
-        use_shell = True # Keep original behavior for now, but be aware of risks
+        """
+        Execute a console command using shell and update the result dict.
+        
+        :param command: Command to execute
+        :type command: str
+        :param command_id: ID of the command
+        :type command_id: str
+        :param result: Dictionary to update with result
+        :type result: Dict[str, Any]
+        """
+        use_shell = True
         if use_shell:
             logger.warning(f"Executing command '{command_id}' with shell=True. Ensure the command source is trusted and sanitized.")
 
-        # Windows-specific encoding - use cp1252 for Windows console output
         output_encoding = 'cp1252'
         
         try:
-            # Use CREATE_NO_WINDOW to hide console window when running commands
             process = subprocess.run(
                 command,
-                shell=use_shell, # !!! SECURITY RISK if command is untrusted !!!
+                shell=use_shell,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True, # Decode stdout/stderr as text
+                text=True,
                 encoding=output_encoding,
-                errors='replace', # Handle decoding errors gracefully
-                timeout=self.command_timeout, # Use configured timeout
-                check=False, # Don't raise exception for non-zero exit code, handle it manually
-                creationflags=subprocess.CREATE_NO_WINDOW # Windows-specific flag to hide console window
+                errors='replace',
+                timeout=self.command_timeout,
+                check=False,
+                creationflags=subprocess.CREATE_NO_WINDOW
             )
 
             result["result"] = {
@@ -181,7 +173,7 @@ class CommandExecutor:
             
             log_level = logging.INFO if process.returncode == 0 else logging.WARNING
             logger.log(log_level, f"Command '{command_id}' completed. Exit Code: {process.returncode}")
-            # Log output only if it exists
+            
             if result["result"]["stdout"]:
                 logger.debug(f"Command '{command_id}' STDOUT:\n{result['result']['stdout']}")
             if result["result"]["stderr"]:
@@ -192,43 +184,47 @@ class CommandExecutor:
             result["result"] = {
                 "stdout": "",
                 "stderr": f"Lỗi: Lệnh hết hạn sau {self.command_timeout} giây.",
-                "exitCode": 124 # Standard exit code for timeout
+                "exitCode": 124
             }
         except FileNotFoundError:
-            # Extract the likely command name that wasn't found
             cmd_part = command.split()[0] if command else 'N/A'
             logger.error(f"Command '{command_id}' not found: '{cmd_part}'")
             result["result"] = {
                 "stdout": "",
                 "stderr": f"Lỗi: Lệnh không tìm thấy: '{cmd_part}'. Đảm bảo lệnh đã được cài đặt và nằm trong PATH của hệ thống.",
-                "exitCode": 127 # Standard exit code for command not found
+                "exitCode": 127
             }
         except PermissionError as e:
             logger.error(f"Permission denied executing command '{command_id}': {e}", exc_info=True)
             result["result"] = {
                 "stdout": "",
                 "stderr": f"Lỗi: Không có quyền thực thi lệnh: {e}",
-                "exitCode": 126 # Standard exit code for permission denied
+                "exitCode": 126
             }
         except OSError as e:
-            # Catch other OS-level errors during process creation/execution
             logger.error(f"OS error executing command '{command_id}': {e}", exc_info=True)
             result["result"] = {
                 "stdout": "",
                 "stderr": f"Lỗi hệ điều hành khi thực thi lệnh: {e}",
-                "exitCode": e.errno if hasattr(e, 'errno') else 1 # Use errno if available
+                "exitCode": e.errno if hasattr(e, 'errno') else 1
             }
         except Exception as e:
-            # Catch any other unexpected errors
             logger.critical(f"Unexpected error executing command '{command_id}': {e}", exc_info=True)
             result["result"] = {
                 "stdout": "",
                 "stderr": f"Lỗi không mong muốn khi thực thi lệnh: {str(e)}",
-                "exitCode": 1 # Generic error code
+                "exitCode": 1
             }
 
     def _send_result(self, command_id: str, result: Dict[str, Any]):
-        """Sends the command result to the server using the WebSocket client."""
+        """
+        Sends the command result to the server using the WebSocket client.
+        
+        :param command_id: ID of the command
+        :type command_id: str
+        :param result: Result data to send
+        :type result: Dict[str, Any]
+        """
         logger.debug(f"Attempting to send result for command ID: {command_id}")
         if not self.ws_client:
             logger.error(f"Cannot send result for {command_id}: WSClient is not available.")
@@ -238,26 +234,24 @@ class CommandExecutor:
         if success:
             logger.debug(f"Command result sent successfully for {command_id}")
         else:
-            # Error is already logged by ws_client._emit_message
             logger.error(f"Failed to send command result via WebSocket for {command_id}. Check WSClient logs.")
 
     def handle_incoming_command(self, command_data: Dict[str, Any]):
         """
         Callback method registered with WSClient to queue incoming commands.
-        Should be called by the Agent or WSClient event handler.
+        
+        :param command_data: Command data from WebSocket
+        :type command_data: Dict[str, Any]
         """
         try:
-            # Prioritize specific 'commandId', fallback to generic 'id'
             command_id = command_data.get('commandId') or command_data.get('id')
             command = command_data.get('command')
-            # Get command type, default to 'console' or 'unknown'
             command_type = command_data.get('commandType', command_data.get('type', 'console'))
 
             if not command_id:
                 logger.error(f"Received command message missing required 'commandId' (or 'id'): {command_data}")
-                # Cannot send result back without ID
                 return
-            if command is None: # Check specifically for None
+            if command is None:
                 logger.error(f"Received command message missing required 'command' field for ID {command_id}: {command_data}")
                 self._send_result(command_id, {
                     "type": "unknown",
@@ -265,7 +259,7 @@ class CommandExecutor:
                     "result": {
                         "stdout": "",
                         "stderr": "Lỗi Agent: Thiếu trường 'command' trong dữ liệu lệnh.",
-                        "exitCode": -1 # Indicate agent-side error
+                        "exitCode": -1
                     }
                 })
                 return
@@ -282,10 +276,8 @@ class CommandExecutor:
                  })
                  return
 
-
-            # Try putting into queue, handle Queue Full
             try:
-                 self._command_queue.put((command, command_id, command_type), block=False) # Don't block if full
+                 self._command_queue.put((command, command_id, command_type), block=False)
                  logger.info(f"Command queued: {command_id} (Type: {command_type}, Queue size: {self._command_queue.qsize()})")
             except Full:
                  logger.error(f"Command queue is full (max={self._command_queue.maxsize}). Cannot queue command: {command_id}")
@@ -299,12 +291,9 @@ class CommandExecutor:
                     }
                  })
 
-
         except Exception as e:
-            # Catch errors during handling/queuing
             cmd_id_err = command_data.get('commandId', command_data.get('id', 'N/A'))
             logger.error(f"Error handling/queuing command data for ID {cmd_id_err}: {e}", exc_info=True)
-            # Try to send error back if possible
             if cmd_id_err != 'N/A':
                  self._send_result(cmd_id_err, {
                     "type": "unknown",
@@ -317,27 +306,31 @@ class CommandExecutor:
                  })
 
     def stop(self):
-        """Signals worker threads to stop and waits for the queue to be processed."""
+        """
+        Signals worker threads to stop and waits for the queue to be processed.
+        """
         logger.info("Stopping CommandExecutor...")
         self._stop_event.set()
 
-        # Wait for threads to finish processing current items and exit loop
         logger.debug("Waiting for worker threads to terminate...")
         for thread in self._worker_threads:
-            thread.join(timeout=self.command_timeout + 5) # Wait slightly longer than command timeout
+            thread.join(timeout=self.command_timeout + 5)
             if thread.is_alive():
                  logger.warning(f"Worker thread {thread.name} did not terminate gracefully.")
 
-        # Clear the list of threads
         self._worker_threads = []
 
-        # Clear any remaining items in the queue (should be empty if workers finished)
         self.clear_command_queue()
 
         logger.info("CommandExecutor stopped.")
 
     def clear_command_queue(self) -> int:
-        """Clears all pending commands from the execution queue."""
+        """
+        Clears all pending commands from the execution queue.
+        
+        :return: Number of cleared commands
+        :rtype: int
+        """
         count = 0
         while not self._command_queue.empty():
             try:

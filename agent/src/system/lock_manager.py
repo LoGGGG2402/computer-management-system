@@ -4,23 +4,21 @@ Manages the agent's lock file to ensure only one instance runs.
 Phase 2: Uses file locking, PID, and timestamp checks.
 """
 import os
-import sys
-import time
 import atexit
-import msvcrt  # For file locking on Windows
+import msvcrt
 import threading
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Tuple
 from src.utils.logger import get_logger
 
 try:
-    import psutil  # For checking if PID exists
+    import psutil
 except ImportError:
-    psutil = None  # Handle case where psutil might not be installed initially
+    psutil = None
 
 logger = get_logger(__name__)
 
-LOCK_STALE_TIMEOUT_SECONDS = 120  # How old timestamp can be before considered stale
+LOCK_STALE_TIMEOUT_SECONDS = 120
 
 
 class LockManager:
@@ -30,23 +28,35 @@ class LockManager:
     """
 
     def __init__(self, storage_path: str):
-        """Initializes the LockManager."""
+        """
+        Initializes the LockManager.
+        
+        :param storage_path: Directory path for storing the lock file
+        :type storage_path: str
+        :raises ValueError: If storage_path is invalid
+        """
         if not storage_path or not os.path.isdir(storage_path):
             raise ValueError(f"Invalid storage path provided to LockManager: {storage_path}")
         if not psutil:
             logger.warning("psutil library not found. Stale lock detection based on PID will be skipped.")
 
         self.lock_file_path = os.path.join(storage_path, "agent.lock")
-        self._lock_fd = None  # File descriptor
+        self._lock_fd = None
         self._updater_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         logger.debug(f"LockManager initialized. Lock file path: {self.lock_file_path}")
 
     def _read_lock_content(self, fd) -> Tuple[Optional[int], Optional[datetime]]:
-        """Reads PID and Timestamp from the lock file descriptor."""
+        """
+        Reads PID and Timestamp from the lock file descriptor.
+        
+        :param fd: File descriptor to read from
+        :return: Tuple of (PID, timestamp) or (None, None) if read fails
+        :rtype: Tuple[Optional[int], Optional[datetime]]
+        """
         try:
             os.lseek(fd, 0, os.SEEK_SET)
-            content_bytes = os.read(fd, 100)  # Read ~100 bytes, should be enough
+            content_bytes = os.read(fd, 100)
             content = content_bytes.decode('utf-8').strip()
             parts = content.split('|', 1)
             if len(parts) == 2:
@@ -62,17 +72,23 @@ class LockManager:
             return None, None
 
     def _write_lock_content(self, fd) -> bool:
-        """Writes current PID and Timestamp to the lock file descriptor."""
+        """
+        Writes current PID and Timestamp to the lock file descriptor.
+        
+        :param fd: File descriptor to write to
+        :return: True if write succeeded, False otherwise
+        :rtype: bool
+        """
         try:
             pid = os.getpid()
             timestamp_iso = datetime.now(timezone.utc).isoformat()
             content = f"{pid}|{timestamp_iso}"
             content_bytes = content.encode('utf-8')
 
-            os.lseek(fd, 0, os.SEEK_SET)  # Go to start
+            os.lseek(fd, 0, os.SEEK_SET)
             bytes_written = os.write(fd, content_bytes)
-            os.ftruncate(fd, bytes_written)  # Truncate to the exact size written
-            os.fsync(fd)  # Ensure it's written to disk
+            os.ftruncate(fd, bytes_written)
+            os.fsync(fd)
             logger.debug(f"Wrote PID {pid} and timestamp {timestamp_iso} to lock file.")
             return True
         except OSError as e:
@@ -84,22 +100,21 @@ class LockManager:
         Attempts to acquire the lock using atomic creation and file locking.
         Includes stale lock detection (PID check, timestamp check).
 
-        Returns:
-            bool: True if the lock was acquired successfully, False otherwise.
+        :return: True if the lock was acquired successfully, False otherwise
+        :rtype: bool
         """
         if self._lock_fd is not None:
             logger.warning("Acquire called when lock is already held.")
-            return True  # Already acquired
+            return True
 
         try:
-            # 1. Attempt atomic creation and exclusive lock
             fd = os.open(self.lock_file_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
             try:
-                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)  # Lock the first byte non-blockingly
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
                 logger.debug("Acquired lock via atomic creation.")
                 self._lock_fd = fd
                 if not self._write_lock_content(fd):
-                    self.release()  # Release if initial write fails
+                    self.release()
                     return False
                 self._start_timestamp_updater()
                 try:
@@ -177,13 +192,13 @@ class LockManager:
                     logger.critical(f"Lock file {self.lock_file_path} held by running process PID {pid}. Cannot acquire.")
                     msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
                     os.close(fd)
-                    print(f"ERROR: Lock file {self.lock_file_path} indicates another agent instance (PID {pid}) is running.", file=sys.stderr)
+
                     return False
 
             except IOError:
                 logger.critical(f"Lock file {self.lock_file_path} is actively locked by another process.")
                 os.close(fd)
-                print(f"ERROR: Lock file {self.lock_file_path} is locked. Another agent instance is running.", file=sys.stderr)
+
                 return False
             except Exception as e:
                 logger.critical(f"Unexpected error checking existing lock file: {e}", exc_info=True)
@@ -196,15 +211,15 @@ class LockManager:
 
         except PermissionError as e:
             logger.critical(f"Permission denied creating/accessing lock file {self.lock_file_path}: {e}")
-            print(f"FATAL: Permission denied for lock file at {self.lock_file_path}. Check permissions.", file=sys.stderr)
+
             return False
         except OSError as e:
             logger.critical(f"OS error creating/accessing lock file {self.lock_file_path}: {e}")
-            print(f"FATAL: Could not create/access lock file {self.lock_file_path}. Error: {e}", file=sys.stderr)
+
             return False
         except Exception as e:
             logger.critical(f"Unexpected error acquiring lock file {self.lock_file_path}: {e}", exc_info=True)
-            print(f"FATAL: Unexpected error acquiring lock file {self.lock_file_path}. Error: {e}", file=sys.stderr)
+
             return False
 
     def release(self):
@@ -240,7 +255,9 @@ class LockManager:
             logger.error(f"Unexpected error removing lock file {self.lock_file_path}: {e}", exc_info=True)
 
     def _start_timestamp_updater(self):
-        """Starts the background thread to update the lock file timestamp."""
+        """
+        Starts the background thread to update the lock file timestamp.
+        """
         if self._updater_thread is None or not self._updater_thread.is_alive():
             self._stop_event.clear()
             self._updater_thread = threading.Thread(target=self._timestamp_update_loop, daemon=True)
@@ -248,7 +265,9 @@ class LockManager:
             logger.debug("Timestamp updater thread started.")
 
     def _stop_timestamp_updater(self):
-        """Signals the timestamp updater thread to stop and waits for it."""
+        """
+        Signals the timestamp updater thread to stop and waits for it.
+        """
         if self._updater_thread and self._updater_thread.is_alive():
             logger.debug("Stopping timestamp updater thread...")
             self._stop_event.set()
@@ -260,7 +279,9 @@ class LockManager:
             self._updater_thread = None
 
     def _timestamp_update_loop(self):
-        """Periodically updates the timestamp in the locked file."""
+        """
+        Periodically updates the timestamp in the locked file.
+        """
         logger.debug("Timestamp update loop running.")
         update_interval = max(15, LOCK_STALE_TIMEOUT_SECONDS // 2)
 

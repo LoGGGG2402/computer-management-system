@@ -70,8 +70,8 @@ import sys
 try:
     import PyInstaller.__main__
 except ImportError:
-    print("Error: PyInstaller is not installed.")
-    print("Please install it using: pip install pyinstaller")
+
+
     sys.exit(1)
 
 # --- Configuration ---
@@ -88,18 +88,18 @@ path_separator = ';' if platform.system() == "Windows" else ':'
 # --- Build Steps ---
 def build():
     """Runs the PyInstaller build process."""
-    print(f"Starting build for {APP_NAME}...")
+
 
     if not os.path.exists(ENTRY_SCRIPT):
-        print(f"Error: Entry script not found at '{ENTRY_SCRIPT}'")
+
         sys.exit(1)
 
     if not os.path.exists(CONFIG_FILE_SOURCE):
-        print(f"Error: Configuration file not found at '{CONFIG_FILE_SOURCE}'")
+
         sys.exit(1)
 
     # Clean previous builds
-    print("Cleaning previous build directories ('build', 'dist')...")
+
     if os.path.isdir("build"):
         shutil.rmtree("build")
     if os.path.isdir("dist"):
@@ -123,21 +123,21 @@ def build():
         ENTRY_SCRIPT
     ]
 
-    print(f"Running PyInstaller with args: {' '.join(pyinstaller_args)}")
+
 
     try:
         PyInstaller.__main__.run(pyinstaller_args)
-        print("\nBuild completed successfully!")
-        print(f"Executable created in: {os.path.abspath('dist')}")
+
+
     except Exception as e:
-        print(f"\nBuild failed with error: {e}")
+
         sys.exit(1)
 
 if __name__ == "__main__":
     # Ensure the script is run from the project root directory
     if not (os.path.exists("src") and os.path.exists("config")):
-         print("Error: This script must be run from the agent's root directory")
-         print("(The directory containing 'src', 'config', etc.)")
+
+
          sys.exit(1)
 
     build()
