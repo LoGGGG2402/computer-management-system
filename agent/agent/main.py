@@ -16,7 +16,7 @@ if project_root not in sys.path:
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
-from agent.utils import setup_logger, get_logger
+from agent.utils import setup_logger, get_logger, get_file_logging_status
 from agent.system import (
     LockManager, 
     is_running_as_admin, 
@@ -100,6 +100,26 @@ def initialize_logging(config: ConfigManager, storage_path: str, debug_mode: boo
         file_level_name=file_level_name,
         log_file_path=log_file
     )
+
+    logger = get_logger("agent.main")
+    
+    # Check log file status immediately after setup
+    log_status = get_file_logging_status()
+    
+    if log_status["file_logging_enabled"]:
+        for log_file_info in log_status["log_files"]:
+            logger.info(f"Log file configured at: {log_file_info['path']}")
+            if log_file_info.get("exists", False):
+                logger.info(f"Log file exists and is {'writable' if log_file_info.get('writable', False) else 'not writable'}")
+            else:
+                logger.info(f"Log file does not exist yet but will be created when needed")
+    else:
+        if log_status.get("errors"):
+            for error in log_status["errors"]:
+                logger.warning(f"Log file error: {error}")
+        logger.warning("File logging is not enabled - only logging to console")
+        
+    logger.info(f"Logging initialized successfully.")
 
 def main() -> int:
     """
@@ -188,8 +208,7 @@ def main() -> int:
                 return 1
 
         config_manager = ConfigManager(config_file_path)
-        # Store storage path in config so other components can use it
-        config_manager.set('storage_path', storage_path)
+        # No longer need to store storage_path in config as it's determined programmatically
     except FileNotFoundError as e:
         logger.critical(f"Configuration file not found: {e}", exc_info=True)        
         return 1
@@ -201,11 +220,11 @@ def main() -> int:
         return 1
 
     try:
+        # Set up the logging system with the proper configuration and storage path
         initialize_logging(config_manager, storage_path, args.debug)
         logger = get_logger("agent.main")
         logger.info(f"Using storage path: {storage_path}")
         logger.info(f"Using configuration file: {config_file_path}")
-        logger.info("Logging initialized successfully.")
     except Exception as e:
         logger.critical(f"Unexpected error during logging initialization: {e}", exc_info=True)
         return 1

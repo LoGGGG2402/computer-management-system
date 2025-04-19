@@ -45,12 +45,10 @@ class StateManager:
         self.config = config
         self.state_filename = self.config.get('agent.state_filename', 'agent_state.json')
 
-        # Storage path is now determined externally and should be already set up
-        self.storage_path = config.get('storage_path')
-        if not self.storage_path:
-            app_name = self.config.get('agent.app_name', 'CMSAgent')
-            self.storage_path = determine_storage_path(app_name)
-            logger.info(f"Determined storage path: {self.storage_path}")
+        # Determine storage path based on app name and privileges
+        app_name = self.config.get('agent.app_name', 'CMSAgent')
+        self.storage_path = determine_storage_path(app_name)
+        logger.info(f"Using storage path: {self.storage_path}")
 
         self.state_filepath = os.path.join(self.storage_path, self.state_filename)
         self._state_cache: Optional[Dict[str, Any]] = None

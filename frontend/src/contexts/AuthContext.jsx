@@ -196,7 +196,7 @@ export const AuthProvider = ({ children }) => {
      * @type {function(): void}
      */
     logoutAction
-  }), [user, loading, error, isAuthenticated, loginAction, logoutAction]); 
+  }), [user, loading, error, loginAction, logoutAction]); 
 
   return (
       <AuthContext.Provider value={authValue}>

@@ -30,9 +30,6 @@ from .communication import ServerConnector, WSClient, HttpClient
 # System monitoring
 from .monitoring import SystemMonitor
 
-# Utility functions
-from .utils import get_logger
-
 __all__ = [
     # Core
     'Agent',
