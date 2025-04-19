@@ -6,8 +6,6 @@
     },
     "agent": {
         "app_name": "CMSAgent",
-        "app_version": "1.0.0",
-        "config_version": 1,
         "status_report_interval_sec": 30,
         "state_filename": "agent_state.json"
     },

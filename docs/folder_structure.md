@@ -12,48 +12,50 @@ computer-management-system/
 │
 ├── agent/                    # Root directory for Agent (Python)
 │   ├── requirements.txt      # Required Python libraries
-│   ├── config/               # Agent configuration
-│   │   └── agent_config.json # Agent configuration file
-│   └── src/                  # Main source code of the Agent
-│       ├── __init__.py       # Initialization file
-│       ├── main.py           # Entry point of the Agent
-│       ├── command_handlers/ # Command handlers module
-│       │   ├── __init__.py
-│       │   ├── base_handler.py       # Base abstract handler
-│       │   ├── console_handler.py    # Console command handler
-│       │   └── system_handler.py     # System command handler
-│       ├── communication/    # Communication module
-│       │   ├── __init__.py
-│       │   ├── http_client.py        # HTTP Client
-│       │   ├── server_connector.py   # Connection to server
-│       │   └── ws_client.py          # WebSocket Client
-│       ├── config/           # Configuration management module
-│       │   ├── __init__.py
-│       │   ├── config_manager.py     # Configuration management
-│       │   └── state_manager.py      # State management
-│       ├── core/             # Core processing module
-│       │   ├── __init__.py
-│       │   ├── agent.py             # Main Agent logic
-│       │   ├── agent_state.py       # Agent state management
-│       │   └── command_executor.py  # Command execution
-│       ├── ipc/              # Inter-Process Communication
-│       │   ├── __init__.py
-│       │   ├── named_pipe_client.py # IPC client via named pipe
-│       │   └── named_pipe_server.py # IPC server via named pipe
-│       ├── monitoring/       # Monitoring module
-│       │   ├── __init__.py
-│       │   └── system_monitor.py    # System monitoring
-│       ├── system/           # System interaction module
-│       │   ├── __init__.py
-│       │   ├── lock_manager.py      # Lock management
-│       │   └── windows_utils.py     # Windows utilities
-│       ├── ui/               # User interface module
-│       │   ├── __init__.py
-│       │   └── ui_console.py        # Console interface
-│       └── utils/            # Support utilities
-│           ├── __init__.py
-│           ├── logger.py            # Logging handler
-│           └── utils.py             # Utility functions
+│   ├── agent/                # Main source code of the Agent
+│   │   ├── __init__.py       # Initialization file
+│   │   ├── main.py           # Entry point of the Agent
+│   │   ├── version.py        # Version information
+│   │   ├── command_handlers/ # Command handlers module
+│   │   │   ├── __init__.py
+│   │   │   ├── base_handler.py       # Base abstract handler
+│   │   │   ├── console_handler.py    # Console command handler
+│   │   │   └── system_handler.py     # System command handler
+│   │   ├── communication/    # Communication module
+│   │   │   ├── __init__.py
+│   │   │   ├── http_client.py        # HTTP Client
+│   │   │   ├── server_connector.py   # Connection to server
+│   │   │   └── ws_client.py          # WebSocket Client
+│   │   ├── config/           # Configuration management module
+│   │   │   ├── __init__.py
+│   │   │   ├── config_manager.py     # Configuration management
+│   │   │   └── state_manager.py      # State management
+│   │   ├── core/             # Core processing module
+│   │   │   ├── __init__.py
+│   │   │   ├── agent.py             # Main Agent logic
+│   │   │   ├── agent_state.py       # Agent state management
+│   │   │   └── command_executor.py  # Command execution
+│   │   ├── ipc/              # Inter-Process Communication
+│   │   │   ├── __init__.py
+│   │   │   ├── named_pipe_client.py # IPC client via named pipe
+│   │   │   └── named_pipe_server.py # IPC server via named pipe
+│   │   ├── monitoring/       # Monitoring module
+│   │   │   ├── __init__.py
+│   │   │   └── system_monitor.py    # System monitoring
+│   │   ├── system/           # System interaction module
+│   │   │   ├── __init__.py
+│   │   │   ├── directory_utils.py   # Directory utilities
+│   │   │   ├── lock_manager.py      # Lock management
+│   │   │   └── windows_utils.py     # Windows utilities
+│   │   ├── ui/               # User interface module
+│   │   │   ├── __init__.py
+│   │   │   └── ui_console.py        # Console interface
+│   │   └── utils/            # Support utilities
+│   │       ├── __init__.py
+│   │       ├── logger.py            # Logging handler
+│   │       └── utils.py             # Utility functions
+│   └── config/               # Agent configuration
+│       └── agent_config.json # Agent configuration file
 │
 ├── backend/                  # Root directory for Backend (Node.js/Express)
 │   ├── create_db.sh          # Database creation script
