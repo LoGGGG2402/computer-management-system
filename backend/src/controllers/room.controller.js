@@ -1,4 +1,5 @@
 const roomService = require('../services/room.service');
+const logger = require('../utils/logger');
 
 /**
  * Controller for room management operations
@@ -40,13 +41,29 @@ class RoomController {
       const name = req.query.name || '';
       const assigned_user_id = req.query.assigned_user_id ? parseInt(req.query.assigned_user_id) : null;
       
+      logger.debug('Fetching rooms with filters:', {
+        page,
+        limit,
+        name,
+        assigned_user_id,
+        requestedBy: req.user?.id
+      });
+      
       const result = await roomService.getAllRooms(page, limit, name, assigned_user_id, req.user);
+      
+      logger.debug(`Retrieved ${result.rooms.length} rooms (total: ${result.total})`);
       
       return res.status(200).json({
         status: 'success',
         data: result
       });
     } catch (error) {
+      logger.error('Failed to fetch rooms:', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id
+      });
+      
       return res.status(500).json({
         status: 'error',
         message: error.message || 'Failed to fetch rooms'
@@ -58,7 +75,7 @@ class RoomController {
    * Get room by ID with computers
    * @param {Object} req - Express request object
    * @param {Object} req.params - Route parameters
-   * @param {string} req.params.id - Room ID to retrieve
+   * @param {string} req.params.roomId - Room ID to retrieve
    * @param {Object} res - Express response object
    * @returns {Object} JSON response with:
    *   - status {string} - 'success' or 'error'
@@ -89,15 +106,17 @@ class RoomController {
    */
   async getRoomById(req, res) {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.roomId);
       
       if (!id) {
+        logger.debug('Invalid room ID provided:', { id: req.params.roomId });
         return res.status(400).json({
           status: 'error',
           message: 'Room ID is required'
         });
       }
       
+      logger.debug(`Fetching room with ID: ${id}`);
       const room = await roomService.getRoomById(id);
       
       return res.status(200).json({
@@ -105,6 +124,12 @@ class RoomController {
         data: room
       });
     } catch (error) {
+      logger.error(`Failed to get room with ID ${req.params.roomId}:`, {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id
+      });
+      
       return res.status(404).json({
         status: 'error',
         message: error.message || 'Room not found'
@@ -140,6 +165,7 @@ class RoomController {
       const { name, description, layout } = req.body;
       
       if (!name) {
+        logger.debug('Missing room name in creation request');
         return res.status(400).json({
           status: 'error',
           message: 'Room name is required'
@@ -152,7 +178,10 @@ class RoomController {
         layout
       };
       
+      logger.info(`Creating new room: ${name}`, { createdBy: req.user?.id });
       const room = await roomService.createRoom(roomData);
+      
+      logger.info(`Room created successfully: ID ${room.id}, name: ${room.name}`);
       
       return res.status(201).json({
         status: 'success',
@@ -160,6 +189,13 @@ class RoomController {
         message: 'Room created successfully'
       });
     } catch (error) {
+      logger.error('Failed to create room:', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id,
+        name: req.body.name
+      });
+      
       return res.status(400).json({
         status: 'error',
         message: error.message || 'Failed to create room'
@@ -171,7 +207,7 @@ class RoomController {
    * Update a room
    * @param {Object} req - Express request object
    * @param {Object} req.params - Route parameters
-   * @param {string} req.params.id - Room ID to update
+   * @param {string} req.params.roomId - Room ID to update
    * @param {Object} req.body - Request body
    * @param {string} [req.body.name] - New name for the room
    * @param {string} [req.body.description] - New description for the room
@@ -191,10 +227,11 @@ class RoomController {
    */
   async updateRoom(req, res) {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.roomId);
       const { name, description } = req.body;
       
       if (!id) {
+        logger.debug('Invalid room ID provided for update:', { id: req.params.roomId });
         return res.status(400).json({
           status: 'error',
           message: 'Room ID is required'
@@ -207,7 +244,14 @@ class RoomController {
       if (description !== undefined) roomData.description = description;
       // Layout changes are not allowed for room updates
       
+      logger.info(`Updating room ID ${id}`, { 
+        fields: Object.keys(roomData),
+        updatedBy: req.user?.id
+      });
+      
       const room = await roomService.updateRoom(id, roomData);
+      
+      logger.info(`Room ID ${id} updated successfully`);
       
       return res.status(200).json({
         status: 'success',
@@ -215,6 +259,12 @@ class RoomController {
         message: 'Room updated successfully'
       });
     } catch (error) {
+      logger.error(`Failed to update room ID ${req.params.roomId}:`, {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id
+      });
+      
       return res.status(400).json({
         status: 'error',
         message: error.message || 'Failed to update room'
@@ -242,13 +292,26 @@ class RoomController {
       const { userIds } = req.body;
       
       if (!roomId || !userIds || !Array.isArray(userIds)) {
+        logger.debug('Invalid assignment request:', {
+          roomId,
+          hasUserIds: !!userIds,
+          isArray: Array.isArray(userIds)
+        });
+        
         return res.status(400).json({
           status: 'error',
           message: 'Room ID and user IDs array are required'
         });
       }
       
+      logger.info(`Assigning ${userIds.length} users to room ID ${roomId}`, {
+        performedBy: req.user?.id,
+        userIds
+      });
+      
       const count = await roomService.assignUsersToRoom(roomId, userIds);
+      
+      logger.info(`Successfully assigned ${count} users to room ID ${roomId}`);
       
       return res.status(200).json({
         status: 'success',
@@ -256,6 +319,12 @@ class RoomController {
         message: `${count} users assigned to room successfully`
       });
     } catch (error) {
+      logger.error(`Failed to assign users to room ID ${req.params.roomId}:`, {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id
+      });
+      
       return res.status(400).json({
         status: 'error',
         message: error.message || 'Failed to assign users to room'
@@ -283,13 +352,26 @@ class RoomController {
       const { userIds } = req.body;
       
       if (!roomId || !userIds || !Array.isArray(userIds)) {
+        logger.debug('Invalid unassignment request:', {
+          roomId,
+          hasUserIds: !!userIds,
+          isArray: Array.isArray(userIds)
+        });
+        
         return res.status(400).json({
           status: 'error',
           message: 'Room ID and user IDs array are required'
         });
       }
       
+      logger.info(`Unassigning ${userIds.length} users from room ID ${roomId}`, {
+        performedBy: req.user?.id,
+        userIds
+      });
+      
       const count = await roomService.unassignUsersFromRoom(roomId, userIds);
+      
+      logger.info(`Successfully unassigned ${count} users from room ID ${roomId}`);
       
       return res.status(200).json({
         status: 'success',
@@ -297,6 +379,12 @@ class RoomController {
         message: `${count} users unassigned from room successfully`
       });
     } catch (error) {
+      logger.error(`Failed to unassign users from room ID ${req.params.roomId}:`, {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id
+      });
+      
       return res.status(400).json({
         status: 'error',
         message: error.message || 'Failed to unassign users from room'
@@ -327,19 +415,29 @@ class RoomController {
       const roomId = parseInt(req.params.roomId);
       
       if (!roomId) {
+        logger.debug('Invalid room ID provided to get users:', { id: req.params.roomId });
         return res.status(400).json({
           status: 'error',
           message: 'Room ID is required'
         });
       }
       
+      logger.debug(`Fetching users in room ID: ${roomId}`);
       const users = await roomService.getUsersInRoom(roomId);
+      
+      logger.debug(`Retrieved ${users.length} users for room ID ${roomId}`);
       
       return res.status(200).json({
         status: 'success',
         data: { users }
       });
     } catch (error) {
+      logger.error(`Failed to get users in room ID ${req.params.roomId}:`, {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id
+      });
+      
       return res.status(404).json({
         status: 'error',
         message: error.message || 'Failed to get users in room'

@@ -1,4 +1,5 @@
-const StatisticsService = require('../services/statics.service');
+const StatisticsService = require("../services/statics.service");
+const logger = require("../utils/logger");
 
 /**
  * Controller for handling system statistics requests.
@@ -23,14 +24,30 @@ class StaticsController {
   async getSystemStats(req, res) {
     try {
       const stats = await StatisticsService.getSystemStats();
+
+      logger.debug("System statistics retrieved successfully", {
+        stats: {
+          totalUsers: stats.totalUsers,
+          totalComputers: stats.totalComputers,
+          onlineComputers: stats.onlineComputers,
+          computersWithErrors: stats.computersWithErrors,
+        },
+      });
+
       return res.status(200).json({
-        status: 'success',
+        status: "success",
         data: stats,
       });
     } catch (error) {
+      logger.error("Failed to retrieve system statistics:", {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id,
+      });
+
       return res.status(500).json({
-        status: 'error',
-        message: error.message || 'Failed to retrieve system statistics',
+        status: "error",
+        message: error.message || "Failed to retrieve system statistics",
       });
     }
   }

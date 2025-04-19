@@ -3,6 +3,7 @@
  */
 const computerService = require('../../services/computer.service');
 const websocketService = require('../../services/websocket.service');
+const logger = require('../../utils/logger');
 
 // --- Handler Functions ---
 
@@ -16,7 +17,7 @@ async function handleAgentAuthentication(socket, data) {
     const { agentId, token } = data || {};
 
     if (!agentId || !token) {
-      console.warn(`Authentication attempt with missing credentials from ${socket.id}`);
+      logger.warn(`Authentication attempt with missing credentials from ${socket.id}`);
       socket.emit('agent:ws_auth_failed', { status: 'error', message: 'Missing agent ID or token' });
       return;
     }
@@ -24,7 +25,7 @@ async function handleAgentAuthentication(socket, data) {
     const computerId = await computerService.verifyAgentToken(agentId, token);
 
     if (!computerId) {
-      console.warn(`Failed authentication attempt for agent ${agentId} from ${socket.id}`);
+      logger.warn(`Failed authentication attempt for agent ${agentId} from ${socket.id}`);
       socket.emit('agent:ws_auth_failed', { status: 'error', message: 'Authentication failed (Invalid ID or token)' });
       return;
     }
@@ -32,19 +33,17 @@ async function handleAgentAuthentication(socket, data) {
     socket.data.computerId = computerId;
     socket.data.agentId = agentId;
 
-    const roomName = websocketService.ROOM_PREFIXES.AGENT(computerId);
-    socket.join(roomName);
+    websocketService.joinAgentRoom(socket, computerId);
 
     socket.emit('agent:ws_auth_success', {
       status: 'success',
-      message: 'Authentication successful',
-      computerId
+      message: 'Authentication successful'
     });
-
-    console.info(`Agent authenticated: Agent ID ${agentId}, Computer ID ${computerId}, Socket ID ${socket.id}, Joined Room ${roomName}`);
-
   } catch (error) {
-    console.error(`Agent authentication error for agent ${data?.agentId}, socket ${socket.id}: ${error.message}`, error.stack);
+    logger.error(`Agent authentication error for agent ${data?.agentId}, socket ${socket.id}:`, { 
+      error: error.message, 
+      stack: error.stack 
+    });
     socket.emit('agent:ws_auth_failed', { status: 'error', message: 'Internal server error during authentication' });
   }
 }
@@ -58,12 +57,12 @@ async function handleAgentStatusUpdate(socket, data) {
   const computerId = socket.data.computerId;
 
   if (!computerId) {
-    console.warn(`Unauthenticated status update attempt from ${socket.id}. Ignoring.`);
+    logger.warn(`Unauthenticated status update attempt from ${socket.id}. Ignoring.`);
     return;
   }
 
   if (!data) {
-      console.warn(`Received empty status update from computer ${computerId} (Socket ${socket.id})`);
+      logger.warn(`Received empty status update from computer ${computerId} (Socket ${socket.id})`);
       return;
   }
 
@@ -76,7 +75,10 @@ async function handleAgentStatusUpdate(socket, data) {
 
     await websocketService.broadcastStatusUpdate(computerId);
   } catch (error) {
-    console.error(`Status update processing error for computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+    logger.error(`Status update processing error for computer ${computerId} (Socket ${socket.id}):`, {
+      error: error.message,
+      stack: error.stack
+    });
   }
 }
 
@@ -93,18 +95,18 @@ function handleAgentCommandResult(socket, data) {
   const computerId = socket.data.computerId;
 
   if (!computerId) {
-    console.warn(`Unauthenticated command result received from ${socket.id}. Ignoring.`);
+    logger.warn(`Unauthenticated command result received from ${socket.id}. Ignoring.`);
     return;
   }
 
   const { commandId, type, success, result } = data || {};
 
   if (!commandId) {
-    console.warn(`Command result missing commandId from computer ${computerId} (Socket ${socket.id}). Ignoring.`);
+    logger.warn(`Command result missing commandId from computer ${computerId} (Socket ${socket.id}). Ignoring.`);
     return;
   }
 
-  console.debug(`Command result for ID ${commandId} received from computer ${computerId} (Socket ${socket.id}) - Type: ${type || 'unknown'}, Success: ${success}`);
+  logger.debug(`Command result for ID ${commandId} received from computer ${computerId} (Socket ${socket.id}) - Type: ${type || 'unknown'}, Success: ${success}`);
 
   try {
     // Standardize the result format for the frontend
@@ -118,7 +120,10 @@ function handleAgentCommandResult(socket, data) {
     websocketService.notifyCommandCompletion(commandId, standardizedResult);
 
   } catch (error) {
-    console.error(`Command result handling error for command ${commandId}, computer ${computerId} (Socket ${socket.id}): ${error.message}`, error.stack);
+    logger.error(`Command result handling error for command ${commandId}, computer ${computerId} (Socket ${socket.id}):`, {
+      error: error.message,
+      stack: error.stack
+    });
   }
 }
 
@@ -134,18 +139,18 @@ const setupAgentHandlers = (io, socket) => {
   const tokenFromData = socket.data.authToken;
 
   if (agentIdFromData && tokenFromData) {
-    console.info(`Attempting auto-authentication for agent via headers: Agent ID ${agentIdFromData}, Socket ID ${socket.id}`);
+    logger.info(`Attempting auto-authentication for agent via headers: Agent ID ${agentIdFromData}, Socket ID ${socket.id}`);
     handleAgentAuthentication(socket, {
       agentId: agentIdFromData,
       token: tokenFromData
     });
   } else {
-    console.info(`Agent ${socket.id} connected without pre-authentication headers. Waiting for 'agent:authenticate' event.`);
+    logger.info(`Agent ${socket.id} connected without pre-authentication headers. Waiting for 'agent:authenticate' event.`);
   }
 
   socket.on('agent:authenticate', (data) => {
     if (socket.data.computerId) {
-        console.warn(`Agent ${socket.data.agentId} (Socket ${socket.id}) sent 'agent:authenticate' but is already authenticated. Ignoring.`);
+        logger.warn(`Agent ${socket.data.agentId} (Socket ${socket.id}) sent 'agent:authenticate' but is already authenticated. Ignoring.`);
         return;
     }
     handleAgentAuthentication(socket, data);

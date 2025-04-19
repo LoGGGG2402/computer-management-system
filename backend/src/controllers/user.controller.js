@@ -1,4 +1,5 @@
 const userService = require('../services/user.service');
+const logger = require('../utils/logger');
 
 /**
  * Controller for user management operations
@@ -39,11 +40,25 @@ class UserController {
       
       const result = await userService.getAllUsers(page, limit, search, role, is_active);
       
+      logger.debug(`Retrieved ${result.users.length} users (total: ${result.total}) with filters:`, {
+        page,
+        limit,
+        search,
+        role,
+        is_active,
+        requestedBy: req.user?.id
+      });
+      
       return res.status(200).json({
         status: 'success',
         data: result
       });
     } catch (error) {
+      logger.error('Failed to fetch users:', {
+        error: error.message,
+        stack: error.stack
+      });
+      
       return res.status(500).json({
         status: 'error',
         message: error.message || 'Failed to fetch users'
@@ -55,7 +70,7 @@ class UserController {
    * Get user by ID
    * @param {Object} req - Express request object
    * @param {Object} req.params - Route parameters
-   * @param {string} req.params.id - User ID to retrieve
+   * @param {string} req.params.userId - User ID to retrieve
    * @param {Object} res - Express response object
    * @returns {Object} JSON response with:
    *   - status {string} - 'success' or 'error'
@@ -70,15 +85,17 @@ class UserController {
    */
   async getUserById(req, res) {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.userId);
       
       if (!id) {
+        logger.debug('Invalid user ID provided:', { id: req.params.userId });
         return res.status(400).json({
           status: 'error',
           message: 'User ID is required'
         });
       }
       
+      logger.debug(`Fetching user with ID: ${id}`);
       const user = await userService.getUserById(id);
       
       return res.status(200).json({
@@ -86,6 +103,11 @@ class UserController {
         data: user
       });
     } catch (error) {
+      logger.error(`Failed to get user with ID ${req.params.userId}:`, {
+        error: error.message,
+        stack: error.stack
+      });
+      
       return res.status(404).json({
         status: 'error',
         message: error.message || 'User not found'
@@ -118,6 +140,11 @@ class UserController {
       const { username, password, role, is_active } = req.body;
       
       if (!username || !password) {
+        logger.debug('Missing required user creation fields:', { 
+          hasUsername: !!username, 
+          hasPassword: !!password 
+        });
+        
         return res.status(400).json({
           status: 'error',
           message: 'Username and password are required'
@@ -130,8 +157,9 @@ class UserController {
         role,
         is_active
       };
-      
       const user = await userService.createUser(userData);
+      
+      logger.info(`User created successfully: ID ${user.id}, username: ${user.username}`);
       
       return res.status(201).json({
         status: 'success',
@@ -139,6 +167,12 @@ class UserController {
         message: 'User created successfully'
       });
     } catch (error) {
+      logger.error('Failed to create user:', {
+        error: error.message, 
+        stack: error.stack,
+        username: req.body.username
+      });
+      
       return res.status(400).json({
         status: 'error',
         message: error.message || 'Failed to create user'
@@ -150,7 +184,7 @@ class UserController {
    * Update a user
    * @param {Object} req - Express request object
    * @param {Object} req.params - Route parameters
-   * @param {string} req.params.id - User ID to update
+   * @param {string} req.params.userId - User ID to update
    * @param {Object} req.body - Request body
    * @param {string} [req.body.role] - New role for the user
    * @param {boolean} [req.body.is_active] - New active status for the user
@@ -168,10 +202,11 @@ class UserController {
    */
   async updateUser(req, res) {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.userId);
       const { role, is_active } = req.body;
       
       if (!id) {
+        logger.debug('Invalid user ID provided for update:', { id: req.params.userId });
         return res.status(400).json({
           status: 'error',
           message: 'User ID is required'
@@ -179,6 +214,11 @@ class UserController {
       }
       
       if (req.body.username || req.body.password) {
+        logger.warn('Attempt to update username/password via unauthorized endpoint:', {
+          userId: id,
+          attemptedBy: req.user?.id
+        });
+        
         return res.status(400).json({
           status: 'error',
           message: 'Username and password cannot be updated via this endpoint'
@@ -192,12 +232,19 @@ class UserController {
       
       const user = await userService.updateUser(id, userData);
       
+      logger.info(`User ID ${id} updated successfully`);
+      
       return res.status(200).json({
         status: 'success',
         data: user,
         message: 'User updated successfully'
       });
     } catch (error) {
+      logger.error(`Failed to update user ID ${req.params.userId}:`, {
+        error: error.message,
+        stack: error.stack
+      });
+      
       return res.status(400).json({
         status: 'error',
         message: error.message || 'Failed to update user'
@@ -209,7 +256,7 @@ class UserController {
    * Delete/inactivate a user
    * @param {Object} req - Express request object
    * @param {Object} req.params - Route parameters
-   * @param {string} req.params.id - User ID to delete/inactivate
+   * @param {string} req.params.userId - User ID to delete/inactivate
    * @param {Object} res - Express response object
    * @returns {Object} JSON response with:
    *   - status {string} - 'success' or 'error'
@@ -217,9 +264,10 @@ class UserController {
    */
   async deleteUser(req, res) {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.userId);
       
       if (!id) {
+        logger.debug('Invalid user ID provided for deletion:', { id: req.params.userId });
         return res.status(400).json({
           status: 'error',
           message: 'User ID is required'
@@ -228,11 +276,18 @@ class UserController {
       
       await userService.deleteUser(id);
       
+      logger.info(`User ID ${id} inactivated successfully`);
+      
       return res.status(200).json({
         status: 'success',
         message: 'User inactivated successfully'
       });
     } catch (error) {
+      logger.error(`Failed to inactivate user ID ${req.params.userId}:`, {
+        error: error.message,
+        stack: error.stack
+      });
+      
       return res.status(404).json({
         status: 'error',
         message: error.message || 'User not found'
@@ -244,7 +299,7 @@ class UserController {
    * Reactivate an inactive user
    * @param {Object} req - Express request object
    * @param {Object} req.params - Route parameters
-   * @param {string} req.params.id - User ID to reactivate
+   * @param {string} req.params.userId - User ID to reactivate
    * @param {Object} res - Express response object
    * @returns {Object} JSON response with:
    *   - status {string} - 'success' or 'error'
@@ -259,16 +314,19 @@ class UserController {
    */
   async reactivateUser(req, res) {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.userId);
       
       if (!id) {
+        logger.debug('Invalid user ID provided for reactivation:', { id: req.params.userId });
         return res.status(400).json({
           status: 'error',
           message: 'User ID is required'
         });
       }
-      
+
       const user = await userService.reactivateUser(id);
+      
+      logger.info(`User ID ${id} reactivated successfully`);
       
       return res.status(200).json({
         status: 'success',
@@ -276,6 +334,11 @@ class UserController {
         message: 'User reactivated successfully'
       });
     } catch (error) {
+      logger.error(`Failed to reactivate user ID ${req.params.userId}:`, {
+        error: error.message,
+        stack: error.stack
+      });
+      
       return res.status(404).json({
         status: 'error',
         message: error.message || 'User not found'

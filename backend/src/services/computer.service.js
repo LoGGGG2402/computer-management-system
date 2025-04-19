@@ -13,7 +13,7 @@ const Room = db.Room;
 class ComputerService {
   /**
    * Finds a computer in the database by its unique agent identifier.
-   * 
+   *
    * @param {string} agentId - The unique identifier assigned to the agent
    * @returns {Promise<Object|null>} Computer object with related room data if found, null otherwise
    *   - id {number} - The database identifier of the computer
@@ -36,7 +36,7 @@ class ComputerService {
    *     - name {string} - Room name
    */
   async findComputerByAgentId(agentId) {
-    return Computer.findOne({
+    const computer = await Computer.findOne({
       where: { unique_agent_id: agentId },
       include: [
         {
@@ -44,13 +44,17 @@ class ComputerService {
           as: "room",
           attributes: ["id", "name"],
         },
-      ]
+      ],
     });
+    if (!computer) {
+      throw new Error("Computer not found");
+    }
+    return computer;
   }
 
   /**
    * Generates a secure token and assigns it to a computer agent.
-   * 
+   *
    * @param {string} agentId - The unique identifier for the agent
    * @param {Object|null} positionInfo - Information about the physical position of the computer
    * @param {number|null} positionInfo.roomId - ID of the room where the computer is located
@@ -86,29 +90,33 @@ class ComputerService {
       last_update: new Date(),
     };
 
-    if (computer) {
-      await computer.update(updateData);
-    } else {
-      computer = await Computer.create({
-        unique_agent_id: agentId,
-        agent_token_hash: tokenHash,
-        name: `Computer-${agentId.substring(0, 8)}`,
-        status: "offline",
-        errors: [],
-        have_active_errors: false,
-        last_update: new Date(),
-        room_id: positionInfo?.roomId,
-        pos_x: positionInfo?.posX,
-        pos_y: positionInfo?.posY,
-      });
-    }
+    try {
+      if (computer) {
+        await computer.update(updateData);
+      } else {
+        computer = await Computer.create({
+          unique_agent_id: agentId,
+          agent_token_hash: tokenHash,
+          name: `Computer-${agentId.substring(0, 8)}`,
+          status: "offline",
+          errors: [],
+          have_active_errors: false,
+          last_update: new Date(),
+          room_id: positionInfo?.roomId,
+          pos_x: positionInfo?.posX,
+          pos_y: positionInfo?.posY,
+        });
+      }
 
-    return {plainToken, computer};
+      return { plainToken, computer };
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
    * Verifies the authenticity of an agent token for a specific agent.
-   * 
+   *
    * @param {string} agentId - The unique identifier for the agent
    * @param {string} token - The token to verify against stored hash
    * @returns {Promise<number|null>} The computer ID if token is valid, null otherwise
@@ -130,14 +138,13 @@ class ComputerService {
 
       return null;
     } catch (error) {
-      console.error("Error verifying agent token:", error);
       throw error;
     }
   }
 
   /**
    * Retrieves a paginated and filtered list of computers.
-   * 
+   *
    * @param {number} page - The page number for pagination (1-based)
    * @param {number} limit - Maximum number of items per page
    * @param {Object} filters - Filter criteria for the computer list
@@ -193,7 +200,9 @@ class ComputerService {
       }
 
       const { count, rows } = await Computer.findAndCountAll({
-        attributes: { exclude: ['agent_token_hash', 'unique_agent_id', 'errors'] },
+        attributes: {
+          exclude: ["agent_token_hash", "unique_agent_id", "errors"],
+        },
         where: whereClause,
         include: [
           {
@@ -206,7 +215,7 @@ class ComputerService {
         offset,
         order: [["id", "ASC"]],
       });
-      
+
       return {
         total: count,
         currentPage: page,
@@ -220,7 +229,7 @@ class ComputerService {
 
   /**
    * Retrieves a computer by its unique ID.
-   * 
+   *
    * @param {number} id - The database identifier of the computer
    * @returns {Promise<Object>} Computer object with the following properties:
    *   - id {number} - Computer ID
@@ -243,7 +252,9 @@ class ComputerService {
    */
   async getComputerById(id) {
     const computer = await Computer.findByPk(id, {
-      attributes: { exclude: ['agent_token_hash', 'unique_agent_id', 'errors'] },
+      attributes: {
+        exclude: ["agent_token_hash", "unique_agent_id", "errors"],
+      },
       include: [
         {
           model: Room,
@@ -262,7 +273,7 @@ class ComputerService {
 
   /**
    * Updates a computer record with new data.
-   * 
+   *
    * @param {number} id - The database identifier of the computer to update
    * @param {Object} data - The data fields to update on the computer record
    * @param {string} [data.name] - New computer name
@@ -280,21 +291,27 @@ class ComputerService {
    * @throws {Error} If computer is not found
    */
   async updateComputer(id, data) {
-    const computer = await Computer.findByPk(id);
+    try {
+      const computer = await Computer.findByPk(id);
 
-    if (!computer) {
-      throw new Error("Computer not found");
+      if (!computer) {
+        throw new Error("Computer not found");
+      }
+
+      await computer.update(data);
+
+      const { agent_token_hash, unique_agent_id, ...safeData } = computer.get({
+        plain: true,
+      });
+      return safeData;
+    } catch (error) {
+      throw error;
     }
-
-    await computer.update(data);
-
-    const { agent_token_hash, unique_agent_id, ...safeData } = computer.get({ plain: true });
-    return safeData;
   }
 
   /**
    * Updates the last_update timestamp for a computer.
-   * 
+   *
    * @param {number} computerId - The database identifier of the computer
    * @returns {Promise<boolean>} True if update was successful
    * @throws {Error} If computer is not found or update fails
@@ -311,14 +328,13 @@ class ComputerService {
 
       return true;
     } catch (error) {
-      console.error("Error updating computer last seen timestamp:", error);
       throw error;
     }
   }
 
   /**
    * Deletes a computer from the database.
-   * 
+   *
    * @param {number} id - The database identifier of the computer to delete
    * @returns {Promise<boolean>} True if deletion was successful
    * @throws {Error} If computer is not found or deletion fails
@@ -337,7 +353,7 @@ class ComputerService {
 
   /**
    * Checks if a user has access to a specific computer via room assignments.
-   * 
+   *
    * @param {number} userId - The database identifier of the user
    * @param {number} computerId - The database identifier of the computer
    * @returns {Promise<boolean>} True if user has access to the computer, false otherwise
@@ -351,20 +367,19 @@ class ComputerService {
       const userRoomAssignment = await db.UserRoomAssignment.findOne({
         where: {
           user_id: userId,
-          room_id: computer.room_id
-        }
+          room_id: computer.room_id,
+        },
       });
 
       return userRoomAssignment !== null;
     } catch (error) {
-      console.error(`Error checking user computer access: ${error.message}`);
       return false;
     }
   }
 
   /**
    * Retrieves all error records for a specific computer.
-   * 
+   *
    * @param {number} id - The database identifier of the computer
    * @returns {Promise<Array<Object>>} Array of error objects with the following properties:
    *   - id {number} - Error ID
@@ -379,19 +394,19 @@ class ComputerService {
    */
   async getComputerErrors(id) {
     const computer = await db.Computer.findByPk(id, {
-      attributes: ['id', 'name', 'errors', 'have_active_errors']
+      attributes: ["id", "name", "errors", "have_active_errors"],
     });
-    
+
     if (!computer) {
-      throw new Error('Computer not found');
+      throw new Error("Computer not found");
     }
-    
+
     return computer.errors || [];
   }
 
   /**
    * Records a new error for a computer and updates its error status.
-   * 
+   *
    * @param {number} id - The database identifier of the computer
    * @param {Object} errorData - Data describing the error
    * @param {string} errorData.error_type - Type/category of the error
@@ -409,29 +424,33 @@ class ComputerService {
    * @throws {Error} If computer is not found
    */
   async reportComputerError(id, errorData) {
-    const computer = await db.Computer.findByPk(id);
-    
-    if (!computer) {
-      throw new Error('Computer not found');
+    try {
+      const computer = await db.Computer.findByPk(id);
+
+      if (!computer) {
+        throw new Error("Computer not found");
+      }
+
+      const errorId = Date.now();
+      errorData.id = errorId;
+
+      const errors = Array.isArray(computer.errors) ? [...computer.errors] : [];
+      errors.push(errorData);
+
+      await computer.update({
+        errors: errors,
+        have_active_errors: true,
+      });
+
+      return { error: errorData, computerId: id };
+    } catch (error) {
+      throw error;
     }
-    
-    const errorId = Date.now();
-    errorData.id = errorId;
-    
-    const errors = Array.isArray(computer.errors) ? [...computer.errors] : [];
-    errors.push(errorData);
-    
-    await computer.update({
-      errors: errors,
-      have_active_errors: true
-    });
-    
-    return { error: errorData, computerId: id };
   }
 
   /**
    * Marks a computer error as resolved and updates the error status.
-   * 
+   *
    * @param {number} computerId - The database identifier of the computer
    * @param {number} errorId - The identifier of the specific error to resolve
    * @param {string} [resolutionNotes=''] - Notes detailing the resolution
@@ -449,35 +468,39 @@ class ComputerService {
    * @throws {Error} If computer or error is not found
    */
   async resolveComputerError(computerId, errorId, resolutionNotes) {
-    const computer = await db.Computer.findByPk(computerId);
-    
-    if (!computer) {
-      throw new Error('Computer not found');
+    try {
+      const computer = await db.Computer.findByPk(computerId);
+
+      if (!computer) {
+        throw new Error("Computer not found");
+      }
+
+      let errors = Array.isArray(computer.errors) ? [...computer.errors] : [];
+
+      const errorIndex = errors.findIndex((err) => err.id === errorId);
+
+      if (errorIndex === -1) {
+        throw new Error("Error not found for this computer");
+      }
+
+      errors[errorIndex] = {
+        ...errors[errorIndex],
+        resolved: true,
+        resolved_at: new Date(),
+        resolution_notes: resolutionNotes || "Marked as resolved",
+      };
+
+      const hasUnresolvedErrors = errors.some((err) => !err.resolved);
+
+      await computer.update({
+        errors: errors,
+        have_active_errors: hasUnresolvedErrors,
+      });
+
+      return { error: errors[errorIndex], computerId };
+    } catch (error) {
+      throw error;
     }
-    
-    let errors = Array.isArray(computer.errors) ? [...computer.errors] : [];
-    
-    const errorIndex = errors.findIndex(err => err.id === errorId);
-    
-    if (errorIndex === -1) {
-      throw new Error('Error not found for this computer');
-    }
-    
-    errors[errorIndex] = {
-      ...errors[errorIndex],
-      resolved: true,
-      resolved_at: new Date(),
-      resolution_notes: resolutionNotes || 'Marked as resolved'
-    };
-    
-    const hasUnresolvedErrors = errors.some(err => !err.resolved);
-    
-    await computer.update({
-      errors: errors,
-      have_active_errors: hasUnresolvedErrors
-    });
-    
-    return { error: errors[errorIndex], computerId };
   }
 }
 

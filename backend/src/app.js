@@ -5,6 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const routes = require('./routes');
+const logger = require('./utils/logger');
 
 /**
  * Creates and configures the Express application instance.
@@ -25,15 +26,15 @@ function createApp() {
       const { method, originalUrl, ip } = req;
       const userAgent = req.get('User-Agent') || 'N/A';
 
-      // console.info(`<----- ${method} ${originalUrl} - IP: ${ip} - Agent: ${userAgent}`);
+      // logger.debug(`<----- ${method} ${originalUrl} - IP: ${ip} - Agent: ${userAgent}`);
 
       if (method !== 'GET') {
-        console.info('Request Body:', req.body);
+        logger.debug('Request Body:', { body: req.body });
       }
 
       res.on('finish', () => {
         const duration = Date.now() - start;
-        console.info(` ${method} ${originalUrl} - Status: ${res.statusCode} - ${duration}ms`);
+        logger.http(`${method} ${originalUrl} - Status: ${res.statusCode} - ${duration}ms`);
       });
 
       next();
@@ -69,7 +70,7 @@ function createApp() {
    * Logs the error and sends a standardized JSON error response.
    */
   app.use((err, req, res, next) => {
-    console.error('Unhandled Error:', err.stack || err.message || err);
+    logger.error('Unhandled Error:', { error: err.message, stack: err.stack });
 
     // Avoid leaking stack trace in production
     const errorResponse = {

@@ -65,7 +65,7 @@ computer-management-system/
 │       │   ├── authAdmin.js           # Kiểm tra quyền Admin
 │       │   ├── authAgentToken.js      # Xác thực token Agent
 │       │   ├── authComputerAccess.js  # Kiểm tra quyền truy cập Computer
-│       │   ├── authJwt.js             # Xác thực JWT token
+│       │   ├── aythUser.js             # Xác thực JWT token
 │       │   └── authRoomAccess.js      # Kiểm tra quyền truy cập Room
 │       ├── routes/           # Định nghĩa các routes API
 │       │   ├── agent.routes.js

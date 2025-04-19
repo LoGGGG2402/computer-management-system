@@ -1,7 +1,7 @@
 const express = require('express');
 const userController = require('../controllers/user.controller');
-const { verifyToken } = require('../middleware/authJwt');
-const { isAdmin } = require('../middleware/authAdmin');
+const { verifyToken } = require('../middleware/authUser');
+const { authAccess } = require('../middleware/authAccess');
 
 const router = express.Router();
 
@@ -9,16 +9,16 @@ const router = express.Router();
 router.use(verifyToken);
 
 // All routes below require admin role
-router.use(isAdmin);
+router.use(authAccess({ requiredRole: 'admin' }));
 
 // User CRUD routes
 router.get('/', userController.getAllUsers);
-router.get('/:id', userController.getUserById);
+router.get('/:userId', userController.getUserById);
 router.post('/', userController.createUser);
-router.put('/:id', userController.updateUser);
-router.delete('/:id', userController.deleteUser);
+router.put('/:userId', userController.updateUser);
+router.delete('/:userId', userController.deleteUser);
 
 // User reactivation route
-router.put('/:id/reactivate', userController.reactivateUser);
+router.put('/:userId/reactivate', userController.reactivateUser);
 
 module.exports = router;

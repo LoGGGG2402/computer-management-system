@@ -4,6 +4,7 @@
 const { setupFrontendHandlers, handleFrontendDisconnect } = require('./handlers/frontend.handler');
 const { setupAgentHandlers, handleAgentDisconnect } = require('./handlers/agent.handler'); // Assuming this path is correct
 const websocketService = require('../services/websocket.service');
+const logger = require('../utils/logger');
 
 /**
  * Initializes WebSocket event handlers and middleware.
@@ -17,29 +18,32 @@ const initializeWebSocket = (io) => {
     const clientIp = socket.handshake.address;
     const headerType = socket.handshake.headers['x-client-type'];
     const clientType = (headerType || 'unknown').toLowerCase();
-    console.info(`New client connected: ${clientId} (IP: ${clientIp}, Type: ${clientType})`);
+    logger.info(`New client connected: ${clientId} (IP: ${clientIp}, Type: ${clientType})`);
     socket.data.type = clientType;
 
     if (clientType === 'agent') {
-      console.info(`Setting up agent handlers for socket ${clientId}`);
+      logger.debug(`Setting up agent handlers for socket ${clientId}`);
       setupAgentHandlers(io, socket);
     } else if (clientType === 'frontend') {
-      console.info(`Setting up frontend handlers for socket ${clientId}`);
+      logger.debug(`Setting up frontend handlers for socket ${clientId}`);
       setupFrontendHandlers(socket);
     } else {
-      console.warn(`Unknown client type '${clientType}' for socket ${clientId}. Disconnecting.`);
+      logger.warn(`Unknown client type '${clientType}' for socket ${clientId}. Disconnecting.`);
       socket.emit('error', { message: 'Unknown client type' });
       socket.disconnect(true);
       return;
     }
 
     socket.on('disconnect', (reason) => {
-      console.info(`Client disconnected: ${clientId} (Type: ${clientType}), Reason: ${reason}`);
+      logger.info(`Client disconnected: ${clientId} (Type: ${clientType}), Reason: ${reason}`);
       handleDisconnect(socket, reason);
     });
 
     socket.on('error', (error) => {
-      console.error(`Socket ${clientId} error: ${error.message}`, error.stack);
+      logger.error(`Socket ${clientId} error:`, {
+        error: error.message,
+        stack: error.stack 
+      });
     });
   });
 
@@ -49,18 +53,18 @@ const initializeWebSocket = (io) => {
 
     if (authHeader?.startsWith('Bearer ')) {
       socket.data.authToken = authHeader.substring(7);
-      console.debug(`Auth token found for socket ${socket.id}`);
+      logger.debug(`Auth token found for socket ${socket.id}`);
     }
 
     if (agentIdHeader) {
       socket.data.agentId = agentIdHeader;
-      console.debug(`Agent ID header found for socket ${socket.id}: ${agentIdHeader}`);
+      logger.debug(`Agent ID header found for socket ${socket.id}: ${agentIdHeader}`);
     }
 
     next();
   });
 
-  console.info('WebSocket server initialized successfully');
+  logger.info('WebSocket server initialized successfully');
 };
 
 /**
@@ -76,7 +80,7 @@ const handleDisconnect = (socket, reason) => {
   } else if (clientType === 'frontend') {
     handleFrontendDisconnect(socket);
   } else {
-    console.info(`Unknown client type disconnected: ${socket.id}, Reason: ${reason}`);
+    logger.info(`Unknown client type disconnected: ${socket.id}, Reason: ${reason}`);
   }
 };
 

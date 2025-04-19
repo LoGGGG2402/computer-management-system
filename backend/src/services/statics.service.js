@@ -29,23 +29,21 @@ class StatisticsService {
      */
     async getSystemStats() {
       try {
-        // Perform count queries and fetch computers with errors in parallel
         const [
           totalUsers,
           totalRooms,
           totalComputers,
-          computersWithErrorRecords, // Fetch full records for error processing
+          computersWithErrorRecords,
         ] = await Promise.all([
           User.count(),
           Room.count(),
           Computer.count(),
           Computer.findAll({
             where: { have_active_errors: true },
-            attributes: ['id', 'name', 'errors'] // Only fetch necessary fields
+            attributes: ['id', 'name', 'errors'] 
           }),
         ]);
 
-        // Process unresolved errors
         const unresolvedErrors = [];
         computersWithErrorRecords.forEach(computer => {
           const errors = Array.isArray(computer.errors) ? computer.errors : [];
@@ -54,7 +52,7 @@ class StatisticsService {
               unresolvedErrors.push({
                 computerId: computer.id,
                 computerName: computer.name,
-                errorId: error.id, // Assuming error object has an 'id'
+                errorId: error.id, 
                 error_type: error.error_type,
                 error_message: error.error_message,
                 error_details: error.error_details,
@@ -64,9 +62,8 @@ class StatisticsService {
           });
         });
 
-        // Get the number of currently online computers from WebSocketService
         const onlineComputers = websocketService.numberOfConnectedAgents();
-        const computersWithErrorsCount = computersWithErrorRecords.length; // Count based on fetched records
+        const computersWithErrorsCount = computersWithErrorRecords.length;
 
         return {
           totalUsers,
@@ -74,14 +71,12 @@ class StatisticsService {
           totalComputers,
           onlineComputers,
           offlineComputers: totalComputers - onlineComputers,
-          computersWithErrors: computersWithErrorsCount, // Use the count from fetched records
-          unresolvedErrors, // Add the list of unresolved errors
+          computersWithErrors: computersWithErrorsCount, 
+          unresolvedErrors,
         };
       } catch (error) {
-        console.error('Error fetching system statistics:', error);
-        // Re-throw a generic error to avoid exposing internal details
         throw new Error('Could not retrieve statistics data.');
       }
     }
   }
-  module.exports = new StatisticsService(); // Export an instance
+  module.exports = new StatisticsService();

@@ -1,8 +1,7 @@
 const express = require('express');
 const roomController = require('../controllers/room.controller');
-const { verifyToken } = require('../middleware/authJwt');
-const { isAdmin } = require('../middleware/authAdmin');
-const { hasRoomAccess } = require('../middleware/authRoomAccess');
+const { verifyToken } = require('../middleware/authUser');
+const { authAccess } = require('../middleware/authAccess');
 
 const router = express.Router();
 
@@ -10,22 +9,22 @@ const router = express.Router();
 router.use(verifyToken);
 
 // Room routes with appropriate access checks
-// Get all rooms (filtered by user permission)
-router.get('/', roomController.getAllRooms);
+// Get all rooms (filtered by user permission - handled in controller/service)
+router.get('/', roomController.getAllRooms); // No specific middleware here, logic inside controller
 
 // Get specific room by ID (check room access)
-router.get('/:id', hasRoomAccess, roomController.getRoomById);
+router.get('/:roomId', authAccess({ checkRoomIdParam: true }), roomController.getRoomById);
 
 // Routes that require room access
-router.put('/:id', hasRoomAccess, roomController.updateRoom);
+router.put('/:roomId', authAccess({ checkRoomIdParam: true }), roomController.updateRoom);
 
 // Admin-only routes below
-router.use('/admin', isAdmin);
-router.post('/', isAdmin, roomController.createRoom);
+// Apply admin check directly to admin-specific routes
+const requireAdmin = authAccess({ requiredRole: 'admin' });
 
-// User assignment routes (admin only)
-router.post('/:roomId/assign', isAdmin, roomController.assignUsersToRoom);
-router.post('/:roomId/unassign', isAdmin, roomController.unassignUsersFromRoom);
-router.get('/:roomId/users', isAdmin, roomController.getUsersInRoom);
+router.post('/', requireAdmin, roomController.createRoom);
+router.post('/:roomId/assign', requireAdmin, roomController.assignUsersToRoom);
+router.post('/:roomId/unassign', requireAdmin, roomController.unassignUsersFromRoom);
+router.get('/:roomId/users', requireAdmin, roomController.getUsersInRoom);
 
 module.exports = router;

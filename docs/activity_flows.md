@@ -168,7 +168,7 @@ Tài liệu này mô tả chi tiết các bước thực hiện, file liên quan
 * **Files/Modules & Functions:** 
   * `src/routes/computer.routes.js`
   * `src/controllers/computer.controller.js` (`handleSendCommand`)
-  * `src/middleware/authJwt.js`
+  * `src/middleware/aythUser.js`
   * `src/middleware/authComputerAccess.js`
   * `src/services/websocket.service.js` (`sendCommandToAgent`, quản lý `pendingCommands`), map `agentCommandSockets`.
 * **API/Event:** Xử lý `POST /api/computers/:id/command`. Gửi WS Event `command:execute` tới Agent.
@@ -232,7 +232,7 @@ Tài liệu này mô tả chi tiết các bước thực hiện, file liên quan
 * **Files/Modules & Functions:** 
   * `src/routes/computer.routes.js`
   * `src/controllers/computer.controller.js` (`handleReportError`)
-  * `src/middleware/authJwt.js`
+  * `src/middleware/aythUser.js`
   * `src/middleware/authComputerAccess.js`
   * `src/services/computer.service.js` (`addComputerError`)
   * `src/database/models/computer.model.js`.
@@ -259,7 +259,7 @@ Tài liệu này mô tả chi tiết các bước thực hiện, file liên quan
 * **Files/Modules & Functions:** 
   * `src/routes/computer.routes.js`
   * `src/controllers/computer.controller.js` (`handleResolveError`)
-  * `src/middleware/authJwt.js`
+  * `src/middleware/aythUser.js`
   * `src/middleware/authAdmin.js`
   * `src/services/computer.service.js` (`resolveComputerError`)
   * `src/database/models/computer.model.js`.

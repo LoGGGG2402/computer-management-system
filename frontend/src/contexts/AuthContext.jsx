@@ -29,7 +29,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [userRooms, setUserRooms] = useState([]);
 
   /**
    * Initializes authentication on component mount
@@ -38,8 +37,7 @@ export const AuthProvider = ({ children }) => {
    * 1. Checks for existing user token in storage
    * 2. Validates the token with the server
    * 3. Fetches the user profile if token is valid
-   * 4. Fetches assigned rooms for non-admin users
-   * 5. Handles token validation errors and logout
+   * 4. Handles token validation errors and logout
    * 
    * @effect
    */
@@ -56,18 +54,6 @@ export const AuthProvider = ({ children }) => {
             const profile = await authService.getProfile();
             if (isMounted) {
               setUser({ ...currentUser, profile });
-              if (currentUser.role !== 'admin') {
-                try {
-                  const userRoomsData = await authService.getUserRooms();
-                  if (isMounted) {
-                    setUserRooms(userRoomsData.data || []);
-                  }
-                } catch (err) {
-                  console.error('Failed to fetch user rooms:', err);
-                }
-              } else {
-                 if (isMounted) setUserRooms([]);
-              }
             }
           } catch (err) {
             console.error('Token verification error (possibly invalid/expired):', err);
@@ -137,18 +123,6 @@ export const AuthProvider = ({ children }) => {
       const profile = await authService.getProfile();
       const fullUser = { ...userData, profile };
       setUser(fullUser);
-
-      if (userData.role !== 'admin') {
-        try {
-          const userRoomsData = await authService.getUserRooms();
-          setUserRooms(userRoomsData.data || []);
-        } catch (err) {
-          console.error('Failed to fetch rooms after login:', err);
-          setUserRooms([]);
-        }
-      } else {
-        setUserRooms([]);
-      }
       setLoading(false);
       return fullUser;
     } catch (err) {
@@ -167,8 +141,7 @@ export const AuthProvider = ({ children }) => {
    * This function:
    * 1. Clears the authentication token
    * 2. Removes user data from state
-   * 3. Clears room access information
-   * 4. Resets any authentication errors
+   * 3. Resets any authentication errors
    * 
    * @function
    * @returns {void}
@@ -180,25 +153,6 @@ export const AuthProvider = ({ children }) => {
     setUserRooms([]);
     setError(null);
   }, []);
-
-  /**
-   * Checks if the user has access to a specific room
-   * 
-   * Access rules:
-   * 1. Admin users have access to all rooms
-   * 2. Regular users only have access to rooms they are assigned to
-   * 
-   * @function
-   * @param {string|number} roomId - ID of the room to check access for
-   * @returns {boolean} True if user has access to the room, false otherwise
-   */
-  const hasRoomAccess = useCallback((roomId) => {
-    const numericRoomId = parseInt(roomId, 10);
-    if (isNaN(numericRoomId)) return false;
-    if (!user) return false;
-    if (user.role === 'admin') return true;
-    return userRooms.some(room => room.id === numericRoomId);
-  }, [user, userRooms]);
 
   const authValue = useMemo(() => ({
     /**
@@ -218,12 +172,6 @@ export const AuthProvider = ({ children }) => {
      * @type {string|null}
      */
     error,
-    
-    /**
-     * List of rooms the user has access to (for non-admin users)
-     * @type {Array<Object>}
-     */
-    userRooms,
     
     /**
      * Whether a user is authenticated
@@ -254,7 +202,7 @@ export const AuthProvider = ({ children }) => {
      * @type {function(): void}
      */
     logoutAction
-  }), [user, loading, error, userRooms, hasRoomAccess, loginAction, logoutAction]); 
+  }), [user, loading, error, loginAction, logoutAction]); 
 
   return (
       <AuthContext.Provider value={authValue}>
@@ -271,7 +219,6 @@ export const AuthProvider = ({ children }) => {
  * @returns {Object|null} return.user - Current authenticated user or null
  * @returns {boolean} return.loading - Whether authentication is in progress
  * @returns {string|null} return.error - Authentication error message if any
- * @returns {Array<Object>} return.userRooms - Rooms the user has access to
  * @returns {boolean} return.isAuthenticated - Whether a user is authenticated
  * @returns {boolean} return.isAdmin - Whether the current user is an admin
  * @returns {function(string|number): boolean} return.hasRoomAccess - Check if user has room access

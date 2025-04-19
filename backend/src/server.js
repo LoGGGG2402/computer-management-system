@@ -8,6 +8,7 @@ const dotenv = require('dotenv');
 const app = require('./app'); // Import the app instance directly
 const db = require('./database/models'); // Assuming Sequelize models index
 const { initializeWebSocket } = require('./sockets'); // WebSocket initializer
+const logger = require('./utils/logger');
 
 // Load environment variables from .env file
 dotenv.config();
@@ -18,14 +19,14 @@ dotenv.config();
  */
 async function startServer() {
   try {
-    console.info('Starting server initialization...');
+    logger.info('Starting server initialization...');
 
     // --- Database Connection ---
-    console.info('Attempting to connect to the database...');
+    logger.info('Attempting to connect to the database...');
     await db.sequelize.authenticate(); // Verify connection details
     // Optional: Sync models if needed (use with caution in production)
     // await db.sequelize.sync({ alter: process.env.NODE_ENV === 'development' });
-    console.info('Database connection established successfully.');
+    logger.info('Database connection established successfully.');
 
     // --- Create HTTP Server ---
     const httpServer = http.createServer(app);
@@ -37,24 +38,24 @@ async function startServer() {
         methods: ['GET', 'POST'],
       },
     });
-    console.info(`Socket.IO initialized with CORS origin: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
+    logger.info(`Socket.IO initialized with CORS origin: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
 
     // --- Initialize WebSocket Handlers ---
     initializeWebSocket(io); // Pass the io instance to the WebSocket setup function
-    console.info('WebSocket handlers initialized.');
+    logger.info('WebSocket handlers initialized.');
 
     // --- Set Port ---
     const PORT = process.env.PORT || 3000;
     if (!PORT) {
-        console.warn('PORT environment variable not set, defaulting to 3000.');
+        logger.warn('PORT environment variable not set, defaulting to 3000.');
     }
 
     // --- Start Listening ---
     httpServer.listen(PORT, () => {
-      console.info(`Server is running and listening on port ${PORT}`);
-      console.info(`Access API at http://localhost:${PORT}`);
+      logger.info(`Server is running and listening on port ${PORT}`);
+      logger.info(`Access API at http://localhost:${PORT}`);
       if (process.env.CLIENT_URL) {
-          console.info(`Frontend expected at ${process.env.CLIENT_URL}`);
+          logger.info(`Frontend expected at ${process.env.CLIENT_URL}`);
       }
     });
 
@@ -62,14 +63,14 @@ async function startServer() {
     const signals = ['SIGINT', 'SIGTERM'];
     signals.forEach(signal => {
         process.on(signal, async () => {
-            console.info(`Received ${signal}. Shutting down gracefully...`);
+            logger.info(`Received ${signal}. Shutting down gracefully...`);
             httpServer.close(async () => {
-                console.info('HTTP server closed.');
+                logger.info('HTTP server closed.');
                 try {
                     await db.sequelize.close();
-                    console.info('Database connection closed.');
+                    logger.info('Database connection closed.');
                 } catch (dbError) {
-                    console.error('Error closing database connection:', dbError);
+                    logger.error('Error closing database connection:', { error: dbError.message, stack: dbError.stack });
                 } finally {
                     process.exit(0); // Exit successfully
                 }
@@ -77,15 +78,15 @@ async function startServer() {
 
             // Force close after a timeout if graceful shutdown fails
             setTimeout(() => {
-                console.error('Graceful shutdown timed out. Forcing exit.');
+                logger.error('Graceful shutdown timed out. Forcing exit.');
                 process.exit(1);
-            }, 1000); // 10 seconds timeout
+            }, 10000); // 10 seconds timeout (corrected from comment)
         });
     });
 
 
   } catch (error) {
-    console.error('Failed to start server:', error.stack || error.message || error);
+    logger.error('Failed to start server:', { error: error.message, stack: error.stack || 'No stack trace available' });
     process.exit(1); // Exit with error code
   }
 }

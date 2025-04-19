@@ -2,6 +2,7 @@ const computerService = require("../services/computer.service");
 const mfaService = require("../services/mfa.service");
 const websocketService = require("../services/websocket.service");
 const roomService = require("../services/room.service");
+const logger = require('../utils/logger');
 
 /**
  * Controller for agent communication
@@ -35,76 +36,95 @@ class AgentController {
    *     - message {string} - Error message
    */
   async handleIdentifyRequest(req, res, next) {
+    const { unique_agent_id, positionInfo, forceRenewToken } = req.body;
+    
     try {
-      const { unique_agent_id, positionInfo, forceRenewToken } = req.body;
-
       if (!unique_agent_id) {
+        logger.warn('Agent identification attempt without agent ID', { 
+          ip: req.ip 
+        });
+        
         return res.status(400).json({
           status: "error",
-          message: "Agent ID is required",
+          message: "Agent ID is required"
         });
       }
 
-      const computer = await computerService.findComputerByAgentId(
-        unique_agent_id
-      );
+      const computer = await computerService.findComputerByAgentId(unique_agent_id);
 
       if (forceRenewToken && computer) {
-        if (computer.room.name === positionInfo.roomName,
-          computer.pos_x === positionInfo.posX,
-          computer.pos_y === positionInfo.posY)
-          {
-        const { plainToken } =
-          await computerService.generateAndAssignAgentToken(
+        if (computer.room.name === positionInfo.roomName && 
+            computer.pos_x === positionInfo.posX &&
+            computer.pos_y === positionInfo.posY) {
+              
+          logger.info(`Renewing token for agent: ${unique_agent_id}, Computer ID: ${computer.id}`);
+          
+          const { plainToken } = await computerService.generateAndAssignAgentToken(
             unique_agent_id,
             null,
             computer
           );
 
-        return res.status(200).json({
-          status: "success",
-          agentToken: plainToken,
-        });
-          }
+          logger.debug(`Token renewed successfully for agent: ${unique_agent_id}`);
+          
+          return res.status(200).json({
+            status: "success",
+            agentToken: plainToken,
+          });
+        }
       }
 
       if (computer && computer.agent_token_hash) {
+        logger.debug(`Agent already registered: ${unique_agent_id}, Computer ID: ${computer.id}`);
+        
         return res.status(200).json({
           status: "success",
         });
       }
 
-      let resulst = await roomService.isPositionAvailable(
+      const result = await roomService.isPositionAvailable(
         positionInfo.roomName,
         positionInfo.posX,
         positionInfo.posY
       );
-      if (resulst.valid) {
-        let mfacode = mfaService.generateAndStoreMfa(
+      
+      if (result.valid) {
+        const mfaCode = mfaService.generateAndStoreMfa(
           unique_agent_id,
           {
-            roomId: resulst.room.id,
+            roomId: result.room.id,
             posX: positionInfo.posX,
             posY: positionInfo.posY,
           }
         );
+        
         websocketService.notifyAdminsNewMfa(
-          mfacode,
+          mfaCode,
           positionInfo
         );
+        logger.info(`MFA required for new agent: ${unique_agent_id}, Room: ${positionInfo.roomName} (${positionInfo.posX},${positionInfo.posY})`);
         return res.status(200).json({
           status: "mfa_required",
         });
       } else {
+        logger.warn(`Invalid position for agent: ${unique_agent_id}, Room: ${positionInfo.roomName} (${positionInfo.posX},${positionInfo.posY})`, {
+          reason: result.message
+        });
         return res.status(400).json({
           status: "position_error",
-          message: resulst.message,
+          message: result.message,
         });
       }
     } catch (error) {
+      logger.error(`Error in agent identification request:`, {
+        error: error.message,
+        stack: error.stack,
+        agentId: unique_agent_id
+      });
+      
       return res.status(500).json({
         status: "error",
-        message: "Internal server error",
+        message: "Internal server error during identification",
       });
     }
   }
@@ -130,40 +150,56 @@ class AgentController {
       const { unique_agent_id, mfaCode } = req.body;
 
       if (!unique_agent_id || !mfaCode) {
+        logger.warn('MFA verification attempt with missing data', {
+          hasAgentId: !!unique_agent_id,
+          hasMfaCode: !!mfaCode,
+          ip: req.ip
+        });
+        
         return res.status(400).json({
           status: "error",
           message: "Agent ID and MFA code are required",
         });
       }
-
       const { valid, positionInfo } = mfaService.verifyMfa(
         unique_agent_id,
         mfaCode
       );
 
       if (valid) {
-        const { computer, plainToken } =
-          await computerService.generateAndAssignAgentToken(
-            unique_agent_id,
-            positionInfo
-          );
+        logger.info(`MFA verification successful for agent: ${unique_agent_id}`);
+        
+        const { computer, plainToken } = await computerService.generateAndAssignAgentToken(
+          unique_agent_id,
+          positionInfo
+        );
 
         websocketService.notifyAdminsAgentRegistered(
           computer.id,
           positionInfo
         );
+        
+        logger.info(`Agent registered successfully: ${unique_agent_id}, Computer ID: ${computer.id}`);
 
         return res.status(200).json({
           status: "success",
           agentToken: plainToken,
         });
       } else {
+        logger.warn(`Invalid MFA verification attempt for agent: ${unique_agent_id}`);
+        
         return res.status(401).json({
           status: "error",
           message: "Invalid or expired MFA code",
         });
       }
     } catch (error) {
+      logger.error(`Error in MFA verification:`, {
+        error: error.message,
+        stack: error.stack,
+        agentId: req.body.unique_agent_id
+      });
+      
       next(error);
     }
   }
@@ -189,8 +225,10 @@ class AgentController {
       const computerId = req.computer.id;
 
       const { total_disk_space, gpu_info, cpu_info, total_ram, os_info } = req.body;
-
+      
       if (!total_disk_space) {
+        logger.warn(`Hardware info update missing total_disk_space for computer ${computerId}`);
+        
         return res.status(400).json({
           status: "error",
           message: "Total disk space is required",
@@ -204,9 +242,16 @@ class AgentController {
         cpu_info: cpu_info || null,
         total_ram: total_ram || null,
       });
+      
+      logger.info(`Hardware info updated successfully for computer ${computerId}`);
 
       return res.sendStatus(204);
     } catch (error) {
+      logger.error(`Error updating hardware info for computer ${req.computer?.id}:`, {
+        error: error.message,
+        stack: error.stack
+      });
+      
       next(error);
     }
   }

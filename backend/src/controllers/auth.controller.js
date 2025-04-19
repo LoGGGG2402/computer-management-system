@@ -1,4 +1,5 @@
 const authService = require('../services/auth.service');
+const logger = require('../utils/logger');
 
 /**
  * Authentication controller for handling login and user verification
@@ -26,19 +27,37 @@ class AuthController {
       const { username, password } = req.body;
       
       if (!username || !password) {
+        logger.debug('Login attempt with missing credentials', { 
+          hasUsername: !!username, 
+          hasPassword: !!password,
+          ip: req.ip
+        });
+        
         return res.status(400).json({ 
           status: 'error', 
           message: 'Username and password are required' 
         });
       }
       
+      logger.debug(`Login attempt for username: ${username}`, { ip: req.ip });
       const userData = await authService.login(username, password);
+      
+      logger.info(`Successful login: ${username} (ID: ${userData.id}, Role: ${userData.role})`, { 
+        userId: userData.id,
+        ip: req.ip
+      });
       
       return res.status(200).json({
         status: 'success',
         data: userData
       });
     } catch (error) {
+      logger.warn('Failed login attempt', { 
+        username: req.body.username,
+        error: error.message,
+        ip: req.ip
+      });
+      
       return res.status(401).json({ 
         status: 'error', 
         message: error.message || 'Authentication failed' 
@@ -65,12 +84,19 @@ class AuthController {
    */
   async handleGetMe(req, res) {
     try {
+      logger.debug(`Fetching user data for ID: ${req.user.id}`);
       const userData = await authService.getUserById(req.user.id);
+      
       return res.status(200).json({
         status: 'success',
         data: userData
       });
     } catch (error) {
+      logger.error(`Failed to get user data for ID ${req.user.id}:`, {
+        error: error.message,
+        stack: error.stack
+      });
+      
       return res.status(404).json({ 
         status: 'error', 
         message: error.message || 'User not found' 

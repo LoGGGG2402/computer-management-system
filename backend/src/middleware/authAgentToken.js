@@ -1,4 +1,5 @@
 const computerService = require('../services/computer.service');
+const logger = require('../utils/logger');
 
 /**
  * Middleware to authenticate agent requests using agent token
@@ -8,44 +9,66 @@ const computerService = require('../services/computer.service');
  */
 const verifyAgentToken = async (req, res, next) => {
   try {
-    // Extract agent ID from headers
-    const agentId = req.headers['x-agent-id'];
-    
-    // Extract token from authorization header
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.startsWith('Bearer ') 
-      ? authHeader.slice(7) // Remove 'Bearer ' prefix
-      : null;
-    
+    // Extract agent ID and token from headers
+    const agentId = req.headers['agent-id'];
+    const token = req.headers['agent-token'];
+
     // Check if both agent ID and token are provided
     if (!agentId || !token) {
-      return res.status(401).json({
+      logger.debug('Missing agent credentials', { 
+        hasAgentId: !!agentId,
+        hasToken: !!token,
+        endpoint: `${req.method} ${req.originalUrl}`, 
+        ip: req.ip 
+      });
+      
+      return res.status(403).json({
         status: 'error',
-        message: 'Agent ID and token are required'
+        message: 'Agent ID and token are required',
       });
     }
-    
+
     // Verify the token with computer service
-    const computerId = await computerService.verifyAgentToken(agentId, token);
+    const computer = await computerService.verifyAgentToken(agentId, token);
     
-    if (computerId) {
-      // Attach computer object to request for use in controllers
-      req.computer = { id: computerId };
-      next();
-    } else {
-      // Return error for invalid token
+    if (!computer) {
+      logger.warn('Invalid agent credentials', { 
+        agentId,
+        endpoint: `${req.method} ${req.originalUrl}`, 
+        ip: req.ip
+      });
+      
       return res.status(401).json({
         status: 'error',
-        message: 'Invalid Agent Token'
+        message: 'Unauthorized (Invalid agent credentials)',
       });
     }
+
+    // Attach computer object and agent ID to request for use in controllers
+    req.computer = computer;
+    req.agentId = agentId;
+    
+    logger.debug(`Authenticated agent: ${agentId} (Computer ID: ${computer.id})`, {
+      endpoint: `${req.method} ${req.originalUrl}`
+    });
+    
+    next();
   } catch (error) {
-    console.error('Agent authentication error:', error);
-    return res.status(500).json({
+    logger.error('Agent authentication error:', {
+      error: error.message,
+      stack: error.stack,
+      agentId: req.headers['agent-id'],
+      endpoint: `${req.method} ${req.originalUrl}`,
+      ip: req.ip
+    });
+    
+    res.status(500).json({
       status: 'error',
-      message: 'Authentication failed due to server error'
+      message: 'Internal server error during authentication',
     });
   }
 };
 
-module.exports = { verifyAgentToken };
+module.exports = {
+  verifyAgentToken,
+};
