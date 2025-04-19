@@ -222,7 +222,7 @@ class AgentController {
    */
   async handleHardwareInfo(req, res, next) {
     try {
-      const computerId = req.computer.id;
+      const computerId = req.computerId;
 
       const { total_disk_space, gpu_info, cpu_info, total_ram, os_info } = req.body;
       

@@ -58,6 +58,28 @@ def display_registration_success() -> None:
 
     logger.info("Agent registration successful - success message displayed to user.")
 
+def display_error(error_message: str, error_type: str = "ERROR") -> None:
+    """
+    Displays a formatted error message to the console.
+    
+    :param error_message: The error message to display
+    :type error_message: str
+    :param error_type: The type or category of error (default: "ERROR")
+    :type error_type: str
+    """
+    print("\n" + "="*50)
+    print(f"{error_type.upper()} - COMPUTER MANAGEMENT SYSTEM AGENT")
+    print("="*50)
+    print(f"\n{error_message}\n")
+    
+    print("Please contact your system administrator if this problem persists.\n")
+    
+    try:
+        logger.error(f"UI Error displayed: [{error_type}] {error_message}")
+    except Exception:
+        # If logging fails, just continue without logging
+        pass
+
 def is_room_config_valid(config: Optional[Dict[str, Any]]) -> bool:
     """
     Checks if the provided room config dictionary is valid.

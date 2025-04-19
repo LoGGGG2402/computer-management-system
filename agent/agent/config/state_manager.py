@@ -5,12 +5,9 @@ import os
 import uuid
 import socket
 from typing import Dict, Any, Optional, TYPE_CHECKING
-import win32security
-import ntsecuritycon as win32con
-import pywintypes
 
 from ..utils import get_logger, save_json, load_json
-from ..system import is_running_as_admin, determine_storage_path
+from ..system import determine_storage_path
 
 if TYPE_CHECKING:
     from . import ConfigManager

@@ -8,10 +8,7 @@ import win32security
 import ntsecuritycon as win32con
 import pywintypes
 
-from ..utils import get_logger
 from .windows_utils import is_running_as_admin
-
-logger = get_logger(__name__)
 
 def determine_storage_path(app_name: str) -> str:
     """
@@ -29,17 +26,13 @@ def determine_storage_path(app_name: str) -> str:
     if is_admin:
         base_path = os.getenv('PROGRAMDATA')
         if not base_path:
-             logger.error("Could not get PROGRAMDATA environment variable.")
-             raise ValueError("Cannot determine ProgramData path for admin storage.")
+            raise ValueError("Cannot determine ProgramData path for admin storage.")
         storage_dir = os.path.join(base_path, app_name)
-        logger.debug(f"Running as Admin. Using ProgramData path: {storage_dir}")
     else:
         base_path = os.getenv('LOCALAPPDATA')
         if not base_path:
-             logger.error("Could not get LOCALAPPDATA environment variable.")
-             raise ValueError("Cannot determine LocalAppData path for user storage.")
+            raise ValueError("Cannot determine LocalAppData path for user storage.")
         storage_dir = os.path.join(base_path, app_name)
-        logger.debug(f"Running as User. Using LocalAppData path: {storage_dir}")
 
     return storage_dir
 
@@ -54,10 +47,8 @@ def ensure_directory_permissions(path: str, is_admin: bool):
     :type is_admin: bool
     """
     if not is_admin:
-        logger.debug("Not running as admin, skipping ACL modification.")
         return
 
-    logger.info(f"Setting ACLs for admin storage directory: {path}")
     try:
         sid_system = win32security.LookupAccountName("", "SYSTEM")[0]
         sid_admins = win32security.LookupAccountName("", "Administrators")[0]
@@ -79,13 +70,8 @@ def ensure_directory_permissions(path: str, is_admin: bool):
 
         security_info = win32security.DACL_SECURITY_INFORMATION | win32security.PROTECTED_DACL_SECURITY_INFORMATION | win32security.OWNER_SECURITY_INFORMATION | win32security.GROUP_SECURITY_INFORMATION
         win32security.SetFileSecurity(path, security_info, sd)
-
-        logger.info(f"Successfully applied strict ACLs to {path}")
-
-    except pywintypes.error as e:
-        logger.error(f"Failed to set ACLs on {path}: {e}", exc_info=True)
-    except Exception as e:
-        logger.error(f"Unexpected error setting ACLs on {path}: {e}", exc_info=True)
+    except Exception:
+        pass
 
 def ensure_storage_directory(storage_path: str) -> None:
     """
@@ -99,35 +85,26 @@ def ensure_storage_directory(storage_path: str) -> None:
     is_admin = is_running_as_admin()
     try:
         if not os.path.exists(storage_path):
-             logger.info(f"Storage path '{storage_path}' does not exist. Creating.")
-             os.makedirs(storage_path, exist_ok=True)
-             logger.info(f"Successfully created storage directory: {storage_path}")
-             ensure_directory_permissions(storage_path, is_admin)
+            os.makedirs(storage_path, exist_ok=True)
+            ensure_directory_permissions(storage_path, is_admin)
         elif not os.path.isdir(storage_path):
-             logger.critical(f"Configured storage path '{storage_path}' exists but is not a directory.")
-             raise ValueError(f"Storage path '{storage_path}' is not a directory.")
+            raise ValueError(f"Storage path '{storage_path}' is not a directory.")
         else:
-             logger.debug(f"Storage directory '{storage_path}' already exists. Checking writability and permissions.")
-             test_file = os.path.join(storage_path, f".writetest_{uuid.uuid4()}")
-             try:
-                  with open(test_file, 'w') as f:
-                       f.write('test')
-                  os.remove(test_file)
-                  logger.debug(f"Storage directory '{storage_path}' appears writable.")
-             except (IOError, OSError) as write_err:
-                  logger.critical(f"Storage directory '{storage_path}' is not writable: {write_err}")
-                  raise ValueError(f"Storage path '{storage_path}' is not writable.")
-             ensure_directory_permissions(storage_path, is_admin)
+            test_file = os.path.join(storage_path, f".writetest_{uuid.uuid4()}")
+            try:
+                with open(test_file, 'w') as f:
+                    f.write('test')
+                os.remove(test_file)
+            except (IOError, OSError):
+                raise ValueError(f"Storage path '{storage_path}' is not writable.")
+            ensure_directory_permissions(storage_path, is_admin)
 
     except PermissionError:
-         logger.critical(f"Permission denied creating/accessing storage directory: {storage_path}")
-         raise ValueError(f"Permission denied for storage path: {storage_path}")
+        raise ValueError(f"Permission denied for storage path: {storage_path}")
     except OSError as e:
-         logger.critical(f"OS error creating/accessing storage directory {storage_path}: {e}")
-         raise ValueError(f"Could not create/access storage directory: {e}")
+        raise ValueError(f"Could not create/access storage directory: {e}")
     except Exception as e:
-         logger.critical(f"Unexpected error ensuring storage directory {storage_path}: {e}", exc_info=True)
-         raise ValueError(f"Unexpected error ensuring storage directory: {e}")
+        raise ValueError(f"Unexpected error ensuring storage directory: {e}")
 
 def setup_directory_structure(app_name: str) -> str:
     """
@@ -151,10 +128,8 @@ def setup_directory_structure(app_name: str) -> str:
         logs_dir = os.path.join(storage_path, 'logs')
         if not os.path.exists(logs_dir):
             os.makedirs(logs_dir, exist_ok=True)
-            logger.info(f"Created logs directory: {logs_dir}")
         
         return storage_path
         
     except Exception as e:
-        logger.critical(f"Failed to set up directory structure: {e}", exc_info=True)
         raise ValueError(f"Failed to set up directory structure: {e}")

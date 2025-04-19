@@ -47,7 +47,7 @@ class ComputerService {
       ],
     });
     if (!computer) {
-      throw new Error("Computer not found");
+      return null;
     }
     return computer;
   }

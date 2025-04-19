@@ -15,6 +15,9 @@ Main components:
 - SystemMonitor: Monitors system resources
 """
 
+# Version information
+from .version import __version__, __version_full__, get_version, get_full_version, get_version_info
+
 # Core components
 from .core import Agent
 from .core import AgentState
@@ -31,6 +34,13 @@ from .communication import ServerConnector, WSClient, HttpClient
 from .monitoring import SystemMonitor
 
 __all__ = [
+    # Version
+    '__version__',
+    '__version_full__',
+    'get_version',
+    'get_full_version',
+    'get_version_info',
+    
     # Core
     'Agent',
     'AgentState',

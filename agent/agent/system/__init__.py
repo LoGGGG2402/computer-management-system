@@ -9,8 +9,6 @@ from .windows_utils import (
 )
 from .directory_utils import (
     determine_storage_path,
-    ensure_storage_directory,
-    ensure_directory_permissions,
     setup_directory_structure
 )
 
@@ -20,7 +18,5 @@ __all__ = [
     'register_autostart',
     'unregister_autostart',
     'determine_storage_path',
-    'ensure_storage_directory',
-    'ensure_directory_permissions',
     'setup_directory_structure'
 ]

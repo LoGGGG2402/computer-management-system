@@ -3,7 +3,6 @@ Core Agent module for the Computer Management System.
 """
 import time
 import threading
-import logging
 import pywintypes
 from typing import Optional, TYPE_CHECKING
 
@@ -267,11 +266,6 @@ class Agent:
             else:
                 logger.debug("IPC server thread joined.")
 
-        try:
-            logging.shutdown()
-            logger.debug("Logging shutdown requested.")
-        except Exception as log_e:
-            logger.error(f"Error during logging shutdown: {log_e}", exc_info=True)
 
         if self.lock_manager:
             logger.info("Releasing agent lock file...")

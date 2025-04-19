@@ -29,7 +29,7 @@ const { initializeWebSocket } = require('./sockets');
  */
 const corsConfig = {
     origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST'],
+    methods: ['GET', 'POST', 'DELETE'],
 };
 
 /**

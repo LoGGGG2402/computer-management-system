@@ -29,9 +29,9 @@ const verifyAgentToken = async (req, res, next) => {
     }
 
     // Verify the token with computer service
-    const computer = await computerService.verifyAgentToken(agentId, token);
+    const computerId = await computerService.verifyAgentToken(agentId, token);
     
-    if (!computer) {
+    if (!computerId) {
       logger.warn('Invalid agent credentials', { 
         agentId,
         endpoint: `${req.method} ${req.originalUrl}`, 
@@ -45,10 +45,10 @@ const verifyAgentToken = async (req, res, next) => {
     }
 
     // Attach computer object and agent ID to request for use in controllers
-    req.computer = computer;
+    req.computerId = computerId;
     req.agentId = agentId;
     
-    logger.debug(`Authenticated agent: ${agentId} (Computer ID: ${computer.id})`, {
+    logger.debug(`Authenticated agent: ${agentId} (Computer ID: ${computerId})`, {
       endpoint: `${req.method} ${req.originalUrl}`
     });
     
