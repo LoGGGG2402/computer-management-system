@@ -2,13 +2,12 @@
 Console User Interface module for the Computer Management System Agent.
 Handles interactions like prompting for MFA codes and room configuration.
 """
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from agent.config.state_manager import StateManager
+    from ..config import StateManager
 
-from agent.utils.logger import get_logger
+from ..utils import get_logger
 
 logger = get_logger(__name__)
 

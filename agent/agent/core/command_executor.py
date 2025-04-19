@@ -4,11 +4,14 @@ Command Executor module for processing and executing incoming commands.
 import threading
 import time
 import queue
-from typing import Dict, Any, List, Optional, Tuple, Type, cast
-from agent.utils import get_logger
-from agent.config import ConfigManager
-from agent.communication import WSClient
-from agent.command_handlers import ConsoleCommandHandler, SystemCommandHandler, BaseCommandHandler
+from typing import Dict, Any, List, Optional, Tuple, Type, cast, TYPE_CHECKING
+
+from ..utils import get_logger
+
+from ..command_handlers import BaseCommandHandler, ConsoleCommandHandler, SystemCommandHandler
+if TYPE_CHECKING:
+    from ..communication import WSClient
+    from ..config import ConfigManager
 
 logger = get_logger("command.executor")
 
@@ -28,7 +31,7 @@ class CommandExecutor:
     (Optimized for readability and maintainability)
     """
 
-    def __init__(self, ws_client: WSClient, config: ConfigManager):
+    def __init__(self, ws_client: 'WSClient', config: 'ConfigManager'):
         """
         Initialize the command executor.
 

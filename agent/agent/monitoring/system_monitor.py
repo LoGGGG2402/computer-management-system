@@ -7,7 +7,7 @@ import socket
 import json
 import subprocess
 from typing import Dict, Any
-from agent.utils import get_logger
+from ..utils import get_logger
 
 logger = get_logger(__name__)
 

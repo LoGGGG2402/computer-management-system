@@ -6,7 +6,7 @@ import os
 import datetime
 import shutil
 from typing import Any, Optional, Dict
-from agent.utils.logger import get_logger
+from ..utils import get_logger
 
 logger = get_logger(__name__)
 

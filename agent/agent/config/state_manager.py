@@ -4,16 +4,20 @@ State Manager module for managing persistent agent state.
 import os
 import uuid
 import socket
-from typing import Dict, Any, Optional
-from agent.config import ConfigManager
-from agent.utils import get_logger, save_json, load_json
+from typing import Dict, Any, Optional, TYPE_CHECKING
+import win32security
+import ntsecuritycon as win32con
+import pywintypes
+
+from ..utils import get_logger, save_json, load_json
+from ..system import is_running_as_admin, determine_storage_path
+
+if TYPE_CHECKING:
+    from . import ConfigManager
 
 logger = get_logger(__name__)
 
 
-import win32security
-import ntsecuritycon as win32con
-import pywintypes
 
 try:
     import keyring
@@ -30,7 +34,7 @@ class StateManager:
     Manages persistent agent state (device ID, room config, token).
     """
 
-    def __init__(self, config: ConfigManager):
+    def __init__(self, config: 'ConfigManager'):
         """
         Initialize the StateManager. Determines storage path based on privileges.
 
@@ -41,125 +45,16 @@ class StateManager:
         self.config = config
         self.state_filename = self.config.get('agent.state_filename', 'agent_state.json')
 
-        self.storage_path = self._determine_storage_path()
-        logger.info(f"Determined storage path: {self.storage_path}")
-
-        self._ensure_storage_directory()
+        # Storage path is now determined externally and should be already set up
+        self.storage_path = config.get('storage_path')
+        if not self.storage_path:
+            app_name = self.config.get('agent.app_name', 'CMSAgent')
+            self.storage_path = determine_storage_path(app_name)
+            logger.info(f"Determined storage path: {self.storage_path}")
 
         self.state_filepath = os.path.join(self.storage_path, self.state_filename)
         self._state_cache: Optional[Dict[str, Any]] = None
         logger.info(f"StateManager initialized. State file: {self.state_filepath}")
-
-    def _determine_storage_path(self) -> str:
-        """
-        Determines the appropriate storage path based on execution privileges.
-        Uses ProgramData for Admin, LocalAppData for standard user.
-
-        :return: The absolute path to the storage directory
-        :rtype: str
-        :raises: ValueError: If a suitable path cannot be determined
-        """
-        app_name = self.config.get('agent.app_name', 'CMSAgent')
-        is_admin = is_running_as_admin()
-
-        if is_admin:
-            base_path = os.getenv('PROGRAMDATA')
-            if not base_path:
-                 logger.error("Could not get PROGRAMDATA environment variable.")
-                 raise ValueError("Cannot determine ProgramData path for admin storage.")
-            storage_dir = os.path.join(base_path, app_name)
-            logger.debug(f"Running as Admin. Using ProgramData path: {storage_dir}")
-        else:
-            base_path = os.getenv('LOCALAPPDATA')
-            if not base_path:
-                 logger.error("Could not get LOCALAPPDATA environment variable.")
-                 raise ValueError("Cannot determine LocalAppData path for user storage.")
-            storage_dir = os.path.join(base_path, app_name)
-            logger.debug(f"Running as User. Using LocalAppData path: {storage_dir}")
-
-        return storage_dir
-
-    def _ensure_storage_directory(self):
-        """
-        Ensures the determined storage directory exists, is accessible,
-        and sets appropriate permissions if running as Admin.
-        
-        :raises: ValueError: On critical errors
-        """
-        is_admin = is_running_as_admin()
-        try:
-            if not os.path.exists(self.storage_path):
-                 logger.info(f"Storage path '{self.storage_path}' does not exist. Creating.")
-                 os.makedirs(self.storage_path, exist_ok=True)
-                 logger.info(f"Successfully created storage directory: {self.storage_path}")
-                 self._ensure_directory_permissions(is_admin)
-            elif not os.path.isdir(self.storage_path):
-                 logger.critical(f"Configured storage path '{self.storage_path}' exists but is not a directory.")
-                 raise ValueError(f"Storage path '{self.storage_path}' is not a directory.")
-            else:
-                 logger.debug(f"Storage directory '{self.storage_path}' already exists. Checking writability and permissions.")
-                 test_file = os.path.join(self.storage_path, f".writetest_{uuid.uuid4()}")
-                 try:
-                      with open(test_file, 'w') as f:
-                           f.write('test')
-                      os.remove(test_file)
-                      logger.debug(f"Storage directory '{self.storage_path}' appears writable.")
-                 except (IOError, OSError) as write_err:
-                      logger.critical(f"Storage directory '{self.storage_path}' is not writable: {write_err}")
-                      raise ValueError(f"Storage path '{self.storage_path}' is not writable.")
-                 self._ensure_directory_permissions(is_admin)
-
-        except PermissionError:
-             logger.critical(f"Permission denied creating/accessing storage directory: {self.storage_path}")
-             raise ValueError(f"Permission denied for storage path: {self.storage_path}")
-        except OSError as e:
-             logger.critical(f"OS error creating/accessing storage directory {self.storage_path}: {e}")
-             raise ValueError(f"Could not create/access storage directory: {e}")
-        except Exception as e:
-             logger.critical(f"Unexpected error ensuring storage directory {self.storage_path}: {e}", exc_info=True)
-             raise ValueError(f"Unexpected error ensuring storage directory: {e}")
-
-    def _ensure_directory_permissions(self, is_admin: bool):
-        """
-        Sets strict permissions (SYSTEM:F, Administrators:F) on the storage directory
-        if running as Admin and win32security is available. Disables inheritance.
-        
-        :param is_admin: Whether running as admin
-        :type is_admin: bool
-        """
-        if not is_admin:
-            logger.debug("Not running as admin, skipping ACL modification.")
-            return
-
-        logger.info(f"Setting ACLs for admin storage directory: {self.storage_path}")
-        try:
-            sid_system = win32security.LookupAccountName("", "SYSTEM")[0]
-            sid_admins = win32security.LookupAccountName("", "Administrators")[0]
-
-            dacl = win32security.ACL()
-            dacl.AddAccessAllowedAceEx(win32security.ACL_REVISION_DS,
-                                       win32con.OBJECT_INHERIT_ACE | win32con.CONTAINER_INHERIT_ACE,
-                                       win32con.GENERIC_ALL,
-                                       sid_system)
-            dacl.AddAccessAllowedAceEx(win32security.ACL_REVISION_DS,
-                                       win32con.OBJECT_INHERIT_ACE | win32con.CONTAINER_INHERIT_ACE,
-                                       win32con.GENERIC_ALL,
-                                       sid_admins)
-
-            sd = win32security.SECURITY_DESCRIPTOR()
-            sd.SetSecurityDescriptorOwner(sid_admins, False)
-            sd.SetSecurityDescriptorGroup(sid_system, False)
-            sd.SetSecurityDescriptorDacl(True, dacl, False)
-
-            security_info = win32security.DACL_SECURITY_INFORMATION | win32security.PROTECTED_DACL_SECURITY_INFORMATION | win32security.OWNER_SECURITY_INFORMATION | win32security.GROUP_SECURITY_INFORMATION
-            win32security.SetFileSecurity(self.storage_path, security_info, sd)
-
-            logger.info(f"Successfully applied strict ACLs to {self.storage_path}")
-
-        except pywintypes.error as e:
-            logger.error(f"Failed to set ACLs on {self.storage_path}: {e}", exc_info=True)
-        except Exception as e:
-            logger.error(f"Unexpected error setting ACLs on {self.storage_path}: {e}", exc_info=True)
 
     def _load_state_from_file(self) -> Dict[str, Any]:
         """

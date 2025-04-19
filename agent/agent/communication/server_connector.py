@@ -1,13 +1,15 @@
 """
 Server connector module for handling authentication and communication with the server.
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 
-from agent.config import ConfigManager, StateManager
-from agent.communication import HttpClient, WSClient
-from agent.monitoring import SystemMonitor
-from agent.ui import prompt_for_mfa, display_registration_success
-from agent.utils import get_logger
+if TYPE_CHECKING:
+    from ..config import ConfigManager, StateManager
+    from . import HttpClient, WSClient
+    from ..monitoring import SystemMonitor
+
+from ..ui import prompt_for_mfa, display_registration_success
+from ..utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -17,11 +19,11 @@ class ServerConnector:
     """
 
     def __init__(self,
-                 config_manager: ConfigManager,
-                 state_manager: StateManager,
-                 http_client: HttpClient,
-                 ws_client: WSClient,
-                 system_monitor: SystemMonitor):
+                 config_manager: 'ConfigManager',
+                 state_manager: 'StateManager',
+                 http_client: 'HttpClient',
+                 ws_client: 'WSClient',
+                 system_monitor: 'SystemMonitor'):
         """
         Initialize the ServerConnector.
 

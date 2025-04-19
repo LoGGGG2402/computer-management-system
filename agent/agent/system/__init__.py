@@ -7,10 +7,20 @@ from .windows_utils import (
     register_autostart,
     unregister_autostart
 )
+from .directory_utils import (
+    determine_storage_path,
+    ensure_storage_directory,
+    ensure_directory_permissions,
+    setup_directory_structure
+)
 
 __all__ = [
     'LockManager',
     'is_running_as_admin',
     'register_autostart',
-    'unregister_autostart'
+    'unregister_autostart',
+    'determine_storage_path',
+    'ensure_storage_directory',
+    'ensure_directory_permissions',
+    'setup_directory_structure'
 ]

@@ -4,7 +4,7 @@ General utility functions for the Computer Management System Agent.
 import json
 import os
 from typing import Dict, Any, Optional
-from agent.utils import get_logger
+from . import get_logger
 
 logger = get_logger("agent.utils.utils")
 

@@ -17,7 +17,13 @@ if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 from agent.utils import setup_logger, get_logger
-from agent.system import LockManager, is_running_as_admin, register_autostart, unregister_autostart
+from agent.system import (
+    LockManager, 
+    is_running_as_admin, 
+    register_autostart, 
+    unregister_autostart,
+    setup_directory_structure
+)
 from . import ConfigManager, StateManager, HttpClient, WSClient, ServerConnector, SystemMonitor, Agent, CommandExecutor
 
 def parse_arguments() -> argparse.Namespace:
@@ -139,15 +145,6 @@ def main() -> int:
     temp_config_manager = ConfigManager(temp_config_path) if temp_config_path else ConfigManager(None)
     app_name_for_registry = temp_config_manager.get('agent.app_name', 'CMSAgent')
 
-    try:
-        state_manager = StateManager(temp_config_manager)
-        storage_path = state_manager.storage_path
-
-    except ValueError as e:
-        return 1
-    except Exception as e:
-        return 1
-
     if args.enable_autostart or args.disable_autostart:
         if args.enable_autostart:
             success = register_autostart(app_name_for_registry, executable_path, is_admin)
@@ -156,28 +153,43 @@ def main() -> int:
             success = unregister_autostart(app_name_for_registry, is_admin)
             return 0 if success else 1
 
+    # Initialize basic logging until we have a proper storage path
+    setup_logger(
+        name="agent",
+        console_level_name="DEBUG" if args.debug else "INFO"
+    )
+    
+    logger = get_logger("agent.main")
+    logger.info("--- Agent Starting ---")
+    
+    # Setup directory structure early in the startup process
+    try:
+        storage_path = setup_directory_structure(app_name_for_registry)
+        logger.info(f"Directory structure set up successfully at {storage_path}")
+    except ValueError as e:
+        logger.critical(f"Failed to set up directory structure: {e}")
+        return 1
+
     try:
         config_file_path = os.path.join(storage_path, args.config_name)
 
         if not os.path.exists(config_file_path):
-            logger_provisional = get_logger("agent.main")
             if source_config_path and os.path.exists(source_config_path):
-                logger_provisional.info(f"Configuration file not found in storage path. Copying from {source_config_path}...")
+                logger.info(f"Configuration file not found in storage path. Copying from {source_config_path}...")
 
                 try:
-                    os.makedirs(storage_path, exist_ok=True)
                     shutil.copy2(source_config_path, config_file_path)
-                    logger_provisional.info(f"Successfully copied configuration to {config_file_path}")
+                    logger.info(f"Successfully copied configuration to {config_file_path}")
                 except Exception as copy_err:
-                    if logger_provisional:
-                        logger_provisional.critical(f"Failed to copy configuration file: {copy_err}", exc_info=True)
+                    logger.critical(f"Failed to copy configuration file: {copy_err}", exc_info=True)
                     return 1
             else:
-                if logger_provisional:
-                    logger_provisional.critical(f"Config file missing in storage and source location.")
+                logger.critical(f"Config file missing in storage and source location.")
                 return 1
 
         config_manager = ConfigManager(config_file_path)
+        # Store storage path in config so other components can use it
+        config_manager.set('storage_path', storage_path)
     except FileNotFoundError as e:
         logger.critical(f"Configuration file not found: {e}", exc_info=True)        
         return 1
@@ -191,12 +203,20 @@ def main() -> int:
     try:
         initialize_logging(config_manager, storage_path, args.debug)
         logger = get_logger("agent.main")
-        logger.info("--- Agent Starting ---")
         logger.info(f"Using storage path: {storage_path}")
         logger.info(f"Using configuration file: {config_file_path}")
         logger.info("Logging initialized successfully.")
     except Exception as e:
         logger.critical(f"Unexpected error during logging initialization: {e}", exc_info=True)
+        return 1
+
+    try:
+        state_manager = StateManager(config_manager)
+    except ValueError as e:
+        logger.critical(f"Failed to initialize State Manager: {e}")
+        return 1
+    except Exception as e:
+        logger.critical(f"Unexpected error initializing State Manager: {e}", exc_info=True)
         return 1
 
     proceed_normally = True

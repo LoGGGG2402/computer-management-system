@@ -1,26 +1,30 @@
 """
 System command handler for handling system-related commands.
 """
-from typing import Dict, Any
-from agent.command_handlers import BaseCommandHandler
-from agent.config import ConfigManager
-from agent.utils import get_logger
+from typing import Dict, Any, TYPE_CHECKING
+from . import BaseCommandHandler 
+
+if TYPE_CHECKING:
+    from ..config import ConfigManager
+
+from ..utils import get_logger
 
 logger = get_logger(__name__)
+
 
 class SystemCommandHandler(BaseCommandHandler):
     """
     Handler for system commands like shutdown, restart, etc.
     """
     
-    def __init__(self, config: ConfigManager):
+    def __init__(self, config: 'ConfigManager'):
         """
         Initialize the system command handler.
         
         :param config: Configuration manager instance
         :type config: ConfigManager
         """
-        self.config = config
+        super().__init__(config)
     
     def execute_command(self, command: str, command_id: str, 
                        result: Dict[str, Any], **kwargs) -> Dict[str, Any]:

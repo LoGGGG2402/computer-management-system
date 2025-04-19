@@ -10,9 +10,7 @@ import win32security
 import win32api
 import pywintypes
 
-from agent.utils.logger import get_logger
-
-WINDOWS_ACL_SUPPORT = True
+from ..utils import get_logger
 
 logger = get_logger(__name__)
 

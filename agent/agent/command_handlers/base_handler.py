@@ -1,10 +1,13 @@
 """
 Base command handler class providing common functionality for all command handlers.
 """
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING
 from abc import ABC, abstractmethod
-from agent.utils import get_logger
-from agent.config import ConfigManager
+
+from ..utils import get_logger
+
+if TYPE_CHECKING:
+    from ..config import ConfigManager
 
 logger = get_logger(__name__)
 
@@ -17,7 +20,7 @@ class BaseCommandHandler(ABC):
     ConsoleCommandHandler, SystemCommandHandler) should inherit from this class.
     """
 
-    def __init__(self, config: ConfigManager):
+    def __init__(self, config: 'ConfigManager'):
         """
         Initialize the base command handler.
         

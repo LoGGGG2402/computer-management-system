@@ -9,7 +9,6 @@ logger = get_logger(__name__)
 
 import win32file
 import pywintypes
-WINDOWS_PIPE_SUPPORT = True
 
 from agent.system.windows_utils import determine_pipe_name
 

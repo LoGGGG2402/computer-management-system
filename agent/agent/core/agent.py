@@ -5,18 +5,20 @@ import time
 import threading
 import logging
 import pywintypes
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
-from agent.config.config_manager import ConfigManager
-from agent.communication.ws_client import WSClient
-from agent.communication.server_connector import ServerConnector
-from agent.core.command_executor import CommandExecutor
-from agent.config.state_manager import StateManager
-from agent.ui import get_or_prompt_room_config
-from agent.core.agent_state import AgentState
-from agent.system.lock_manager import LockManager
-from agent.ipc.named_pipe_server import NamedPipeIPCServer, WINDOWS_PIPE_SUPPORT
-from agent.utils.logger import get_logger
+if TYPE_CHECKING:
+    from ..communication import WSClient, ServerConnector
+    from ..config import StateManager, ConfigManager
+    from ..system import LockManager
+    from . import CommandExecutor
+    
+from . import AgentState
+from ..ipc import NamedPipeIPCServer
+
+from ..utils import get_logger
+from ..ui import get_or_prompt_room_config
+
 logger = get_logger("agent")
 
 class Agent:
@@ -42,12 +44,12 @@ class Agent:
     """
 
     def __init__(self,
-                 config_manager: ConfigManager,
-                 state_manager: StateManager,
-                 ws_client: WSClient,
-                 command_executor: CommandExecutor,
-                 lock_manager: LockManager,
-                 server_connector: ServerConnector,
+                 config_manager: 'ConfigManager',
+                 state_manager: 'StateManager',
+                 ws_client: 'WSClient',
+                 command_executor: 'CommandExecutor',
+                 lock_manager: 'LockManager',
+                 server_connector: 'ServerConnector',
                  is_admin: bool):
         """
         Initialize the agent with its dependencies.

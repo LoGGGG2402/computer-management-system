@@ -3,10 +3,11 @@ HTTP client module for communication with the backend server's Agent API.
 """
 import json
 import requests
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, TYPE_CHECKING
 
-from agent.config.config_manager import ConfigManager
-from agent.utils.logger import get_logger
+if TYPE_CHECKING:
+    from ..config import ConfigManager
+from ..utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -15,7 +16,7 @@ class HttpClient:
     HTTP client for making API calls to the backend server.
     """
 
-    def __init__(self, config: ConfigManager):
+    def __init__(self, config: 'ConfigManager'):
         """
         Initialize the HTTP client.
         

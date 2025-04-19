@@ -5,10 +5,12 @@ import socketio
 import threading
 import time
 import json
-from typing import Dict, Any, Callable, Optional
+from typing import Dict, Any, Callable, Optional, TYPE_CHECKING
 
-from agent.config.config_manager import ConfigManager
-from agent.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from ..config import ConfigManager
+from ..utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -17,7 +19,7 @@ class WSClient:
     Manages the WebSocket connection and communication logic.
     """
 
-    def __init__(self, config: ConfigManager):
+    def __init__(self, config: 'ConfigManager'):
         """
         Initialize the WebSocket client.
         

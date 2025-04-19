@@ -61,13 +61,13 @@ export const AuthProvider = ({ children }) => {
             api.removeAuthToken();
             if (isMounted) {
               setUser(null);
-              setUserRooms([]);
+              
             }
           }
         } else {
            if (isMounted) {
              setUser(null);
-             setUserRooms([]);
+             
            }
         }
       } catch (err) {
@@ -77,7 +77,7 @@ export const AuthProvider = ({ children }) => {
           authService.logout();
           api.removeAuthToken();
           setUser(null);
-          setUserRooms([]);
+          
         }
       } finally {
         if (isMounted) {
@@ -128,7 +128,7 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Login failed');
       setUser(null);
-      setUserRooms([]);
+      
       api.removeAuthToken();
       setLoading(false);
       throw err;
@@ -150,7 +150,7 @@ export const AuthProvider = ({ children }) => {
     authService.logout();
     api.removeAuthToken();
     setUser(null);
-    setUserRooms([]);
+    
     setError(null);
   }, []);
 
@@ -186,12 +186,6 @@ export const AuthProvider = ({ children }) => {
     isAdmin: user?.role === 'admin',
     
     /**
-     * Function to check if user has access to a room
-     * @type {function(string|number): boolean}
-     */
-    hasRoomAccess,
-    
-    /**
      * Function to log in a user
      * @type {function(string, string): Promise<Object>}
      */
@@ -202,7 +196,7 @@ export const AuthProvider = ({ children }) => {
      * @type {function(): void}
      */
     logoutAction
-  }), [user, loading, error, loginAction, logoutAction]); 
+  }), [user, loading, error, isAuthenticated, loginAction, logoutAction]); 
 
   return (
       <AuthContext.Provider value={authValue}>

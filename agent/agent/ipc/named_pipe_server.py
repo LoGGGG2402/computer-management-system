@@ -14,10 +14,8 @@ import win32security
 import ntsecuritycon as win32con
 import pywintypes
 
-WINDOWS_PIPE_SUPPORT = True
-
-from agent.system.windows_utils import get_user_sid_string, is_running_as_admin, determine_pipe_name, WINDOWS_ACL_SUPPORT
-from agent.core.agent_state import AgentState
+from ..system.windows_utils import get_user_sid_string, determine_pipe_name
+from ..core import AgentState
 
 if TYPE_CHECKING:
     from agent.core.agent import Agent
