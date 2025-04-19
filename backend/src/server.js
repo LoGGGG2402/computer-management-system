@@ -1,95 +1,79 @@
 /**
- * Main server startup script.
- * Initializes HTTP server, Socket.IO, database connection, and starts listening.
+ * @fileoverview Main server startup script.
+ * Loads environment variables, connects to the database, and starts the HTTP server
+ * imported from app.js. Handles graceful shutdown.
+ * @requires dotenv
+ * @requires ./app
+ * @requires ./database/models
+ * @requires ./utils/logger
  */
-const http = require('http');
-const { Server } = require('socket.io');
+
 const dotenv = require('dotenv');
-const app = require('./app'); // Import the app instance directly
-const db = require('./database/models'); // Assuming Sequelize models index
-const { initializeWebSocket } = require('./sockets'); // WebSocket initializer
+const { httpServer } = require('./app');
+const db = require('./database/models');
 const logger = require('./utils/logger');
 
-// Load environment variables from .env file
 dotenv.config();
 
 /**
- * Asynchronously starts the server.
- * Connects to the database, initializes Socket.IO, and starts the HTTP server.
+ * Asynchronously starts the application server.
+ * Connects to the database, determines the listening port, starts the HTTP server,
+ * and sets up graceful shutdown listeners.
+ * @async
+ * @function startServer
+ * @throws {Error} If database connection fails or another critical startup error occurs.
  */
 async function startServer() {
   try {
-    logger.info('Starting server initialization...');
+    logger.info('Server initialization sequence started...');
 
-    // --- Database Connection ---
-    logger.info('Attempting to connect to the database...');
-    await db.sequelize.authenticate(); // Verify connection details
-    // Optional: Sync models if needed (use with caution in production)
-    // await db.sequelize.sync({ alter: process.env.NODE_ENV === 'development' });
-    logger.info('Database connection established successfully.');
+    // 1. Database Connection
+    logger.info('Attempting database connection...');
+    await db.sequelize.authenticate();
+    logger.info('Database connection successful.');
 
-    // --- Create HTTP Server ---
-    const httpServer = http.createServer(app);
-
-    // --- Initialize Socket.IO ---
-    const io = new Server(httpServer, {
-      cors: {
-        origin: process.env.CLIENT_URL || 'http://localhost:5173', 
-        methods: ['GET', 'POST'],
-      },
-    });
-    logger.info(`Socket.IO initialized with CORS origin: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
-
-    // --- Initialize WebSocket Handlers ---
-    initializeWebSocket(io); // Pass the io instance to the WebSocket setup function
-    logger.info('WebSocket handlers initialized.');
-
-    // --- Set Port ---
+    // 2. Determine Port
     const PORT = process.env.PORT || 3000;
-    if (!PORT) {
-        logger.warn('PORT environment variable not set, defaulting to 3000.');
-    }
 
-    // --- Start Listening ---
+    // 3. Start HTTP Server (imported from app.js)
     httpServer.listen(PORT, () => {
-      logger.info(`Server is running and listening on port ${PORT}`);
-      logger.info(`Access API at http://localhost:${PORT}`);
+      logger.info(`Server listening on port ${PORT}`);
       if (process.env.CLIENT_URL) {
-          logger.info(`Frontend expected at ${process.env.CLIENT_URL}`);
+          logger.info(`Expected frontend client URL: ${process.env.CLIENT_URL}`);
       }
     });
 
-    // --- Graceful Shutdown Handling (Optional but Recommended) ---
+    // 4. Graceful Shutdown Handling
     const signals = ['SIGINT', 'SIGTERM'];
     signals.forEach(signal => {
         process.on(signal, async () => {
-            logger.info(`Received ${signal}. Shutting down gracefully...`);
+            logger.info(`Received ${signal}. Initiating graceful shutdown...`);
             httpServer.close(async () => {
                 logger.info('HTTP server closed.');
                 try {
                     await db.sequelize.close();
                     logger.info('Database connection closed.');
                 } catch (dbError) {
-                    logger.error('Error closing database connection:', { error: dbError.message, stack: dbError.stack });
+                    logger.error('Error closing database connection:', { error: dbError.message });
                 } finally {
-                    process.exit(0); // Exit successfully
+                    logger.info('Graceful shutdown complete.');
+                    process.exit(0);
                 }
             });
-
-            // Force close after a timeout if graceful shutdown fails
             setTimeout(() => {
-                logger.error('Graceful shutdown timed out. Forcing exit.');
+                logger.error('Graceful shutdown timed out after 10 seconds. Forcing exit.');
                 process.exit(1);
-            }, 10000); // 10 seconds timeout (corrected from comment)
+            }, 10000);
         });
     });
 
-
   } catch (error) {
-    logger.error('Failed to start server:', { error: error.message, stack: error.stack || 'No stack trace available' });
-    process.exit(1); // Exit with error code
+    logger.error('Fatal error during server startup:', {
+        message: error.message,
+        stack: error.stack
+    });
+    process.exit(1);
   }
 }
 
-// --- Execute Server Start ---
 startServer();

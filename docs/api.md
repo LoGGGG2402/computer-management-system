@@ -86,6 +86,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     ```
 * **Response Error:**
     * `400 Bad Request`: `{ "status": "error", "message": "Username and password are required" }`
+    * `400 Bad Request`: `{ "status": "error", "message": "Username already exists" }`
     * `400 Bad Request`: `{ "status": "error", "message": "Failed to create user" }`
 
 ### Lấy danh sách Users
@@ -156,7 +157,9 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     ```json
     {
       "role": "string ('admin' or 'user') (optional)",
-      "is_active": "boolean (optional)"
+      "is_active": "boolean (optional)",
+      "username": "string (optional)",
+      "password": "string (optional)"
     }
     ```
 * **Response Success (200 OK):**
@@ -176,7 +179,8 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     ```
 * **Response Error:**
     * `400 Bad Request`: `{ "status": "error", "message": "User ID is required" }`
-    * `400 Bad Request`: `{ "status": "error", "message": "Username and password cannot be updated via this endpoint" }`
+    * `400 Bad Request`: `{ "status": "error", "message": "Username already exists" }`
+    * `404 Not Found`: `{ "status": "error", "message": "User not found" }`
     * `400 Bad Request`: `{ "status": "error", "message": "Failed to update user" }`
 
 ### Vô hiệu hóa User
@@ -231,15 +235,8 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
       "name": "string (required)",
       "description": "string (optional)",
       "layout": {
-        "width": "integer",
-        "height": "integer",
-        "background": "string (hex color)",
-        "grid": {
-          "columns": "integer",
-          "rows": "integer",
-          "spacing_x": "integer",
-          "spacing_y": "integer"
-        }
+        "columns": "integer",
+        "rows": "integer"
       }
     }
     ```
@@ -743,7 +740,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 
 ### Lấy Thống kê Hệ thống (Admin Only)
 * **Method:** `GET`
-* **Path:** `/api/statics`
+* **Path:** `/api/stats`
 * **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
 * **Response Success (200 OK):**
     ```json
@@ -885,8 +882,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     ```json
     {
       "status": "success",
-      "message": "Authentication successful",
-      "computerId": "integer"
+      "message": "Authentication successful"
     }
     ```
 * **Response Event nếu thất bại:** `agent:ws_auth_failed`
@@ -918,7 +914,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
       "commandId": "string (uuid)",
       "type": "string (default: 'console')",
       "success": "boolean",
-      "result": "jsonObject",
+      "result": "jsonObject"
     }
     ```
 * **No Direct Response**
@@ -975,6 +971,11 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     ```json
     {
       "computerId": "integer",
+      "positionInfo": {
+        "roomId": "integer",
+        "posX": "integer",
+        "posY": "integer"
+      },
       "timestamp": "timestamp"
     }
     ```

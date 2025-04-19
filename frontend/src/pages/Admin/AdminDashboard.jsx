@@ -17,7 +17,7 @@ import {
   ApiOutlined,
   InfoCircleOutlined
 } from '@ant-design/icons';
-import staticsService from '../../services/statics.service';
+import adminService from '../../services/admin.service';
 import { LoadingComponent } from '../../components/common';
 import { useSimpleFetch } from '../../hooks/useSimpleFetch';
 import { useFormatting } from '../../hooks/useFormatting';
@@ -38,7 +38,7 @@ const { Title, Text } = Typography;
 const AdminDashboard = () => {
   // Use hooks for fetching and formatting
   const { data: stats, loading } = useSimpleFetch(
-    staticsService.getSystemStats,
+    adminService.getSystemStats,
     [], // Fetch on mount
     { errorMessage: 'Failed to fetch statistics' }
   );

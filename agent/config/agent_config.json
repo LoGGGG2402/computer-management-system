@@ -22,6 +22,7 @@
     },
     "command_executor": {
         "default_timeout_sec": 300,
-        "max_parallel_commands": 2
+        "max_parallel_commands": 2,
+        "max_queue_size": 100
     }
 }

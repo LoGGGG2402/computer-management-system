@@ -1,168 +1,185 @@
-# Cấu Trúc Thư Mục Của Dự Án Computer Management System
+# Folder Structure of Computer Management System Project
 
-Dưới đây là cấu trúc thư mục hiện tại của dự án, bao gồm ba thành phần chính: Backend (Node.js/Express), Frontend (React/Vite), và Agent (Python).
+Below is the current folder structure of the project, including three main components: Backend (Node.js/Express), Frontend (React/Vite), and Agent (Python).
 
-## Cấu Trúc Thư Mục
+## Folder Structure
 
 ```
 computer-management-system/
-├── package.json              # Package.json cấp root
-├── readme.md                 # Thông tin tổng quan về dự án
+├── package.json              # Root level package.json
+├── readme.md                 # Project overview information
+├── maintain_agent.md         # Agent maintenance documentation
 │
-├── agent/                    # Thư mục gốc cho Agent (Python)
-│   ├── requirements.txt      # Các thư viện Python cần thiết
-│   ├── config/               # Cấu hình Agent
-│   │   └── agent_config.json # File cấu hình Agent
-│   └── src/                  # Mã nguồn chính của Agent
-│       ├── __init__.py       # File khởi tạo
-│       ├── main.py           # Điểm vào của Agent
-│       ├── communication/    # Module giao tiếp
+├── agent/                    # Root directory for Agent (Python)
+│   ├── requirements.txt      # Required Python libraries
+│   ├── config/               # Agent configuration
+│   │   └── agent_config.json # Agent configuration file
+│   └── src/                  # Main source code of the Agent
+│       ├── __init__.py       # Initialization file
+│       ├── main.py           # Entry point of the Agent
+│       ├── command_handlers/ # Command handlers module
 │       │   ├── __init__.py
-│       │   ├── http_client.py   # Client HTTP
-│       │   └── ws_client.py     # Client WebSocket
-│       ├── config/           # Module quản lý cấu hình
+│       │   ├── base_handler.py       # Base abstract handler
+│       │   ├── console_handler.py    # Console command handler
+│       │   └── system_handler.py     # System command handler
+│       ├── communication/    # Communication module
 │       │   ├── __init__.py
-│       │   ├── config_manager.py # Quản lý cấu hình
-│       │   └── state_manager.py  # Quản lý trạng thái
-│       ├── core/             # Module xử lý chính
+│       │   ├── http_client.py        # HTTP Client
+│       │   ├── server_connector.py   # Connection to server
+│       │   └── ws_client.py          # WebSocket Client
+│       ├── config/           # Configuration management module
 │       │   ├── __init__.py
-│       │   ├── agent.py         # Logic chính của Agent
-│       │   └── command_executor.py # Thực thi lệnh
-│       ├── monitoring/       # Module giám sát
+│       │   ├── config_manager.py     # Configuration management
+│       │   └── state_manager.py      # State management
+│       ├── core/             # Core processing module
 │       │   ├── __init__.py
-│       │   └── system_monitor.py # Giám sát hệ thống
-│       ├── ui/               # Module giao diện người dùng
+│       │   ├── agent.py             # Main Agent logic
+│       │   ├── agent_state.py       # Agent state management
+│       │   └── command_executor.py  # Command execution
+│       ├── ipc/              # Inter-Process Communication
 │       │   ├── __init__.py
-│       │   └── ui_console.py    # Giao diện console
-│       └── utils/            # Tiện ích hỗ trợ
+│       │   ├── named_pipe_client.py # IPC client via named pipe
+│       │   └── named_pipe_server.py # IPC server via named pipe
+│       ├── monitoring/       # Monitoring module
+│       │   ├── __init__.py
+│       │   └── system_monitor.py    # System monitoring
+│       ├── system/           # System interaction module
+│       │   ├── __init__.py
+│       │   ├── lock_manager.py      # Lock management
+│       │   └── windows_utils.py     # Windows utilities
+│       ├── ui/               # User interface module
+│       │   ├── __init__.py
+│       │   └── ui_console.py        # Console interface
+│       └── utils/            # Support utilities
 │           ├── __init__.py
-│           ├── logger.py     # Xử lý logging
-│           └── utils.py      # Các hàm tiện ích
+│           ├── logger.py            # Logging handler
+│           └── utils.py             # Utility functions
 │
-├── backend/                  # Thư mục gốc cho Backend (Node.js/Express)
-│   ├── package.json          # Quản lý dependencies của Backend
-│   └── src/                  # Mã nguồn chính của Backend
-│       ├── app.js            # Khởi tạo Express app
-│       ├── server.js         # Khởi động server HTTP và Socket.IO
-│       ├── config/           # Cấu hình ứng dụng
-│       │   ├── auth.config.js # Cấu hình xác thực, JWT
-│       │   └── db.config.js  # Cấu hình kết nối cơ sở dữ liệu
-│       ├── controllers/      # Xử lý các request HTTP
-│       │   ├── agent.controller.js    # Xử lý yêu cầu từ Agent
-│       │   ├── auth.controller.js     # Xử lý xác thực
-│       │   ├── computer.controller.js # Quản lý máy tính
-│       │   ├── room.controller.js     # Quản lý phòng
-│       │   ├── statics.controller.js  # Xử lý dữ liệu thống kê
-│       │   └── user.controller.js     # Quản lý người dùng
-│       ├── database/         # Tương tác với cơ sở dữ liệu
+├── backend/                  # Root directory for Backend (Node.js/Express)
+│   ├── create_db.sh          # Database creation script
+│   ├── package.json          # Backend dependencies management
+│   └── src/                  # Main source code of the Backend
+│       ├── app.js            # Express app initialization
+│       ├── server.js         # HTTP and Socket.IO server startup
+│       ├── config/           # Application configuration
+│       │   ├── auth.config.js # Authentication and JWT configuration
+│       │   └── db.config.js  # Database connection configuration
+│       ├── controllers/      # HTTP request handlers
+│       │   ├── admin.controller.js    # Admin request handler
+│       │   ├── agent.controller.js    # Agent request handler
+│       │   ├── auth.controller.js     # Authentication handler
+│       │   ├── computer.controller.js # Computer management
+│       │   ├── room.controller.js     # Room management
+│       │   └── user.controller.js     # User management
+│       ├── database/         # Database interaction
 │       │   ├── migrations/   # Database migrations
-│       │   │   ├── 20250407000001-create-users.js
-│       │   │   ├── 20250407000002-create-rooms.js
-│       │   │   └── ...
-│       │   ├── models/       # Định nghĩa các model
-│       │   └── seeders/      # Dữ liệu mẫu
+│       │   ├── models/       # Model definitions
+│       │   └── seeders/      # Sample data
 │       ├── middleware/       # Middleware
-│       │   ├── authAdmin.js           # Kiểm tra quyền Admin
-│       │   ├── authAgentToken.js      # Xác thực token Agent
-│       │   ├── authComputerAccess.js  # Kiểm tra quyền truy cập Computer
-│       │   ├── aythUser.js             # Xác thực JWT token
-│       │   └── authRoomAccess.js      # Kiểm tra quyền truy cập Room
-│       ├── routes/           # Định nghĩa các routes API
+│       │   ├── authAccess.js           # Access control check
+│       │   ├── authAgentToken.js      # Agent token authentication
+│       │   ├── authUser.js            # JWT token authentication
+│       │   └── uploadFileMiddleware.js # File upload handling
+│       ├── routes/           # API route definitions
+│       │   ├── admin.routes.js
 │       │   ├── agent.routes.js
 │       │   ├── auth.routes.js
 │       │   ├── computer.routes.js
-│       │   ├── index.js      # Tổng hợp và export tất cả routes
+│       │   ├── index.js      # Aggregation and export of all routes
 │       │   ├── room.routes.js
-│       │   ├── statics.routes.js
 │       │   └── user.routes.js
-│       ├── services/         # Logic nghiệp vụ
+│       ├── services/         # Business logic
+│       │   ├── admin.service.js
 │       │   ├── auth.service.js
 │       │   ├── computer.service.js
 │       │   ├── mfa.service.js
 │       │   ├── room.service.js
-│       │   ├── statics.service.js
 │       │   ├── user.service.js
 │       │   └── websocket.service.js
-│       └── sockets/          # Xử lý WebSocket connections
-│           ├── index.js
-│           └── handlers/     # Xử lý các sự kiện WebSocket
+│       ├── sockets/          # WebSocket connections handling
+│       │   ├── index.js
+│       │   └── handlers/     # WebSocket event handlers
+│       └── utils/            # Utilities
+│           └── logger.js     # Logging handler
 │
-├── docs/                     # Tài liệu dự án
-│   ├── activity_flows.md     # Mô tả các luồng hoạt động
-│   ├── api.md                # Tài liệu API chi tiết
-│   └── folder_structure.md   # Mô tả cấu trúc thư mục (file này)
+├── docs/                     # Project documentation
+│   ├── activity_flows.md     # Description of activity flows
+│   ├── api.md                # Detailed API documentation
+│   └── folder_structure.md   # Folder structure description (this file)
 │
-└── frontend/                 # Thư mục gốc cho Frontend (React/Vite)
-    ├── eslint.config.js      # Cấu hình ESLint
-    ├── index.html            # Trang HTML chính
-    ├── package.json          # Quản lý dependencies Frontend
-    ├── README.md             # Thông tin và hướng dẫn dành cho Frontend
-    ├── vite.config.js        # Cấu hình Vite
-    ├── public/               # Tài nguyên tĩnh
-    │   └── vite.svg          # Logo Vite
-    └── src/                  # Mã nguồn chính của Frontend
-        ├── App.jsx           # Component chính của ứng dụng
-        ├── index.css         # CSS toàn cục
-        ├── main.jsx          # Điểm khởi đầu của ứng dụng React
-        ├── assets/           # Tài nguyên như hình ảnh, fonts
-        │   └── react.svg     # Logo React
-        ├── components/       # Các component tái sử dụng
-        │   ├── admin/        # Component cho trang Admin
-        │   ├── common/       # Component dùng chung
-        │   ├── computer/     # Component quản lý máy tính
-        │   └── room/         # Component quản lý phòng
+└── frontend/                 # Root directory for Frontend (React/Vite)
+    ├── eslint.config.js      # ESLint configuration
+    ├── index.html            # Main HTML page
+    ├── package.json          # Frontend dependencies management
+    ├── README.md             # Information and instructions for Frontend
+    ├── vite.config.js        # Vite configuration
+    ├── public/               # Static resources
+    │   └── vite.svg          # Vite logo
+    └── src/                  # Main source code of the Frontend
+        ├── App.jsx           # Main application component
+        ├── index.css         # Global CSS
+        ├── main.jsx          # React application entry point
+        ├── assets/           # Resources like images, fonts
+        │   └── react.svg     # React logo
+        ├── components/       # Reusable components
+        │   ├── common/       # Common reusable components
+        │   ├── computer/     # Computer management components
+        │   └── room/         # Room management components
         ├── contexts/         # React Contexts
-        │   ├── AuthContext.jsx       # Quản lý trạng thái xác thực
-        │   ├── CommandHandleContext.jsx # Quản lý xử lý lệnh
-        │   └── SocketContext.jsx     # Quản lý kết nối Socket
+        │   ├── AuthContext.jsx       # Authentication state management
+        │   ├── CommandHandleContext.jsx # Command handling management
+        │   └── SocketContext.jsx     # Socket connection management
         ├── hooks/            # Custom React hooks
-        │   ├── useCopyToClipboard.js # Hook sao chép vào clipboard
-        │   ├── useFormatting.js      # Hook định dạng dữ liệu
-        │   ├── useModalState.js      # Hook quản lý trạng thái modal
-        │   └── useSimpleFetch.js     # Hook gọi API đơn giản
+        │   ├── useCopyToClipboard.js # Hook for clipboard copying
+        │   ├── useFormatting.js      # Hook for data formatting
+        │   ├── useModalState.js      # Hook for modal state management
+        │   └── useSimpleFetch.js     # Hook for simple API calls
         ├── layouts/          # Layout components
-        │   ├── Header.jsx    # Component header
-        │   └── MainLayout.jsx # Layout chính của ứng dụng
-        ├── pages/            # Các trang chính
-        │   ├── LoginPage.jsx # Trang đăng nhập
-        │   ├── Admin/        # Các trang quản trị
-        │   ├── computer/     # Các trang quản lý máy tính
-        │   ├── dashboard/    # Trang dashboard
-        │   ├── room/         # Các trang quản lý phòng
-        │   └── user/         # Các trang quản lý người dùng
-        ├── router/           # Cấu hình routing
-        │   ├── index.jsx     # Định nghĩa routes chính
-        │   └── ProtectedRoute.jsx # Bảo vệ route cho người dùng đã đăng nhập
-        └── services/         # Các service giao tiếp với Backend
-            ├── api.js        # Cấu hình axios và các hàm xử lý HTTP chung
-            ├── auth.service.js     # Service xác thực
-            ├── computer.service.js # Service quản lý máy tính
-            ├── room.service.js     # Service quản lý phòng
-            ├── statics.service.js  # Service dữ liệu thống kê
-            └── user.service.js     # Service quản lý người dùng
+        │   ├── Header.jsx    # Header component
+        │   └── MainLayout.jsx # Main application layout
+        ├── pages/            # Main pages
+        │   ├── LoginPage.jsx # Login page
+        │   ├── Admin/        # Admin pages
+        │   ├── computer/     # Computer management pages
+        │   ├── dashboard/    # Dashboard page
+        │   ├── room/         # Room management pages
+        │   └── user/         # User management pages
+        ├── router/           # Routing configuration
+        │   └── index.jsx     # Main route definitions
+        └── services/         # Services for Backend communication
+            ├── api.js        # Axios configuration and common HTTP handlers
+            ├── auth.service.js     # Authentication service
+            ├── computer.service.js # Computer management service
+            ├── room.service.js     # Room management service
+            ├── user.service.js     # User management service
+            └── admin.service.js    # System administration service
 ```
 
-## Đặc điểm cấu trúc:
+## Structure Characteristics:
 
 ### Agent (Python)
-- Cấu trúc mô-đun hóa với điểm vào là `main.py`
-- Logic chính nằm trong `core/agent.py`
-- Module `communication/` xử lý giao tiếp HTTP và WebSocket
-- Module `monitoring/` thu thập thông tin hệ thống
-- Module `config/` quản lý cấu hình và trạng thái Agent
-- Module `utils/` cung cấp các tiện ích như logging
+- Modular structure with entry point in `main.py`
+- Main logic in `core/agent.py` and state management in `core/agent_state.py`
+- The `command_handlers/` module contains handlers for various commands
+- The `communication/` module handles HTTP and WebSocket communication with the server
+- The `monitoring/` module collects system information
+- The `ipc/` module handles inter-process communication
+- The `system/` module contains utilities for system interaction
+- The `config/` module manages Agent configuration and state
+- The `utils/` module provides utilities such as logging
 
 ### Backend (Node.js/Express)
-- Mô hình MVC với Sequelize ORM
-- Controllers trong `controllers/` xử lý các request API
-- Routes trong `routes/` định nghĩa các endpoint
-- Services trong `services/` chứa logic nghiệp vụ
-- WebSocket được xử lý trong `sockets/`
-- Database migrations trong `database/migrations/`
+- MVC pattern with Sequelize ORM
+- Controllers in `controllers/` handle API requests
+- Routes in `routes/` define endpoints
+- Services in `services/` contain business logic
+- WebSocket is handled in `sockets/`
+- Database migrations in `database/migrations/`
+- Authentication and access control middleware
 
 ### Frontend (React/Vite)
-- Cấu trúc theo tính năng với các thư mục `components/`, `pages/`, `contexts/`, `hooks/`
-- Sử dụng React Router cho quản lý routing
-- Services trong `services/` xử lý giao tiếp với Backend API
-- Contexts quản lý trạng thái toàn cục
-- Các trang được tổ chức theo chức năng (admin, phòng, máy tính)
+- Feature-based structure with directories `components/`, `pages/`, `contexts/`, `hooks/`
+- Uses React Router for routing management
+- Services in `services/` handle communication with Backend API
+- Contexts manage global state
+- Pages are organized by function (admin, room, computer)

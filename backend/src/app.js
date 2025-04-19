@@ -1,88 +1,115 @@
 /**
- * Express application setup and configuration.
+ * @fileoverview Express application setup, configuration, and server initialization.
+ * Creates the Express app, HTTP server, Socket.IO instance, and initializes WebSocket handlers.
+ * Exports the configured HTTP server instance.
+ * @requires express
+ * @requires cors
+ * @requires path
+ * @requires http
+ * @requires socket.io
+ * @requires ./routes
+ * @requires ./utils/logger
+ * @requires ./sockets
  */
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
 const routes = require('./routes');
 const logger = require('./utils/logger');
+const { initializeWebSocket } = require('./sockets');
 
 /**
- * Creates and configures the Express application instance.
- * @returns {express.Application} The configured Express app.
+ * @constant {object} corsConfig
+ * @description Configuration object for CORS middleware.
+ * Reads the client URL from environment variables or defaults to localhost.
+ * Defines allowed methods, credentials policy, and allowed headers.
+ */
+const corsConfig = {
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST'],
+};
+
+/**
+ * Creates and configures an Express application instance.
+ * Sets up essential middleware including CORS, body parsing, request logging (dev only),
+ * static file serving, API routes, health check endpoint, 404 handling, and global error handling.
+ * @function createApp
+ * @returns {express.Application} The configured Express application instance.
  */
 function createApp() {
   const app = express();
 
-  // --- Core Middlewares ---
-  app.use(cors()); // Enable Cross-Origin Resource Sharing
-  app.use(express.json()); // Parse JSON request bodies
-  app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bodies
+  // Core Middlewares
+  app.use(cors(corsConfig));
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
 
-  // --- Request Logging Middleware (Development Only) ---
+  // Development Request Logging
   if (process.env.NODE_ENV === 'development') {
     app.use((req, res, next) => {
       const start = Date.now();
-      const { method, originalUrl, ip } = req;
-      const userAgent = req.get('User-Agent') || 'N/A';
-
-      // logger.debug(`<----- ${method} ${originalUrl} - IP: ${ip} - Agent: ${userAgent}`);
-
-      if (method !== 'GET') {
-        logger.debug('Request Body:', { body: req.body });
+      const { method, originalUrl } = req;
+      if (method !== 'GET' && req.body && Object.keys(req.body).length > 0) {
+         logger.debug('Request Body:', { body: req.body });
       }
-
       res.on('finish', () => {
         const duration = Date.now() - start;
         logger.http(`${method} ${originalUrl} - Status: ${res.statusCode} - ${duration}ms`);
       });
-
       next();
     });
   }
-
-  // --- Static Files Middleware ---
-  // Serves static files (e.g., frontend build) from the 'public' directory
-  app.use(express.static(path.join(__dirname, '../public')));
-
-  // --- API Routes ---
+  // API Routes
   app.use('/api', routes);
 
-  // --- Health Check Route ---
-  /**
-   * Simple health check endpoint.
-   * @route GET /health
-   * @returns {object} 200 - JSON object indicating server status.
-   */
+  // Health Check Route
   app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // --- Catch-all for 404 Not Found (after API routes and static files) ---
-   app.use((req, res, next) => {
-    res.status(404).json({ success: false, message: 'Not Found' });
-  });
+  // Static Files
+  app.use(express.static(path.join(__dirname, '../public')));
 
-
-  // --- Global Error Handling Middleware ---
-  /**
-   * Handles errors passed via next(err).
-   * Logs the error and sends a standardized JSON error response.
-   */
+  // Global Error Handler
   app.use((err, req, res, next) => {
-    logger.error('Unhandled Error:', { error: err.message, stack: err.stack });
-
-    // Avoid leaking stack trace in production
+    logger.error('Unhandled Application Error:', {
+        message: err.message,
+        stack: err.stack,
+        path: req.path,
+        method: req.method
+    });
     const errorResponse = {
       success: false,
       message: err.message || 'Internal Server Error',
-      ...(process.env.NODE_ENV === 'development' && { error: err.stack }), // Include stack trace only in dev
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
     };
-
     res.status(err.statusCode || 500).json(errorResponse);
   });
 
   return app;
 }
 
-module.exports = createApp(); // Export the created app instance
+/**
+ * @constant {http.Server} httpServer
+ * @description The Node.js HTTP server instance created directly from the configured Express app.
+ */
+const httpServer = http.createServer(createApp());
+
+// Initialize Socket.IO server and WebSocket event handlers directly
+initializeWebSocket(new Server(httpServer, {
+  cors: corsConfig,
+}));
+
+
+/**
+ * @module app
+ * @description Exports the configured Node.js HTTP server instance.
+ * This server instance includes the Express application and the attached Socket.IO server.
+ * @property {http.Server} httpServer - The initialized HTTP server.
+ */
+module.exports = {
+  httpServer
+};
