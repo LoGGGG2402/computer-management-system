@@ -1,6 +1,9 @@
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const db = require('../database/models');
-const websocketService = require('./websocket.service.js');
-const { User, Room, Computer } = db;
+const websocketService = require('./websocket.service');
+const { User, Room, Computer, AgentVersion } = db;
 
 class AdminService {
   /**
@@ -75,11 +78,148 @@ class AdminService {
         unresolvedErrors,
       };
     } catch (error) {
-      throw new Error('Could not retrieve statistics data.');
+      throw error; // Pass through the original error
     }
   }
 
-  // Additional admin service methods can be added here
+  /**
+   * Process an uploaded agent package
+   * @param {Object} file - The uploaded file object from multer
+   * @param {string} file.path - Path where the uploaded file was stored
+   * @param {number} file.size - File size in bytes
+   * @param {Object} versionData - Version metadata
+   * @param {string} versionData.version - Semantic version string (e.g., '1.0.0')
+   * @param {string} [versionData.notes=''] - Release notes describing changes and features
+   * @returns {Promise<Object>} Created AgentVersion record with the following properties:
+   *   - id {string} - Unique UUID identifier for the agent version
+   *   - version {string} - Semantic version string (e.g., '1.0.0')
+   *   - checksum_sha256 {string} - SHA-256 hash of the agent package for integrity verification
+   *   - download_url {string} - URL path where agents can download this version
+   *   - notes {string|null} - Release notes describing changes and features
+   *   - is_stable {boolean} - Flag indicating if this is a stable production release (initially false)
+   *   - file_path {string} - Server filesystem path where the agent package is stored
+   *   - file_size {number} - Size of the agent package file in bytes
+   *   - created_at {Date} - Timestamp when this version was created
+   *   - updated_at {Date} - Timestamp when this version was last modified
+   * @throws {Error} If file is invalid or version already exists
+   */
+  async processAgentUpload(file, versionData) {
+    try {
+      if (!file || !file.path) {
+        throw new Error('No valid file provided');
+      }
+
+      if (!versionData.version) {
+        throw new Error('Version is required');
+      }
+
+      // Calculate SHA-256 checksum
+      const fileBuffer = fs.readFileSync(file.path);
+      const hashSum = crypto.createHash('sha256');
+      hashSum.update(fileBuffer);
+      const checksum = hashSum.digest('hex');
+
+      // Create download URL path (relative to API base)
+      const filename = path.basename(file.path);
+      const downloadUrl = `/api/agent/agent-packages/${filename}`;
+
+      // Create agent version record
+      const agentVersion = await AgentVersion.create({
+        version: versionData.version,
+        checksum_sha256: checksum,
+        download_url: downloadUrl,
+        notes: versionData.notes || '',
+        is_stable: false, // Default to not stable (must be explicitly set later)
+        file_path: file.path,
+        file_size: file.size
+      });
+
+      return agentVersion;
+    } catch (error) {
+      // If file exists but agent version creation failed, clean up the file
+      if (file && file.path && fs.existsSync(file.path)) {
+        try {
+          fs.unlinkSync(file.path);
+        } catch (cleanupError) {
+          // Let the controller handle the logging
+        }
+      }
+      
+      throw error; // Pass through the original error
+    }
+  }
+
+  /**
+   * Update stability flag of an agent version
+   * @param {string} versionId - The agent version ID (UUID)
+   * @param {boolean} isStable - Whether to mark as stable
+   * @returns {Promise<Object>} Updated AgentVersion object with the following properties:
+   *   - id {string} - Unique UUID identifier for the agent version
+   *   - version {string} - Semantic version string (e.g., '1.0.0')
+   *   - checksum_sha256 {string} - SHA-256 hash of the agent package
+   *   - download_url {string} - URL path where agents can download this version
+   *   - notes {string|null} - Release notes describing changes and features
+   *   - is_stable {boolean} - Flag indicating if this is a stable production release (updated)
+   *   - file_path {string} - Server filesystem path where the agent package is stored
+   *   - file_size {number} - Size of the agent package file in bytes
+   *   - created_at {Date} - Timestamp when this version was created
+   *   - updated_at {Date} - Timestamp when this version was last modified
+   * @throws {Error} If version with given ID does not exist
+   */
+  async updateStabilityFlag(versionId, isStable) {
+    try {
+      const agentVersion = await AgentVersion.findByPk(versionId);
+
+      if (!agentVersion) {
+        throw new Error(`Agent version with ID ${versionId} not found`);
+      }
+
+      if (isStable) {
+        // If setting to stable, mark all other versions as not stable
+        await AgentVersion.update(
+          { is_stable: false },
+          { where: { id: { [require('sequelize').Op.ne]: versionId } } }
+        );
+      }
+
+      // Update the version
+      await agentVersion.update({ is_stable: isStable });
+
+      return agentVersion;
+    } catch (error) {
+      throw error; // Pass through the original error
+    }
+  }
+
+  /**
+   * Get all agent versions
+   * @returns {Promise<Array<Object>>} List of all agent versions ordered by stability and creation date
+   * @returns {Promise<Array<AgentVersion>>} List of all agent versions with the following properties for each:
+   *   - id {string} - Unique UUID identifier for the agent version
+   *   - version {string} - Semantic version string (e.g., '1.0.0') 
+   *   - checksum_sha256 {string} - SHA-256 hash of the agent package
+   *   - download_url {string} - URL path where agents can download this version
+   *   - notes {string|null} - Release notes describing changes and features
+   *   - is_stable {boolean} - Flag indicating if this is a stable production release
+   *   - file_path {string} - Server filesystem path where the agent package is stored
+   *   - file_size {number} - Size of the agent package file in bytes
+   *   - created_at {Date} - Timestamp when this version was created
+   *   - updated_at {Date} - Timestamp when this version was last modified
+   */
+  async getAllVersions() {
+    try {
+      const versions = await AgentVersion.findAll({
+        order: [
+          ['is_stable', 'DESC'],
+          ['created_at', 'DESC']
+        ]
+      });
+      
+      return versions;
+    } catch (error) {
+      throw error; // Pass through the original error
+    }
+  }
 }
 
 module.exports = new AdminService();

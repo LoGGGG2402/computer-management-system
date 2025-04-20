@@ -3,6 +3,22 @@ const path = require('path');
 const fs = require('fs');
 const logger = require('../utils/logger'); // Assuming you have a logger utility at this path
 
+// Ensure upload directories exist
+const UPLOAD_DIR = path.join(__dirname, '../../uploads');
+const AGENT_PACKAGES_DIR = path.join(UPLOAD_DIR, 'agent-packages');
+
+// Create directories if they don't exist
+[UPLOAD_DIR, AGENT_PACKAGES_DIR].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      logger.info(`Created directory: ${dir}`);
+    } catch (error) {
+      logger.error(`Failed to create directory ${dir}:`, { error: error.message });
+    }
+  }
+});
+
 /**
  * Creates middleware to handle single file uploads with configuration options.
  *
@@ -125,4 +141,84 @@ const uploadFileMiddleware = (options = {}) => {
   };
 };
 
-module.exports = { uploadFileMiddleware };
+// Configure storage for agent packages
+const agentPackageStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, AGENT_PACKAGES_DIR);
+  },
+  filename: (req, file, cb) => {
+    // Generate filename based on version and current timestamp
+    const version = req.body.version ? req.body.version.replace(/[^a-zA-Z0-9.-]/g, '_') : '';
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname) || '.zip';
+    const filename = `agent_${version}_${timestamp}${ext}`;
+    
+    cb(null, filename);
+  }
+});
+
+// File filter - only accept zip files
+const agentPackageFileFilter = (req, file, cb) => {
+  const allowedTypes = ['.zip', '.gz', '.tar'];
+  const ext = path.extname(file.originalname).toLowerCase();
+  
+  if (allowedTypes.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only archive files (.zip, .gz, .tar) are allowed'), false);
+  }
+};
+
+// Create the multer instance with limits for agent packages
+const agentPackageUpload = multer({
+  storage: agentPackageStorage,
+  fileFilter: agentPackageFileFilter,
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50 MB max file size
+    files: 1 // Maximum one file per request
+  }
+});
+
+// Single file upload middleware for agent packages
+const uploadAgentPackage = (req, res, next) => {
+  const uploadMiddleware = agentPackageUpload.single('package');
+  
+  uploadMiddleware(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        // Multer-specific errors
+        logger.error('File upload error (Multer):', { error: err.message });
+        return res.status(400).json({
+          status: 'error',
+          message: `Upload failed: ${err.message}`
+        });
+      } else {
+        // General errors
+        logger.error('File upload error:', { error: err.message });
+        return res.status(400).json({
+          status: 'error',
+          message: err.message
+        });
+      }
+    } 
+    
+    // No file uploaded
+    if (!req.file) {
+      logger.warn('No file uploaded in request');
+      return res.status(400).json({
+        status: 'error',
+        message: 'No package file uploaded'
+      });
+    }
+    
+    // File uploaded successfully
+    logger.info(`Agent package uploaded successfully: ${req.file.filename} (${req.file.size} bytes)`);
+    next();
+  });
+};
+
+module.exports = {
+  uploadFileMiddleware,
+  uploadAgentPackage,
+  AGENT_PACKAGES_DIR
+};

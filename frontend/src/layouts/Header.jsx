@@ -104,6 +104,12 @@ const Header = () => {
                 >
                   Computers
                 </Link>
+                <Link
+                  to="/admin/agent-versions"
+                  className="text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                >
+                  Agent Versions
+                </Link>
               </>
             )}
           </nav>
@@ -253,6 +259,13 @@ const Header = () => {
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   Computer Management
+                </Link>
+                <Link
+                  to="/admin/agent-versions"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Agent Versions
                 </Link>
               </>
             )}

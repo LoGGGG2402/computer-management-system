@@ -992,3 +992,180 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
       "commandType": "string (optional, default: 'console')"
     }
     ```
+
+## 9. API Quản lý Phiên bản Agent
+
+### Upload Phiên bản Agent mới (Admin Only)
+* **Method:** `POST`
+* **Path:** `/api/admin/agents/versions`
+* **Headers:** 
+  * `Authorization: Bearer <admin_jwt_token_string>` (Required)
+  * `Content-Type: multipart/form-data`
+* **Request Body:**
+  * `package`: File (required - file package của agent, định dạng .zip, .gz, hoặc .tar)
+  * `version`: String (required - phiên bản của agent, ví dụ: "1.2.0")
+  * `notes`: String (optional - ghi chú về phiên bản)
+* **Response Success (201 Created):**
+  ```json
+  {
+    "status": "success",
+    "message": "Agent version 1.2.0 uploaded successfully",
+    "data": {
+      "id": "uuid",
+      "version": "string",
+      "checksum_sha256": "string",
+      "download_url": "string",
+      "notes": "string",
+      "is_stable": false,
+      "file_path": "string",
+      "file_size": "number",
+      "created_at": "timestamp",
+      "updated_at": "timestamp"
+    }
+  }
+  ```
+* **Response Error:**
+  * `400 Bad Request`: `{ "status": "error", "message": "No agent package file uploaded" }`
+  * `400 Bad Request`: `{ "status": "error", "message": "Version is required" }`
+  * `400 Bad Request`: `{ "status": "error", "message": "Only archive files (.zip, .gz, .tar) are allowed" }`
+
+### Đặt Trạng thái Stable cho Phiên bản Agent (Admin Only)
+* **Method:** `PUT`
+* **Path:** `/api/admin/agents/versions/:versionId`
+* **Headers:**
+  * `Authorization: Bearer <admin_jwt_token_string>` (Required)
+  * `Content-Type: application/json`
+* **Request Body:**
+  ```json
+  {
+    "is_stable": "boolean (required)"
+  }
+  ```
+* **Response Success (200 OK):**
+  ```json
+  {
+    "status": "success",
+    "message": "Agent version 1.2.0 stability updated",
+    "data": {
+      "id": "uuid",
+      "version": "string",
+      "checksum_sha256": "string",
+      "download_url": "string",
+      "notes": "string",
+      "is_stable": "boolean",
+      "file_path": "string",
+      "file_size": "number",
+      "created_at": "timestamp",
+      "updated_at": "timestamp"
+    }
+  }
+  ```
+* **Response Error:**
+  * `400 Bad Request`: `{ "status": "error", "message": "is_stable parameter is required" }`
+  * `404 Not Found`: `{ "status": "error", "message": "Agent version with ID xyz not found" }`
+
+### Lấy Danh sách Phiên bản Agent (Admin Only)
+* **Method:** `GET`
+* **Path:** `/api/admin/agents/versions`
+* **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
+* **Response Success (200 OK):**
+  ```json
+  {
+    "status": "success",
+    "data": [
+      {
+        "id": "uuid",
+        "version": "string",
+        "checksum_sha256": "string",
+        "download_url": "string",
+        "notes": "string",
+        "is_stable": "boolean",
+        "file_path": "string",
+        "file_size": "number",
+        "created_at": "timestamp",
+        "updated_at": "timestamp"
+      },
+      ...
+    ]
+  }
+  ```
+
+### Kiểm tra Bản cập nhật Agent (Cho Agent)
+* **Method:** `GET`
+* **Path:** `/api/agent/check_update`
+* **Headers:**
+  * `agent-id: string (unique_agent_id)` (Required)
+  * `agent-token: string` (Required)
+* **Query Parameters:**
+  * `current_version`: String (optional - phiên bản hiện tại của agent, ví dụ: "1.1.0")
+* **Response Success khi có bản cập nhật (200 OK):**
+  ```json
+  {
+    "status": "success",
+    "update_available": true,
+    "version": "string",
+    "download_url": "string",
+    "checksum_sha256": "string",
+    "notes": "string"
+  }
+  ```
+* **Response Success khi không có bản cập nhật (204 No Content)**
+* **Response Error:**
+  * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized (Invalid agent credentials)" }`
+  * `500 Internal Server Error`: `{ "status": "error", "message": "Failed to check for agent updates" }`
+
+### Báo cáo Lỗi từ Agent
+* **Method:** `POST`
+* **Path:** `/api/agent/report-error`
+* **Headers:**
+  * `agent-id: string (unique_agent_id)` (Required)
+  * `agent-token: string` (Required)
+  * `Content-Type: application/json`
+* **Request Body:**
+  ```json
+  {
+    "error_type": "string (required)",
+    "message": "string (required)",
+    "details": "object (optional)",
+    "timestamp": "string (optional)",
+    "agent_version": "string (optional)",
+    "stack_trace": "string (optional)"
+  }
+  ```
+* **Danh sách `error_type` thống nhất cho lỗi cập nhật:**
+  * `"UpdateResourceCheckFailed"`: Lỗi khi kiểm tra tài nguyên trước khi cập nhật
+  * `"UpdateDownloadFailed"`: Lỗi khi tải package cập nhật
+  * `"UpdateChecksumMismatch"`: Lỗi khi checksum file tải về không khớp
+  * `"UpdateExtractionFailed"`: Lỗi khi giải nén package
+  * `"UpdateLaunchFailed"`: Lỗi khi khởi chạy quá trình cập nhật
+  * `"UpdateGeneralFailure"`: Các lỗi chung khác trong quá trình cập nhật
+* **Response Success (204 No Content)**
+* **Response Error:**
+  * `400 Bad Request`: `{ "status": "error", "message": "Error type and message are required" }`
+  * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized (Invalid agent credentials)" }`
+
+### Tải Gói Package Agent (Yêu cầu xác thực Agent)
+* **Method:** `GET`
+* **Path:** `/api/agent/agent-packages/:filename`
+* **Headers:**
+  * `agent-id: string (unique_agent_id)` (Required)
+  * `agent-token: string` (Required)
+* **Response Success:** File nội dung package
+* **Response Error:**
+  * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized (Invalid agent credentials)" }`
+  * `404 Not Found`: `{ "status": "error", "message": "File not found" }`
+  * `500 Internal Server Error`: `{ "status": "error", "message": "Error serving file" }`
+
+## 10. WebSocket Events liên quan đến Agent Versioning
+
+### Backend -> Agent
+
+#### Thông báo có phiên bản Agent mới
+* **Event:** `agent:new_version_available`
+* **Data:**
+  ```json
+  {
+    "new_stable_version": "string (e.g. '1.2.0')",
+    "timestamp": "timestamp"
+  }
+  ```

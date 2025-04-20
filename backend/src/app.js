@@ -10,6 +10,7 @@
  * @requires ./routes
  * @requires ./utils/logger
  * @requires ./sockets
+ * @requires helmet
  */
 
 const express = require('express');
@@ -17,6 +18,7 @@ const cors = require('cors');
 const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io');
+const helmet = require('helmet');
 const routes = require('./routes');
 const logger = require('./utils/logger');
 const { initializeWebSocket } = require('./sockets');
@@ -42,7 +44,11 @@ const corsConfig = {
 function createApp() {
   const app = express();
 
+  // Apply security headers
+  app.use(helmet());
+
   // Core Middlewares
+
   app.use(cors(corsConfig));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));

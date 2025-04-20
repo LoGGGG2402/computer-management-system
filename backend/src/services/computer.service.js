@@ -36,20 +36,22 @@ class ComputerService {
    *     - name {string} - Room name
    */
   async findComputerByAgentId(agentId) {
-    const computer = await Computer.findOne({
-      where: { unique_agent_id: agentId },
-      include: [
-        {
-          model: Room,
-          as: "room",
-          attributes: ["id", "name"],
-        },
-      ],
-    });
-    if (!computer) {
-      return null;
+    try {
+      const computer = await Computer.findOne({
+        where: { unique_agent_id: agentId },
+        include: [
+          {
+            model: Room,
+            as: "room",
+            attributes: ["id", "name"],
+          },
+        ],
+      });
+      
+      return computer || null;
+    } catch (error) {
+      throw error;
     }
-    return computer;
   }
 
   /**
@@ -80,17 +82,17 @@ class ComputerService {
     positionInfo = null,
     computer = null
   ) {
-    const plainToken = crypto.randomBytes(32).toString("hex");
-
-    const saltRounds = 10;
-    const tokenHash = await bcrypt.hash(plainToken, saltRounds);
-
-    const updateData = {
-      agent_token_hash: tokenHash,
-      last_update: new Date(),
-    };
-
     try {
+      const plainToken = crypto.randomBytes(32).toString("hex");
+
+      const saltRounds = 10;
+      const tokenHash = await bcrypt.hash(plainToken, saltRounds);
+
+      const updateData = {
+        agent_token_hash: tokenHash,
+        last_update: new Date(),
+      };
+
       if (computer) {
         await computer.update(updateData);
       } else {
@@ -340,15 +342,19 @@ class ComputerService {
    * @throws {Error} If computer is not found or deletion fails
    */
   async deleteComputer(id) {
-    const computer = await Computer.findByPk(id);
+    try {
+      const computer = await Computer.findByPk(id);
 
-    if (!computer) {
-      throw new Error("Computer not found");
+      if (!computer) {
+        throw new Error("Computer not found");
+      }
+
+      await computer.destroy();
+
+      return true;
+    } catch (error) {
+      throw error;
     }
-
-    await computer.destroy();
-
-    return true;
   }
 
   /**
@@ -393,15 +399,19 @@ class ComputerService {
    * @throws {Error} If computer is not found
    */
   async getComputerErrors(id) {
-    const computer = await db.Computer.findByPk(id, {
-      attributes: ["id", "name", "errors", "have_active_errors"],
-    });
+    try {
+      const computer = await db.Computer.findByPk(id, {
+        attributes: ["id", "name", "errors", "have_active_errors"],
+      });
 
-    if (!computer) {
-      throw new Error("Computer not found");
+      if (!computer) {
+        throw new Error("Computer not found");
+      }
+
+      return computer.errors || [];
+    } catch (error) {
+      throw error;
     }
-
-    return computer.errors || [];
   }
 
   /**
@@ -432,17 +442,24 @@ class ComputerService {
       }
 
       const errorId = Date.now();
-      errorData.id = errorId;
+      // Create the final error object within the service
+      const newError = {
+        ...errorData, // Spread the data received from the controller
+        id: errorId,
+        reported_at: new Date(), // Add server timestamp here
+        resolved: false, // Set resolved status here
+      };
 
       const errors = Array.isArray(computer.errors) ? [...computer.errors] : [];
-      errors.push(errorData);
+      errors.push(newError); // Push the complete error object
 
       await computer.update({
         errors: errors,
         have_active_errors: true,
       });
 
-      return { error: errorData, computerId: id };
+      // Return the created error object
+      return { error: newError, computerId: id };
     } catch (error) {
       throw error;
     }

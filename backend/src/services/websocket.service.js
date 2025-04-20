@@ -18,6 +18,7 @@ const EVENTS = {
   COMMAND_EXECUTE: 'command:execute',
   COMPUTER_STATUS_UPDATED: 'computer:status_updated',
   COMMAND_COMPLETED: 'command:completed',
+  NEW_VERSION_AVAILABLE: 'agent:new_version_available',
 };
 
 const PENDING_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
@@ -449,6 +450,55 @@ class WebSocketService {
       logger.info(`Socket ${socket.id} joined agent room for computer ${computerId}: ${roomName}`);
     } catch (error) {
       logger.error(`Error joining agent room for Computer ID ${computerId} (Socket ${socket.id}): ${error.message}`, { stack: error.stack });
+    }
+  }
+
+  /**
+   * Notifies all connected agents about a new version being available
+   * @param {Object} [versionInfo] - Information about the new agent version
+   * @param {string} [versionInfo.version] - The version string (e.g., "1.2.0")
+   * @returns {Promise<number>} Number of connected agents that were notified
+   */
+  async notifyAgentsOfNewVersion(versionInfo = {}) {
+    try {
+      if (!this.io) {
+        logger.error('Cannot notify agents: WebSocket IO not initialized');
+        return 0;
+      }
+
+      // Get version information
+      const eventData = {
+        new_stable_version: versionInfo.version || "unknown",
+        timestamp: new Date()
+      };
+
+      // Get all agent rooms
+      const rooms = this.io.sockets.adapter.rooms;
+      let notifiedAgents = 0;
+
+      // For each room, check if it's an agent room
+      for (const [roomName, sockets] of rooms.entries()) {
+        if (roomName.startsWith('agent_')) {
+          // Extract computer ID from room name (agent_{id})
+          const computerId = roomName.split('_')[1];
+          if (!computerId) continue;
+
+          // Send notification to this agent room
+          this.io.to(roomName).emit(EVENTS.NEW_VERSION_AVAILABLE, eventData);
+          notifiedAgents++;
+          
+          logger.debug(`Notified agent for computer ${computerId} about new version ${eventData.new_stable_version}`);
+        }
+      }
+
+      logger.info(`Notified ${notifiedAgents} agents about new agent version: ${eventData.new_stable_version}`);
+      return notifiedAgents;
+    } catch (error) {
+      logger.error('Error notifying agents of new version:', { 
+        error: error.message, 
+        stack: error.stack 
+      });
+      return 0;
     }
   }
 }

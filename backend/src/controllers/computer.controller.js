@@ -58,11 +58,9 @@ class ComputerController {
       
       const result = await computerService.getAllComputers(page, limit, filters, req.user);
       
-      logger.debug(`Retrieved ${result.computers.length} computers (total: ${result.total}) with filters:`, {
-        filters,
-        page,
-        limit,
-        requestedBy: req.user?.id
+      logger.debug(`Retrieved ${result.computers.length} computers (page ${page}, total: ${result.total})`, {
+        userId: req.user?.id,
+        filters
       });
       
       return res.status(200).json({
@@ -73,7 +71,8 @@ class ComputerController {
       logger.error('Failed to fetch computers:', {
         error: error.message,
         stack: error.stack,
-        userId: req.user?.id
+        userId: req.user?.id,
+        query: req.query
       });
       
       return res.status(500).json({
@@ -115,7 +114,7 @@ class ComputerController {
       const id = parseInt(req.params.computerId);
       
       if (!id) {
-        logger.debug('Invalid computer ID provided:', { id: req.params.computerId });
+        logger.debug('Invalid computer ID provided', { id: req.params.computerId });
         return res.status(400).json({
           status: 'error',
           message: 'Computer ID is required'
@@ -123,7 +122,11 @@ class ComputerController {
       }
       
       const computer = await computerService.getComputerById(id);
-      logger.debug(`Fetching computer with ID: ${id}`);
+
+      logger.debug(`Retrieved computer details for ID: ${id}`, {
+        userId: req.user?.id,
+        computerName: computer.name
+      });
       
       return res.status(200).json({
         status: 'success',
@@ -158,7 +161,7 @@ class ComputerController {
       const id = parseInt(req.params.computerId);
       
       if (!id) {
-        logger.debug('Invalid computer ID provided for deletion:', { id: req.params.computerId });
+        logger.debug('Invalid computer ID provided for deletion', { id: req.params.computerId });
         return res.status(400).json({
           status: 'error',
           message: 'Computer ID is required'
@@ -167,7 +170,7 @@ class ComputerController {
       
       await computerService.deleteComputer(id);
       
-      logger.info(`Computer ID ${id} deleted successfully`);
+      logger.info(`Computer ID: ${id} deleted by user ID: ${req.user?.id}`);
       
       return res.status(200).json({
         status: 'success',
@@ -212,7 +215,7 @@ class ComputerController {
       const id = parseInt(req.params.computerId);
       
       if (!id) {
-        logger.debug('Invalid computer ID provided for error lookup:', { id: req.params.computerId });
+        logger.debug('Invalid computer ID provided for error lookup', { id: req.params.computerId });
         return res.status(400).json({
           status: 'error',
           message: 'Computer ID is required'
@@ -221,7 +224,9 @@ class ComputerController {
       
       const errors = await computerService.getComputerErrors(id);
       
-      logger.debug(`Retrieved ${errors.length} errors for computer ID ${id}`);
+      logger.debug(`Retrieved ${errors.length} errors for computer ID: ${id}`, {
+        userId: req.user?.id
+      });
       
       return res.status(200).json({
         status: 'success',
@@ -270,7 +275,7 @@ class ComputerController {
       const { error_type, error_message, error_details } = req.body;
       
       if (!id) {
-        logger.debug('Invalid computer ID provided for error reporting:', { id: req.params.computerId });
+        logger.debug('Invalid computer ID provided for error reporting', { id: req.params.computerId });
         return res.status(400).json({
           status: 'error',
           message: 'Computer ID is required'
@@ -278,7 +283,7 @@ class ComputerController {
       }
       
       if (!error_type || !error_message) {
-        logger.debug('Missing required error fields:', { 
+        logger.debug('Missing required error fields', { 
           hasErrorType: !!error_type, 
           hasErrorMessage: !!error_message 
         });
@@ -292,13 +297,15 @@ class ComputerController {
       const errorData = {
         error_type,
         error_message,
-        error_details: error_details || {},
-        reported_at: new Date(),
-        resolved: false
+        error_details: error_details || {}
       };
+      
       const result = await computerService.reportComputerError(id, errorData);
       
-      logger.info(`Error reported successfully for computer ID ${id}: Error ID ${result.error.id}`);
+      logger.info(`Error reported for computer ID ${id}: Error ID ${result.error.id}`, {
+        errorType: error_type,
+        userId: req.user?.id
+      });
       
       return res.status(201).json({
         status: 'success',
@@ -351,7 +358,7 @@ class ComputerController {
       const { resolution_notes } = req.body;
       
       if (!computerId || !errorId) {
-        logger.debug('Invalid IDs provided for error resolution:', { 
+        logger.debug('Invalid IDs provided for error resolution', { 
           computerId: req.params.computerId, 
           errorId: req.params.errorId 
         });
@@ -361,9 +368,12 @@ class ComputerController {
           message: 'Computer ID and Error ID are required'
         });
       }
+
       const result = await computerService.resolveComputerError(computerId, errorId, resolution_notes);
       
-      logger.info(`Error ID ${errorId} for computer ID ${computerId} resolved successfully by user ID ${req.user?.id}`);
+      logger.info(`Error ID: ${errorId} for computer ID: ${computerId} resolved by user ID: ${req.user?.id}`, {
+        hasNotes: !!resolution_notes
+      });
       
       return res.status(200).json({
         status: 'success',
