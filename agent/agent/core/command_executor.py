@@ -76,6 +76,8 @@ class CommandExecutor:
             except Exception as e:
                 logger.error(f"Failed to initialize or register handler '{handler_type}' ({handler_class.__name__}): {e}", exc_info=True)
 
+    # === PUBLIC METHODS ===
+    
     def start_workers(self):
         """
         Starts worker threads to process the command queue.
@@ -95,7 +97,157 @@ class CommandExecutor:
             thread.start()
             self._worker_threads.append(thread)
         logger.info("Worker threads started.")
+        
+    def handle_incoming_command(self, command_data: Dict[str, Any]):
+        """
+        Callback method to validate and queue incoming commands.
+        Uses helper methods for validation and queuing.
+        """
+        is_valid, validation_error_msg = self._validate_incoming_command(command_data)
 
+        command_id = command_data.get('commandId') or command_data.get('id')
+        command_type = command_data.get('commandType', command_data.get('type', 'console')).lower()
+
+        if not is_valid:
+            logger.error(f"Invalid command data received (ID: {command_id or 'N/A'}): {validation_error_msg}")
+            if command_id:
+                error_result = self._create_error_result(
+                    command_id, command_type, INPUT_ERROR_TYPE, validation_error_msg or "Invalid command data."
+                )
+                self._send_result(command_id, error_result)
+            return
+
+        try:
+            command = cast(str, command_data.get('command'))
+
+            self._queue_command(command, command_id, command_type)
+
+        except Exception as e:
+            err_id = command_id or 'N/A'
+            logger.error(f"Error queuing command data for ID '{err_id}': {e}", exc_info=True)
+            if err_id != 'N/A':
+                 error_result = self._create_error_result(
+                    err_id, command_type, EXECUTOR_ERROR_TYPE,
+                    f"Agent internal error while queuing command: {e}"
+                 )
+                 self._send_result(err_id, error_result)
+    
+    def stop(self, graceful: bool = True, timeout_factor: float = 1.1):
+        """
+        Signals worker threads to stop and waits for them to finish.
+        Incorporates logic previously in _join_worker_threads and clear_command_queue.
+
+        :param graceful: If True, waits for the queue to be processed. If False, clears queue first.
+        :param timeout_factor: Multiplier for command timeout to wait for threads.
+        """
+        logger.info(f"Stopping CommandExecutor (graceful={graceful})...")
+
+        if not graceful:
+            logger.warning("Performing non-graceful shutdown. Clearing command queue.")
+            cleared_count = 0
+            while True:
+                try:
+                    self._command_queue.get_nowait()
+                    self._command_queue.task_done()
+                    cleared_count += 1
+                except queue.Empty:
+                    break
+                except Exception as e:
+                    logger.error(f"Unexpected error clearing command queue item during non-graceful stop: {e}", exc_info=True)
+                    time.sleep(0.1)
+            if cleared_count > 0:
+                 logger.warning(f"Cleared {cleared_count} pending commands.")
+
+        self._stop_event.set()
+
+        if graceful and not self._command_queue.empty():
+             logger.info(f"Waiting for remaining {self._command_queue.qsize()} commands to be processed...")
+             try:
+                  self._command_queue.join()
+                  logger.info("Command queue processed.")
+             except Exception as e:
+                  logger.error(f"Error waiting for command queue to join: {e}")
+
+        logger.debug("Waiting for worker threads to terminate...")
+        join_timeout = (self.command_timeout * timeout_factor) if self.command_timeout else 10.0
+        start_join_time = time.time()
+        threads_to_join = list(self._worker_threads)
+
+        for thread in threads_to_join:
+             remaining_time = max(0, join_timeout - (time.time() - start_join_time))
+             thread.join(timeout=remaining_time)
+             if thread.is_alive():
+                 logger.warning(f"Worker thread {thread.name} did not terminate gracefully within timeout ({join_timeout}s).")
+
+        self._worker_threads = []
+
+        final_cleared_count = 0
+        while True:
+            try:
+                self._command_queue.get_nowait()
+                self._command_queue.task_done()
+                final_cleared_count += 1
+            except queue.Empty:
+                break
+            except Exception as e:
+                 logger.error(f"Unexpected error clearing command queue item during final cleanup: {e}", exc_info=True)
+                 time.sleep(0.1)
+
+        if final_cleared_count > 0:
+             logger.warning(f"Cleared {final_cleared_count} commands during final cleanup after worker termination.")
+
+        logger.info("CommandExecutor stopped.")
+
+    # === COMMAND VALIDATION AND QUEUEING ===
+    
+    def _validate_incoming_command(self, command_data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+        """
+        Validates the raw command data dictionary. Logs errors internally.
+
+        :return: Tuple (is_valid: bool, error_message: Optional[str])
+        """
+        command_id = command_data.get('commandId') or command_data.get('id')
+        command = command_data.get('command')
+
+        error_message: Optional[str] = None
+
+        if not command_id:
+            error_message = "Received command message missing required 'commandId' or 'id'."
+            logger.error(error_message + f" Data: {command_data}")
+            return False, error_message
+        if command is None:
+            error_message = "Required 'command' field is missing."
+            logger.error(f"{error_message} (ID: {command_id}) Data: {command_data}")
+            return False, error_message
+        if not isinstance(command, str):
+             error_message = f"'command' field must be a string (received {type(command).__name__})."
+             logger.error(f"{error_message} (ID: {command_id}) Data: {command_data}")
+             return False, error_message
+        if not command.strip():
+             error_message = "'command' field cannot be empty or whitespace."
+             logger.error(f"{error_message} (ID: {command_id}) Data: {command_data}")
+             return False, error_message
+
+        return True, None
+
+    def _queue_command(self, command: str, command_id: str, command_type: str):
+        """
+        Attempts to put the command onto the queue. Sends error result if full.
+        Does not raise exceptions anymore. Returns True on success, False on failure (queue full).
+        """
+        try:
+             self._command_queue.put((command, command_id, command_type), block=False)
+             logger.info(f"Command queued: {command_id} (Type: {command_type}, Queue size: {self._command_queue.qsize()}/{self.max_queue_size})")
+        except queue.Full:
+             logger.error(f"Command queue is full (max={self.max_queue_size}). Cannot queue command: {command_id}")
+             error_result = self._create_error_result(
+                command_id, command_type, QUEUE_ERROR_TYPE,
+                "Agent command queue is full. Please try again later."
+             )
+             self._send_result(command_id, error_result)
+    
+    # === WORKER AND EXECUTION LOGIC ===
+    
     def _worker_loop(self):
         """
         The main loop for each worker thread. Fetches commands from the queue
@@ -203,88 +355,9 @@ class CommandExecutor:
 
         if result_data['success'] and result_data.get('result') is None:
              logger.warning(f"Handler '{command_type}' for command '{command_id}' succeeded but did not set 'result' field. Sending null.")
-
-    def handle_incoming_command(self, command_data: Dict[str, Any]):
-        """
-        Callback method to validate and queue incoming commands.
-        Uses helper methods for validation and queuing.
-        """
-        is_valid, validation_error_msg = self._validate_incoming_command(command_data)
-
-        command_id = command_data.get('commandId') or command_data.get('id')
-        command_type = command_data.get('commandType', command_data.get('type', 'console')).lower()
-
-        if not is_valid:
-            logger.error(f"Invalid command data received (ID: {command_id or 'N/A'}): {validation_error_msg}")
-            if command_id:
-                error_result = self._create_error_result(
-                    command_id, command_type, INPUT_ERROR_TYPE, validation_error_msg or "Invalid command data."
-                )
-                self._send_result(command_id, error_result)
-            return
-
-        try:
-            command = cast(str, command_data.get('command'))
-
-            self._queue_command(command, command_id, command_type)
-
-        except Exception as e:
-            err_id = command_id or 'N/A'
-            logger.error(f"Error queuing command data for ID '{err_id}': {e}", exc_info=True)
-            if err_id != 'N/A':
-                 error_result = self._create_error_result(
-                    err_id, command_type, EXECUTOR_ERROR_TYPE,
-                    f"Agent internal error while queuing command: {e}"
-                 )
-                 self._send_result(err_id, error_result)
-
-    def _validate_incoming_command(self, command_data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
-        """
-        Validates the raw command data dictionary. Logs errors internally.
-
-        :return: Tuple (is_valid: bool, error_message: Optional[str])
-        """
-        command_id = command_data.get('commandId') or command_data.get('id')
-        command = command_data.get('command')
-
-        error_message: Optional[str] = None
-
-        if not command_id:
-            error_message = "Received command message missing required 'commandId' or 'id'."
-            logger.error(error_message + f" Data: {command_data}")
-            return False, error_message
-        if command is None:
-            error_message = "Required 'command' field is missing."
-            logger.error(f"{error_message} (ID: {command_id}) Data: {command_data}")
-            return False, error_message
-        if not isinstance(command, str):
-             error_message = f"'command' field must be a string (received {type(command).__name__})."
-             logger.error(f"{error_message} (ID: {command_id}) Data: {command_data}")
-             return False, error_message
-        if not command.strip():
-             error_message = "'command' field cannot be empty or whitespace."
-             logger.error(f"{error_message} (ID: {command_id}) Data: {command_data}")
-             return False, error_message
-
-        return True, None
-
-    def _queue_command(self, command: str, command_id: str, command_type: str):
-        """
-        Attempts to put the command onto the queue. Sends error result if full.
-        Does not raise exceptions anymore. Returns True on success, False on failure (queue full).
-        """
-        try:
-             self._command_queue.put((command, command_id, command_type), block=False)
-             logger.info(f"Command queued: {command_id} (Type: {command_type}, Queue size: {self._command_queue.qsize()}/{self.max_queue_size})")
-        except queue.Full:
-             logger.error(f"Command queue is full (max={self.max_queue_size}). Cannot queue command: {command_id}")
-             error_result = self._create_error_result(
-                command_id, command_type, QUEUE_ERROR_TYPE,
-                "Agent command queue is full. Please try again later."
-             )
-             self._send_result(command_id, error_result)
-
-
+    
+    # === RESULT AND ERROR HANDLING ===
+    
     def _send_result(self, command_id: str, result_data: Dict[str, Any]):
         """Sends the final result dictionary back via the WebSocket client."""
         if not self.ws_client:
@@ -325,70 +398,4 @@ class CommandExecutor:
         if exception_type:
              payload["exception"] = exception_type
         return payload
-
-    def stop(self, graceful: bool = True, timeout_factor: float = 1.1):
-        """
-        Signals worker threads to stop and waits for them to finish.
-        Incorporates logic previously in _join_worker_threads and clear_command_queue.
-
-        :param graceful: If True, waits for the queue to be processed. If False, clears queue first.
-        :param timeout_factor: Multiplier for command timeout to wait for threads.
-        """
-        logger.info(f"Stopping CommandExecutor (graceful={graceful})...")
-
-        if not graceful:
-            logger.warning("Performing non-graceful shutdown. Clearing command queue.")
-            cleared_count = 0
-            while True:
-                try:
-                    self._command_queue.get_nowait()
-                    self._command_queue.task_done()
-                    cleared_count += 1
-                except queue.Empty:
-                    break
-                except Exception as e:
-                    logger.error(f"Unexpected error clearing command queue item during non-graceful stop: {e}", exc_info=True)
-                    time.sleep(0.1)
-            if cleared_count > 0:
-                 logger.warning(f"Cleared {cleared_count} pending commands.")
-
-        self._stop_event.set()
-
-        if graceful and not self._command_queue.empty():
-             logger.info(f"Waiting for remaining {self._command_queue.qsize()} commands to be processed...")
-             try:
-                  self._command_queue.join()
-                  logger.info("Command queue processed.")
-             except Exception as e:
-                  logger.error(f"Error waiting for command queue to join: {e}")
-
-        logger.debug("Waiting for worker threads to terminate...")
-        join_timeout = (self.command_timeout * timeout_factor) if self.command_timeout else 10.0
-        start_join_time = time.time()
-        threads_to_join = list(self._worker_threads)
-
-        for thread in threads_to_join:
-             remaining_time = max(0, join_timeout - (time.time() - start_join_time))
-             thread.join(timeout=remaining_time)
-             if thread.is_alive():
-                 logger.warning(f"Worker thread {thread.name} did not terminate gracefully within timeout ({join_timeout}s).")
-
-        self._worker_threads = []
-
-        final_cleared_count = 0
-        while True:
-            try:
-                self._command_queue.get_nowait()
-                self._command_queue.task_done()
-                final_cleared_count += 1
-            except queue.Empty:
-                break
-            except Exception as e:
-                 logger.error(f"Unexpected error clearing command queue item during final cleanup: {e}", exc_info=True)
-                 time.sleep(0.1)
-
-        if final_cleared_count > 0:
-             logger.warning(f"Cleared {final_cleared_count} commands during final cleanup after worker termination.")
-
-        logger.info("CommandExecutor stopped.")
 

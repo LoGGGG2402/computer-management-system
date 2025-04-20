@@ -10,7 +10,6 @@ import time
 import logging
 import logging.handlers
 
-
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 if project_root not in sys.path:
@@ -226,16 +225,16 @@ def _load_configuration(args, logger, storage_path, executable_path):
         return None
 
 
-def _initialize_state(config_manager, logger):
+def _initialize_state(logger):
     """
     Initialize the state manager.
     
-    :param config_manager: ConfigManager instance
     :param logger: Logger instance
     :return: StateManager instance or None on error
     """
     try:
-        state_manager = StateManager(config_manager)
+        state_manager = StateManager()
+        logger.info("State Manager initialized successfully.")
         return state_manager
     except ValueError as e:
         logger.critical(f"Failed to initialize State Manager: {e}")
@@ -347,7 +346,6 @@ def _acquire_instance_lock(storage_path, logger):
         display_error(f"Unexpected error acquiring lock: {e}", "LOCK ERROR")
         return None
 
-
 def main() -> int:
     """
     Main function to initialize and start the agent.
@@ -377,7 +375,7 @@ def main() -> int:
         return 1
     
     # Step 5: Initialize state manager
-    state_manager = _initialize_state(config_manager, logger)
+    state_manager = _initialize_state(logger)
     if not state_manager:
         return 1
     
@@ -416,6 +414,7 @@ def main() -> int:
             server_connector=server_connector,
             is_admin=is_admin,
         )
+
         logger.info("Starting Agent main loop...")
         agent_instance.start()
         logger.info("Agent main loop finished.")

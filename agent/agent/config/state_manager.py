@@ -9,9 +9,6 @@ from typing import Dict, Any, Optional, TYPE_CHECKING
 from ..utils import get_logger, save_json, load_json
 from ..system import determine_storage_path
 
-if TYPE_CHECKING:
-    from . import ConfigManager
-
 logger = get_logger(__name__)
 
 
@@ -30,7 +27,7 @@ class StateManager:
     Manages persistent agent state (device ID, room config, token).
     """
 
-    def __init__(self, config: 'ConfigManager'):
+    def __init__(self):
         """
         Initialize the StateManager. Determines storage path based on privileges.
 
@@ -38,10 +35,8 @@ class StateManager:
         :type config: ConfigManager
         :raises: ValueError: If storage path cannot be determined or created
         """
-        self.config = config
-        self.state_filename = self.config.get('agent.state_filename', 'agent_state.json')
         self.storage_path = determine_storage_path()
-        self.state_filepath = os.path.join(self.storage_path, self.state_filename)
+        self.state_filepath = os.path.join(self.storage_path, 'agent_state.json')
         self._state_cache: Optional[Dict[str, Any]] = None
         logger.info(f"StateManager initialized. State file: {self.state_filepath}")
 

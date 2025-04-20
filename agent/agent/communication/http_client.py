@@ -3,10 +3,15 @@ HTTP client module for communication with the backend server's Agent API.
 """
 import json
 import requests
-from typing import Dict, Any, Tuple, Optional, TYPE_CHECKING
+import os
+import time
+import tempfile
+from urllib.parse import urljoin
+from typing import Dict, Any, Tuple, Optional, TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     from ..config import ConfigManager
+
 from ..utils import get_logger
 
 logger = get_logger(__name__)
@@ -32,8 +37,43 @@ class HttpClient:
         self.base_url = f"{base_url.rstrip('/')}/api/agent"
 
         self.timeout = self.config.get('http_client.request_timeout_sec', 15)
-
+        
+        # Agent identification info
+        self._agent_id = None
+        self._agent_token = None
+        
         logger.info(f"HTTP client initialized. Base API URL: {self.base_url}, Timeout: {self.timeout}s")
+
+    def set_auth_info(self, agent_id: str, agent_token: str):
+        """
+        Set the agent ID and token for authenticated requests.
+        
+        :param agent_id: Agent ID for authentication
+        :type agent_id: str
+        :param agent_token: Agent authentication token
+        :type agent_token: str
+        """
+        self._agent_id = agent_id
+        self._agent_token = agent_token
+        logger.debug(f"Auth info set for agent ID: {agent_id}")
+
+    def _get_auth_headers(self) -> Dict[str, str]:
+        """
+        Get authentication headers for API requests.
+        
+        :return: Dictionary of headers
+        :rtype: Dict[str, str]
+        """
+        headers = {
+            'User-Agent': 'ComputerManagementAgent/1.0',
+            'Content-Type': 'application/json'
+        }
+        
+        if self._agent_id and self._agent_token:
+            headers['X-Agent-Id'] = self._agent_id
+            headers['Authorization'] = f"Bearer {self._agent_token}"
+        
+        return headers
 
     def _make_request(self, method: str, endpoint: str, **kwargs) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
@@ -155,14 +195,10 @@ class HttpClient:
             if 'message' not in error_response: error_response['message'] = error_message
             return False, error_response
 
-    def send_hardware_info(self, agent_token: str, unique_agent_id: str, hardware_data: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
+    def send_hardware_info(self, hardware_data: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
         """
         Sends hardware information to the backend server. Requires authentication.
         
-        :param agent_token: Agent authentication token
-        :type agent_token: str
-        :param unique_agent_id: Unique identifier for this agent
-        :type unique_agent_id: str
         :param hardware_data: Dictionary containing hardware information
         :type hardware_data: Dict[str, Any]
         :return: Tuple containing success status and response data
@@ -170,12 +206,11 @@ class HttpClient:
         """
         endpoint = "/hardware-info"
         headers = {
-            "Authorization": f"Bearer {agent_token}",
-            "X-Agent-Id": unique_agent_id,
+            "Authorization": f"Bearer {self._agent_token}",
+            "X-Agent-Id": self._agent_id,
             "Content-Type": "application/json"
         }
 
-        logger.info(f"Sending hardware info for agent {unique_agent_id}...")
         logger.debug(f"Hardware payload: {json.dumps(hardware_data)}")
 
         response_json, error_message = self._make_request('POST', endpoint, json=hardware_data, headers=headers)
@@ -188,3 +223,161 @@ class HttpClient:
             if 'message' not in error_response: error_response['message'] = error_message
 
             return False, error_response
+            
+    def check_for_update(self, current_version: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
+        """
+        Check for agent updates from the server.
+        
+        :param current_version: Current agent version
+        :type current_version: str
+        :return: Tuple (success_flag, update_info_or_none)
+        :rtype: Tuple[bool, Optional[Dict[str, Any]]]
+        """
+        if not self._agent_id or not self._agent_token:
+            logger.error("Cannot check for updates: Agent ID or token not set")
+            return False, None
+            
+        url = urljoin(self.base_url, "/check_update")
+        headers = self._get_auth_headers()
+        params = {"current_version": current_version}
+        
+        try:
+            logger.info(f"Checking for updates (current version: {current_version})...")
+            response = requests.get(url, headers=headers, params=params, timeout=self.timeout)
+            
+            if response.status_code == 204:
+                # No updates available
+                logger.info("No updates available")
+                return True, None
+                
+            if response.status_code == 200:
+                # Update available
+                update_info = response.json()
+                logger.info(f"Update available: {update_info.get('version', 'Unknown')}")
+                return True, update_info
+                
+            logger.error(f"Server returned unexpected status code during update check: {response.status_code}")
+            return False, None
+            
+        except requests.RequestException as e:
+            logger.error(f"Error checking for updates: {e}")
+            return False, None
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing update check response: {e}")
+            return False, None
+        except Exception as e:
+            logger.error(f"Unexpected error during update check: {e}", exc_info=True)
+            return False, None
+
+    def download_file(self, url: str, save_path: str) -> Tuple[bool, str]:
+        """
+        Download a file from the server with authentication.
+        
+        :param url: URL to download from (can be relative to base URL)
+        :type url: str
+        :param save_path: Path to save the downloaded file
+        :type save_path: str
+        :return: Tuple (success_flag, error_message_or_empty_string)
+        :rtype: Tuple[bool, str]
+        """
+        if not self._agent_id or not self._agent_token:
+            logger.error("Cannot download file: Agent ID or token not set")
+            return False, "Missing authentication credentials"
+            
+        # Handle both absolute and relative URLs
+        if not url.startswith("http"):
+            url = urljoin(self.base_url, url)
+            
+        headers = self._get_auth_headers()
+        
+        try:
+            logger.info(f"Downloading file from {url} to {save_path}...")
+            
+            # Ensure target directory exists
+            os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
+            
+            # Download with streaming to handle large files
+            with requests.get(url, headers=headers, stream=True, timeout=self.timeout) as response:
+                if response.status_code != 200:
+                    error_msg = f"Server returned status {response.status_code} when downloading file"
+                    logger.error(error_msg)
+                    return False, error_msg
+                    
+                # Save to a temporary file first, then move to final destination
+                with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                    temp_path = temp_file.name
+                    
+                    # Download with progress tracking for large files
+                    total_size = int(response.headers.get('content-length', 0))
+                    downloaded = 0
+                    last_log_time = time.time()
+                    
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            temp_file.write(chunk)
+                            downloaded += len(chunk)
+                            
+                            # Log progress periodically (every 3 seconds)
+                            current_time = time.time()
+                            if current_time - last_log_time > 3:
+                                if total_size > 0:
+                                    progress = (downloaded / total_size) * 100
+                                    logger.debug(f"Download progress: {progress:.1f}% ({downloaded}/{total_size} bytes)")
+                                else:
+                                    logger.debug(f"Download progress: {downloaded} bytes")
+                                last_log_time = current_time
+                    
+                # Move temp file to final destination
+                import shutil
+                shutil.move(temp_path, save_path)
+                
+            logger.info(f"File downloaded successfully to {save_path}")
+            return True, ""
+            
+        except requests.RequestException as e:
+            error_msg = f"Network error downloading file: {e}"
+            logger.error(error_msg)
+            return False, error_msg
+        except (IOError, OSError) as e:
+            error_msg = f"I/O error saving file: {e}"
+            logger.error(error_msg)
+            return False, error_msg
+        except Exception as e:
+            error_msg = f"Unexpected error downloading file: {e}"
+            logger.error(error_msg, exc_info=True)
+            return False, error_msg
+
+    def report_error(self, error_data: Dict[str, Any]) -> bool:
+        """
+        Report an error to the server.
+        
+        :param error_data: Error data to report
+        :type error_data: Dict[str, Any]
+        :return: True if sent successfully, False otherwise
+        :rtype: bool
+        """
+        if not self._agent_id or not self._agent_token:
+            logger.error("Cannot report error: Agent ID or token not set")
+            return False
+            
+        url = urljoin(self.base_url, "/report-error")
+        headers = self._get_auth_headers()
+        headers["Content-Type"] = "application/json"
+        
+        try:
+            logger.info(f"Reporting error to server: {error_data.get('error_type', 'Unknown')}")
+            response = requests.post(url, headers=headers, json=error_data, timeout=self.timeout)
+            
+            if response.status_code == 204:  # No content, success
+                logger.info("Error report sent successfully")
+                return True
+                
+            logger.error(f"Server returned unexpected status code for error report: {response.status_code}")
+            return False
+            
+        except requests.RequestException as e:
+            logger.error(f"Network error reporting error: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error sending error report: {e}", exc_info=True)
+            return False

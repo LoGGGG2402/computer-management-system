@@ -1,9 +1,9 @@
 {
     "server_url": "http://192.168.159.130:3000",
-
     "agent": {
         "status_report_interval_sec": 30,
-        "state_filename": "agent_state.json"
+        "enable_auto_update": true,
+        "auto_update_interval_sec": 86400
     },
     "http_client": {
         "request_timeout_sec": 15
@@ -16,6 +16,7 @@
     "command_executor": {
         "default_timeout_sec": 300,
         "max_parallel_commands": 2,
-        "max_queue_size": 100
+        "max_queue_size": 100,
+        "console_encoding": "utf-8"
     }
 }

@@ -1,4 +1,3 @@
-
 """
 Windows specific utility functions for the agent.
 """

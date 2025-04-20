@@ -4,7 +4,9 @@ Core Agent module for the Computer Management System.
 import time
 import threading
 import pywintypes
-from typing import Optional, TYPE_CHECKING
+import os
+import sys
+from typing import Optional, TYPE_CHECKING, Dict, Any
 
 if TYPE_CHECKING:
     from ..communication import WSClient, ServerConnector
@@ -13,6 +15,7 @@ if TYPE_CHECKING:
     from . import CommandExecutor
     
 from . import AgentState
+from .update_handler import UpdateHandler
 from ..ipc import NamedPipeIPCServer
 
 from ..utils import get_logger
@@ -70,6 +73,8 @@ class Agent:
         self._running = threading.Event()
         self._status_timer: Optional[threading.Timer] = None
         self._ipc_server: Optional[NamedPipeIPCServer] = None
+        self._error_reporting_thread: Optional[threading.Thread] = None
+        self._error_reporting_complete = threading.Event()
 
         self.config = config_manager
         self.state_manager = state_manager
@@ -78,6 +83,16 @@ class Agent:
         self.lock_manager = lock_manager
         self.server_connector = server_connector
         self.is_admin = is_admin
+        self.http_client = self.server_connector.http_client
+
+        # Initialize update handler
+        self.update_handler = UpdateHandler(
+            state_manager=self.state_manager,
+            http_client=self.http_client,
+            server_connector=self.server_connector,
+            set_state_callback=self._set_state,
+            shutdown_callback=self.graceful_shutdown
+        )
 
         self.status_report_interval = self.config.get('agent.status_report_interval_sec', 30)
         logger.info(f"Agent Config: Status Interval={self.status_report_interval}s")
@@ -92,67 +107,14 @@ class Agent:
             self._set_state(AgentState.STOPPED)
             raise RuntimeError("Could not determine Room Configuration.")
 
+        # Register handlers for commands and update notifications
         self.ws_client.register_message_handler(self.command_executor.handle_incoming_command)
+        
+        # Register update handler - only register with WebSocket client
+        # Server connector will get updates through WebSocket events
+        self.ws_client.register_update_handler(self._handle_new_version_event)
 
         logger.info(f"Agent initialized (pre-auth). Device ID: {self.device_id}, Room: {self.room_config.get('room', 'N/A')}")
-
-    def _set_state(self, new_state: AgentState):
-        """
-        Sets the agent's state thread-safely and logs the transition.
-        
-        :param new_state: New state to set
-        :type new_state: AgentState
-        """
-        if not isinstance(new_state, AgentState):
-            logger.warning(f"Attempted to set invalid state type: {type(new_state)}")
-            return
-
-        with self._state_lock:
-            if self._state != new_state:
-                logger.info(f"State transition: {self._state.name} -> {new_state.name}")
-                self._state = new_state
-
-    def get_state(self) -> AgentState:
-        """
-        Gets the current agent state thread-safely.
-        
-        :return: Current agent state
-        :rtype: AgentState
-        """
-        with self._state_lock:
-            return self._state
-
-    def request_restart(self):
-        """
-        Called by the IPC server when a valid force_restart command is received.
-        """
-        logger.info("Restart requested via IPC. Initiating graceful shutdown.")
-        self._set_state(AgentState.FORCE_RESTARTING)
-        threading.Thread(target=self.graceful_shutdown, name="GracefulShutdownThread").start()
-
-    def _schedule_next_status_report(self):
-        """
-        Schedules the next status report using a Timer thread.
-        The timer calls server_connector.send_status_update directly.
-        """
-        if not self._running.is_set(): return
-        
-        if self._status_timer and self._status_timer.is_alive():
-            self._status_timer.cancel()
-            
-        def status_update_callback():
-            if not self._running.is_set(): return
-            
-            logger.debug("Sending status update via ServerConnector.")
-            self.server_connector.send_status_update()
-            
-            if self._running.is_set():
-                self._schedule_next_status_report()
-                
-        self._status_timer = threading.Timer(self.status_report_interval, status_update_callback)
-        self._status_timer.daemon = True
-        self._status_timer.start()
-        logger.debug(f"Next status report scheduled in {self.status_report_interval} seconds.")
 
     def start(self):
         """
@@ -192,6 +154,9 @@ class Agent:
                         logger.info("Updating IPC Server with real authentication token...")
                         self._ipc_server.update_token(agent_token_for_ipc)
                         logger.info("IPC Server token updated successfully.")
+                    
+                    # Start error reporting thread after successful authentication
+                    self._start_error_reporting_thread()
                 else:
                     logger.warning("Authentication failed, retrying in 10 seconds...")
                     time.sleep(10)
@@ -201,12 +166,18 @@ class Agent:
                 self.graceful_shutdown()
                 return
             # --- Authentication End ---
-
             self.command_executor.start_workers()
 
             # --- Start Status Reporting ---
             self._schedule_next_status_report()
             # --- Status Reporting End ---
+            
+            # --- Start Update Check ---
+            from ..version import __version__ as current_version
+            self.update_handler.check_for_updates_proactively(
+                current_version=current_version,
+                current_state=self.get_state(),
+            )  # --- Update Check End ---
 
             self._set_state(AgentState.IDLE)
             logger.info("Agent started successfully. Monitoring for commands and reporting status.")
@@ -239,6 +210,13 @@ class Agent:
         logger.info("================ Initiating Graceful Shutdown ================")
         self._running.clear()
 
+        # Wait for error reporting thread to complete if it's running
+        if self._error_reporting_thread and self._error_reporting_thread.is_alive():
+            logger.debug("Waiting for error reporting thread to complete...")
+            self._error_reporting_complete.wait(timeout=10.0)
+            if not self._error_reporting_complete.is_set():
+                logger.warning("Error reporting thread did not complete within timeout")
+
         if self._ipc_server and self._ipc_server.is_alive():
             logger.debug("Stopping Named Pipe IPC server...")
             self._ipc_server.stop()
@@ -266,7 +244,6 @@ class Agent:
             else:
                 logger.debug("IPC server thread joined.")
 
-
         if self.lock_manager:
             logger.info("Releasing agent lock file...")
             self.lock_manager.release()
@@ -276,4 +253,121 @@ class Agent:
 
         self._set_state(AgentState.STOPPED)
         logger.info("================ Agent Shutdown Complete ================")
+        
+        # Flush all log handlers to ensure logs are written to disk
+        import logging
+        logging.shutdown()
+        
+        # Exit the process if this is part of a complete shutdown (not an update preparation)
+        if current_state != AgentState.UPDATING_PREPARING_SHUTDOWN:
+            sys.exit(0)
 
+    def request_restart(self):
+        """
+        Called by the IPC server when a valid force_restart command is received.
+        """
+        logger.info("Restart requested via IPC. Initiating graceful shutdown.")
+        self._set_state(AgentState.FORCE_RESTARTING)
+        threading.Thread(target=self.graceful_shutdown, name="GracefulShutdownThread").start()
+
+    def get_state(self) -> AgentState:
+        """
+        Gets the current agent state thread-safely.
+        
+        :return: Current agent state
+        :rtype: AgentState
+        """
+        with self._state_lock:
+            return self._state
+
+    def _set_state(self, new_state: AgentState):
+        """
+        Sets the agent's state thread-safely and logs the transition.
+        
+        :param new_state: New state to set
+        :type new_state: AgentState
+        :return: True if state was changed, False if the transition is not allowed
+        :rtype: bool
+        """
+        if not isinstance(new_state, AgentState):
+            logger.warning(f"Attempted to set invalid state type: {type(new_state)}")
+            return False
+
+        with self._state_lock:
+            current_state = self._state
+            
+            # Special case: don't allow transitions from update-related states back to IDLE
+            # unless coming from UPDATING_STARTING (allows rollback if update initialization fails)
+            if (current_state.name.startswith('UPDATING_') and 
+                current_state != AgentState.UPDATING_STARTING and 
+                new_state == AgentState.IDLE):
+                logger.warning(f"Blocked state transition: {current_state.name} -> {new_state.name} (not allowed during update)")
+                return False
+                
+            if self._state != new_state:
+                logger.info(f"State transition: {self._state.name} -> {new_state.name}")
+                self._state = new_state
+                return True
+            return False
+
+    def _schedule_next_status_report(self):
+        """
+        Schedules the next status report using a Timer thread.
+        The timer calls server_connector.send_status_update directly.
+        """
+        if not self._running.is_set(): return
+        
+        if self._status_timer and self._status_timer.is_alive():
+            self._status_timer.cancel()
+            
+        def status_update_callback():
+            if not self._running.is_set(): return
+            
+            logger.debug("Sending status update via ServerConnector.")
+            self.server_connector.send_status_update()
+            
+            if self._running.is_set():
+                self._schedule_next_status_report()
+                
+        self._status_timer = threading.Timer(self.status_report_interval, status_update_callback)
+        self._status_timer.daemon = True
+        self._status_timer.start()
+        logger.debug(f"Next status report scheduled in {self.status_report_interval} seconds.")
+
+    def _handle_new_version_event(self, payload: Dict[str, Any]):
+        """
+        Handles new version notifications by delegating to the update handler.
+        
+        :param payload: New version event payload
+        :type payload: Dict[str, Any]
+        """
+        # Delegate to update handler
+        self.update_handler.handle_new_version_event(payload, self.get_state())
+
+    def _start_error_reporting_thread(self):
+        """
+        Starts a thread to read and report any buffered error files from previous runs.
+        """
+        if self._error_reporting_thread and self._error_reporting_thread.is_alive():
+            logger.warning("Error reporting thread is already running")
+            return
+
+        self._error_reporting_complete.clear()
+        
+        # Get the error directory from the state manager
+        error_dir = os.path.join(self.state_manager.storage_path, "error_reports")
+        if not error_dir:
+            logger.warning("Cannot determine error directory path, skipping error reporting")
+            self._error_reporting_complete.set()
+            return
+            
+        # Create and start the thread
+        self._error_reporting_thread = threading.Thread(
+            target=self.server_connector.process_error_reports_thread,
+            args=(error_dir, self._error_reporting_complete.set),
+            name="ErrorReportingThread", 
+            daemon=True
+        )
+        
+        logger.info("Starting error reporting thread")
+        self._error_reporting_thread.start()

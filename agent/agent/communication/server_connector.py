@@ -1,7 +1,9 @@
 """
 Server connector module for handling authentication and communication with the server.
 """
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Dict, Any, Optional, TYPE_CHECKING, Callable, Tuple
+import threading
+import datetime
 
 if TYPE_CHECKING:
     from ..config import ConfigManager, StateManager
@@ -9,7 +11,7 @@ if TYPE_CHECKING:
     from ..monitoring import SystemMonitor
 
 from ..ui import prompt_for_mfa, display_registration_success
-from ..utils import get_logger
+from ..utils import get_logger, utils
 
 logger = get_logger(__name__)
 
@@ -201,8 +203,7 @@ class ServerConnector:
              logger.info("--- Authentication Failed (No Token) ---")
              return False
         
-
-
+        self.http_client.set_auth_info(self.device_id, self.agent_token)
         
         logger.debug("Step 2: Sending Initial Hardware Information")
         if not self.send_hardware_info():
@@ -212,9 +213,6 @@ class ServerConnector:
             
             return False
         logger.info("Initial hardware information sent successfully.")
-        
-
-
         
         logger.debug("Step 3: Establishing WebSocket Connection")
         if not self.connect_websocket():
@@ -296,19 +294,10 @@ class ServerConnector:
         :return: True if hardware info sent successfully, False otherwise
         :rtype: bool
         """
-        if not self.agent_token:
-            logger.error("Cannot send hardware info: Agent token is missing.")
-            return False
-        if not self.device_id:
-            logger.error("Cannot send hardware info: Device ID is missing.")
-            return False
-
         logger.info("Collecting and sending hardware information...")
         try:
             hardware_info = self.system_monitor.get_hardware_info()
             api_call_success, response = self.http_client.send_hardware_info(
-                self.agent_token,
-                self.device_id,
                 hardware_info
             )
             if api_call_success:
@@ -325,4 +314,153 @@ class ServerConnector:
     def get_agent_token(self) -> Optional[str]:
         """Returns the current agent token held by the connector."""
         return self.agent_token
+        
+    def report_error_to_backend(self, error_type: str, message: str, details: Dict[str, Any] = None, stack_trace: str = None):
+        """
+        Reports an error to the backend server.
+        
+        :param error_type: Type of error from standardized list
+        :type error_type: str
+        :param message: Error message
+        :type message: str
+        :param details: Additional error details
+        :type details: Dict[str, Any], optional
+        :param stack_trace: Stack trace if available
+        :type stack_trace: str, optional
+        """
+        from ..version import __version__ as current_version
+        
+        if details is None:
+            details = {}
+            
+        if stack_trace is None:
+            import traceback
+            stack_trace = ''.join(traceback.format_stack()[:-1])
+            
+        # Create standardized error data
+        error_details = details.copy()
+        error_details['stack_trace'] = stack_trace
+        error_details['agent_version'] = current_version
+            
+        error_data = {
+            "error_type": error_type,
+            "error_message": message,
+            "error_details": error_details,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+        
+        logger.error(f"Reporting error to backend: {error_type} - {message}")
+        
+        # Try to report error directly
+        if not self.http_client.report_error(error_data):
+            # If direct reporting fails, save to file for later reporting
+            from ..utils.utils import save_error_report
+            error_dir = self.state_manager.get_error_directory()
+            if error_dir:
+                success, file_path = save_error_report(error_data, error_dir)
+                if success:
+                    logger.info(f"Error saved to file for later reporting: {file_path}")
+                else:
+                    logger.error(f"Failed to save error report to file: {file_path}")
+            else:
+                logger.error("Could not save error report: Error directory path unavailable")
 
+    def process_error_reports(self, error_dir: str, max_retries: int = 3) -> Tuple[int, int]:
+        """
+        Process and report all error files from the error directory.
+        Reports and deletes each file individually after successful reporting.
+        
+        :param error_dir: Path to the error directory
+        :type error_dir: str
+        :param max_retries: Maximum number of retries for each error report
+        :type max_retries: int
+        :return: Tuple (successfully_reported_count, total_error_files_count)
+        :rtype: Tuple[int, int]
+        """
+        from ..utils.utils import read_buffered_error_reports
+        
+        # Read all buffered error reports
+        error_reports = read_buffered_error_reports(error_dir)
+        if not error_reports:
+            logger.info("No buffered error reports found to send")
+            return 0, 0
+            
+        logger.info(f"Found {len(error_reports)} buffered error reports to process")
+        
+        successfully_reported = 0
+        
+        for report in error_reports:
+            # Get the file path and remove it from the report data before sending
+            file_path = report.pop('_file_path', None)
+            if not file_path:
+                logger.warning("Error report missing file path, skipping")
+                continue
+                
+            # Try to send the error report with retries
+            success = False
+            for attempt in range(max_retries):
+                if self.http_client.report_error(report):
+                    # Successfully reported, delete the file
+                    try:
+                        import os
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                            logger.debug(f"Successfully deleted error file after reporting: {file_path}")
+                            successfully_reported += 1
+                            success = True
+                            break
+                        else:
+                            logger.warning(f"Error file not found (already removed?): {file_path}")
+                            success = True  # Consider it successful if file is already gone
+                            break
+                    except Exception as e:
+                        logger.error(f"Failed to delete error file {file_path} after successful reporting: {e}")
+                        # Consider it a partial success even if file deletion fails
+                        successfully_reported += 1
+                        success = True
+                        break
+                else:
+                    logger.warning(f"Failed to report error (attempt {attempt + 1}/{max_retries}): {file_path}")
+                    import time
+                    time.sleep(2)  # Wait before retry
+            
+            if not success:
+                logger.error(f"Failed to report error after {max_retries} attempts: {file_path}")
+                
+        logger.info(f"Completed error reporting: {successfully_reported}/{len(error_reports)} reports sent successfully")
+        return successfully_reported, len(error_reports)
+
+    def process_error_reports_thread(self, error_dir: str, completion_callback=None):
+        """
+        Thread function to process error reports. Designed to be run in a separate thread.
+        
+        :param error_dir: Path to the error directory
+        :type error_dir: str
+        :param completion_callback: Callback function to be called when processing is complete
+        :type completion_callback: callable, optional
+        """
+        from ..utils.utils import read_buffered_error_reports
+        
+        try:
+            logger.info(f"Checking for stored error reports in {error_dir}")
+            
+            # Report buffered errors
+            successfully_reported, total_reports = self.process_error_reports(error_dir)
+            
+            if successfully_reported > 0:
+                logger.info(f"Successfully reported {successfully_reported} error files")
+            
+            # Check if there are any remaining error files
+            remaining_reports = read_buffered_error_reports(error_dir)
+            
+            if remaining_reports:
+                logger.warning(f"{len(remaining_reports)} error reports remain unprocessed")
+            else:
+                logger.info("All error reports have been processed successfully")
+                
+        except Exception as e:
+            logger.error(f"Error in error reporting thread: {e}", exc_info=True)
+        finally:
+            logger.info("Error reporting thread finished")
+            if completion_callback:
+                completion_callback()

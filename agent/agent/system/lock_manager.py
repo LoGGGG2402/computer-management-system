@@ -1,6 +1,6 @@
 """
 Manages the agent's lock file to ensure only one instance runs.
-Phase 2: Uses file locking, PID, and timestamp checks.
+Windows-specific implementation using msvcrt for file locking.
 """
 import os
 import atexit
@@ -20,6 +20,7 @@ class LockManager:
     """
     Manages the agent.lock file for single instance control using file locking,
     PID, and timestamp checks. Includes stale lock detection and timestamp updates.
+    Windows-specific implementation.
     """
 
     def __init__(self, storage_path: str):
@@ -94,6 +95,7 @@ class LockManager:
         """
         Attempts to acquire the lock using atomic creation and file locking.
         Includes stale lock detection (PID check, timestamp check).
+        Windows-specific implementation using msvcrt.
 
         :return: True if the lock was acquired successfully, False otherwise
         :rtype: bool
@@ -276,7 +278,7 @@ class LockManager:
             if self._updater_thread.is_alive():
                 logger.warning("Timestamp updater thread did not stop gracefully.")
             else:
-                logger.debug("Timestamp updater thread stopped.")
+                logger.debug("Timestamp updater thread stopped gracefully.")
             self._updater_thread = None
 
     def _timestamp_update_loop(self):
@@ -288,21 +290,15 @@ class LockManager:
 
         while not self._stop_event.wait(update_interval):
             if self._lock_fd is None:
-                logger.warning("Timestamp update loop: Lock FD is None. Stopping loop.")
+                logger.warning("Lock file descriptor is None in updater thread. Stopping update loop.")
                 break
+
             try:
-                msvcrt.locking(self._lock_fd, msvcrt.LK_LOCK, 1)
-                logger.debug("Timestamp update loop: Acquired lock.")
-                try:
-                    self._write_lock_content(self._lock_fd)
-                finally:
-                    msvcrt.locking(self._lock_fd, msvcrt.LK_UNLCK, 1)
-                    logger.debug("Timestamp update loop: Released lock.")
-            except (IOError, OSError) as e:
-                logger.error(f"Error during timestamp update: {e}. Stopping loop.")
-                break
+                if not self._write_lock_content(self._lock_fd):
+                    logger.error("Failed to update timestamp in lock file. Continuing...")
+                else:
+                    logger.debug(f"Updated timestamp in lock file. Next update in {update_interval}s.")
             except Exception as e:
-                logger.error(f"Unexpected error during timestamp update: {e}. Stopping loop.", exc_info=True)
-                break
-        logger.debug("Timestamp update loop finished.")
+                logger.error(f"Error updating timestamp in lock file: {e}")
+                # Continue with the loop, don't break
 

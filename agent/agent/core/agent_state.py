@@ -1,4 +1,3 @@
-
 """
 Defines the possible operational states of the agent.
 """
@@ -15,23 +14,31 @@ class AgentState(Enum):
     
     States:
         STARTING: Initial state during agent startup and initialization
+        AUTHENTICATING: Agent is authenticating with the server or system
         IDLE: Normal operation state, monitoring and waiting for commands
+        BUSY: Agent is actively processing tasks or commands
         FORCE_RESTARTING: Agent is restarting due to external restart command via IPC
+        SHUTTING_DOWN: Agent is in the process of shutting down normally
+        STOPPED: Agent has been fully stopped and resources released
+        
+        Update-related states:
         UPDATING_STARTING: Beginning of the software update process
         UPDATING_DOWNLOADING: Currently downloading update package from server
         UPDATING_VERIFYING: Verifying integrity and authenticity of downloaded update
         UPDATING_EXTRACTING_UPDATER: Extracting update executable or script
         UPDATING_PREPARING_SHUTDOWN: Final preparations before shutting down for update
-        SHUTTING_DOWN: Agent is in the process of shutting down normally
-        STOPPED: Agent has been fully stopped and resources released
     """
     STARTING = auto()
+    AUTHENTICATING = auto()
     IDLE = auto()
+    BUSY = auto()
     FORCE_RESTARTING = auto()
+    SHUTTING_DOWN = auto()
+    STOPPED = auto()
+    
+    # Update-related states
     UPDATING_STARTING = auto()
     UPDATING_DOWNLOADING = auto()
     UPDATING_VERIFYING = auto()
     UPDATING_EXTRACTING_UPDATER = auto()
     UPDATING_PREPARING_SHUTDOWN = auto()
-    SHUTTING_DOWN = auto()
-    STOPPED = auto()
