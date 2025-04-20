@@ -6,17 +6,15 @@ import uuid
 
 import win32security
 import ntsecuritycon as win32con
-import pywintypes
 
 from .windows_utils import is_running_as_admin
+from .. import __app_name__
 
-def determine_storage_path(app_name: str) -> str:
+def determine_storage_path() -> str:
     """
     Determines the appropriate storage path based on execution privileges.
     Uses ProgramData for Admin, LocalAppData for standard user.
 
-    :param app_name: The application name for the directory
-    :type app_name: str
     :return: The absolute path to the storage directory
     :rtype: str
     :raises: ValueError: If a suitable path cannot be determined
@@ -27,12 +25,12 @@ def determine_storage_path(app_name: str) -> str:
         base_path = os.getenv('PROGRAMDATA')
         if not base_path:
             raise ValueError("Cannot determine ProgramData path for admin storage.")
-        storage_dir = os.path.join(base_path, app_name)
+        storage_dir = os.path.join(base_path, __app_name__)
     else:
         base_path = os.getenv('LOCALAPPDATA')
         if not base_path:
             raise ValueError("Cannot determine LocalAppData path for user storage.")
-        storage_dir = os.path.join(base_path, app_name)
+        storage_dir = os.path.join(base_path, __app_name__)
 
     return storage_dir
 
@@ -106,20 +104,18 @@ def ensure_storage_directory(storage_path: str) -> None:
     except Exception as e:
         raise ValueError(f"Unexpected error ensuring storage directory: {e}")
 
-def setup_directory_structure(app_name: str) -> str:
+def setup_directory_structure() -> str:
     """
     Sets up the directory structure for the application.
     This is a high-level function that should be called early in the application startup.
     
-    :param app_name: The application name for the directory
-    :type app_name: str
     :return: The path to the storage directory
     :rtype: str
     :raises: ValueError: If setup fails
     """
     try:
         # Determine the appropriate storage path
-        storage_path = determine_storage_path(app_name)
+        storage_path = determine_storage_path()
         
         # Ensure the storage directory exists and has proper permissions
         ensure_storage_directory(storage_path)

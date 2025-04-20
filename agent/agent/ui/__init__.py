@@ -8,7 +8,9 @@ from .ui_console import (
     display_registration_success,
     is_room_config_valid,
     prompt_room_config_ui,
-    get_or_prompt_room_config
+    get_or_prompt_room_config,
+    display_error,
+    
 )
 
 __all__ = [
@@ -16,5 +18,6 @@ __all__ = [
     'display_registration_success',
     'is_room_config_valid',
     'prompt_room_config_ui',
-    'get_or_prompt_room_config'
+    'get_or_prompt_room_config',
+    'display_error'
 ]

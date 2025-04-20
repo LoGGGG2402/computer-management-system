@@ -11,6 +11,8 @@ import win32api
 import pywintypes
 
 from ..utils import get_logger
+from .. import __app_name__
+
 
 logger = get_logger(__name__)
 
@@ -44,12 +46,10 @@ def _get_registry_hive(is_admin: bool) -> int:
     """
     return winreg.HKEY_LOCAL_MACHINE if is_admin else winreg.HKEY_CURRENT_USER
 
-def register_autostart(app_name: str, exe_path: str, is_admin: bool) -> bool:
+def register_autostart(exe_path: str, is_admin: bool) -> bool:
     """
     Registers the agent executable to run on Windows startup.
 
-    :param app_name: The name to use for the registry key
-    :type app_name: str
     :param exe_path: The full path to the agent executable
     :type exe_path: str
     :param is_admin: Whether the agent is running with admin privileges
@@ -57,6 +57,7 @@ def register_autostart(app_name: str, exe_path: str, is_admin: bool) -> bool:
     :return: True if registration was successful or already exists, False otherwise
     :rtype: bool
     """
+    app_name = __app_name__.replace(" ", "_").replace("-", "_").capitalize()
     if not exe_path or not os.path.exists(exe_path):
          logger.error(f"Cannot register autostart: Executable path '{exe_path}' is invalid or does not exist.")
          return False
@@ -92,12 +93,10 @@ def register_autostart(app_name: str, exe_path: str, is_admin: bool) -> bool:
         logger.error(f"Unexpected error during autostart registration: {e}", exc_info=True)
         return False
 
-def unregister_autostart(app_name: str, is_admin: bool) -> bool:
+def unregister_autostart(is_admin: bool) -> bool:
     """
     Unregisters the agent executable from running on Windows startup.
 
-    :param app_name: The name used for the registry key
-    :type app_name: str
     :param is_admin: Whether the agent is running with admin privileges
     :type is_admin: bool
     :return: True if unregistration was successful or entry didn't exist, False otherwise
@@ -106,7 +105,7 @@ def unregister_autostart(app_name: str, is_admin: bool) -> bool:
     key_path = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
     hive = _get_registry_hive(is_admin)
     scope = "all users (HKLM)" if is_admin else "current user (HKCU)"
-
+    app_name = __app_name__.replace(" ", "_").replace("-", "_").capitalize()
     logger.info(f"Attempting to unregister autostart entry '{app_name}' for {scope}.")
 
     try:

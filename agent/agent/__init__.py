@@ -16,7 +16,7 @@ Main components:
 """
 
 # Version information
-from .version import __version__, __version_full__, get_version, get_full_version, get_version_info
+from .version import __version__, __version_full__, __app_name__
 
 # Core components
 from .core import Agent
@@ -37,9 +37,7 @@ __all__ = [
     # Version
     '__version__',
     '__version_full__',
-    'get_version',
-    'get_full_version',
-    'get_version_info',
+    '__app_name__',
     
     # Core
     'Agent',

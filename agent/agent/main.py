@@ -10,7 +10,6 @@ import time
 import logging
 import logging.handlers
 
-from agent.ipc import send_force_command
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
@@ -19,10 +18,12 @@ if project_root not in sys.path:
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
-from agent.utils import setup_logger, get_logger
-from agent.ui.ui_console import display_error
 
-from agent.system import (
+from .ipc import send_force_command
+from .utils import setup_logger, get_logger
+from .ui import display_error
+
+from .system import (
     LockManager,
     is_running_as_admin,
     register_autostart,
@@ -73,70 +74,41 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
+def _setup_storage_and_logging(args):
     """
-    Main function to initialize and start the agent.
-
-    :return: Exit code
-    :rtype: int
+    Set up storage path and initialize logging.
+    
+    :param args: Command line arguments
+    :return: tuple (storage_path, logger, executable_path) or (None, None, None) on error
     """
-    # Step 1: Parse arguments (needed early for default app name and debug flag)
-    args = parse_arguments()
     logger = None
-    agent_instance = None
-    config_manager = None
-    state_manager = None
-    lock_manager = None
     storage_path = None
     is_admin = is_running_as_admin()
     
-    # Default app name in case config loading fails
-    app_name_for_registry = "CMSAgent"
-    
-    # Try to get app name from config if available
-    temp_config_path = None
-    source_config_path = None
+    # Get executable path
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         executable_path = sys.executable
-        base_dir = os.path.dirname(sys.executable)
     else:
         try:
             executable_path = os.path.abspath(sys.argv[0])
-            base_dir = project_root
         except IndexError:
             display_error("Could not determine executable path.", "CRITICAL")
-            return 1
+            return None, None, None
     
-    potential_temp_config = os.path.join(base_dir, "config", args.config_name)
-    if os.path.exists(potential_temp_config):
-        temp_config_path = potential_temp_config
-        source_config_path = temp_config_path
-    else:
-        potential_temp_config_alt = os.path.join(base_dir, args.config_name)
-        if os.path.exists(potential_temp_config_alt):
-            temp_config_path = potential_temp_config_alt
-            source_config_path = temp_config_path
-    
+    # Step 1: FIRST PRIORITY - Set up directory structure
     try:
-        temp_config_manager = ConfigManager(temp_config_path) if temp_config_path else ConfigManager(None)
-        app_name_for_registry = temp_config_manager.get("agent.app_name", "CMSAgent")
-    except Exception as e:
-        print(f"WARNING: Using default app name '{app_name_for_registry}' due to config load error: {e}", file=sys.stderr)
-
-    # Step 2: FIRST PRIORITY - Set up directory structure
-    try:
-        storage_path = setup_directory_structure(app_name_for_registry)
+        storage_path = setup_directory_structure()
         log_dir = os.path.join(storage_path, "logs")
         print(f"INFO: Storage path determined: {storage_path}")
         print(f"INFO: Log directory target: {log_dir}")
     except ValueError as e:
         display_error(f"Failed to set up storage directory structure: {e}", "CRITICAL")
-        return 1
+        return None, None, None
     except Exception as e:
         display_error(f"Unexpected error setting up storage directory: {e}", "CRITICAL")
-        return 1
+        return None, None, None
 
-    # Step 3: SECOND PRIORITY - Initialize logger
+    # Step 2: SECOND PRIORITY - Initialize logger
     file_log_success = False
     try:
         logger, file_log_success = setup_logger(name="agent", log_directory_path=log_dir)
@@ -167,24 +139,61 @@ def main() -> int:
         display_error(f"Failed during logging initialization: {e}", "CRITICAL")
         if logger:
             logger.critical(f"Failed during logging initialization: {e}", exc_info=True)
-        return 1
+        return None, None, None
     
-    # Handle autostart arguments if provided (early exit)
+    return storage_path, logger, executable_path
+
+
+def _handle_autostart_commands(args, executable_path):
+    """
+    Handle --enable-autostart and --disable-autostart arguments.
+    
+    :param args: Command line arguments
+    :param executable_path: Path to the executable
+    :return: (exit_code, should_exit) where exit_code is 0 or 1 and should_exit is a boolean
+    """
+    is_admin = is_running_as_admin()
+    
     if args.enable_autostart or args.disable_autostart:
         temp_logger = get_logger("agent.autostart")
         if args.enable_autostart:
-            temp_logger.info(f"Registering autostart for {app_name_for_registry} at {executable_path}")
-            success = register_autostart(app_name_for_registry, executable_path, is_admin)
+            temp_logger.info(f"Registering autostart at {executable_path}")
+            success = register_autostart(executable_path, is_admin)
             temp_logger.info(f"Autostart registration {'succeeded' if success else 'failed'}.")
-            return 0 if success else 1
+            return (0 if success else 1), True
         elif args.disable_autostart:
-            temp_logger.info(f"Unregistering autostart for {app_name_for_registry}")
-            success = unregister_autostart(app_name_for_registry, is_admin)
+            temp_logger.info(f"Unregistering autostart")
+            success = unregister_autostart(is_admin)
             temp_logger.info(f"Autostart unregistration {'succeeded' if success else 'failed'}.")
-            return 0 if success else 1
+            return (0 if success else 1), True
+    
+    return 0, False
 
-    # Step 4: Load configuration
+
+def _load_configuration(args, logger, storage_path, executable_path):
+    """
+    Load the configuration from the config file.
+    
+    :param args: Command line arguments
+    :param logger: Logger instance
+    :param storage_path: Path to the storage directory  
+    :param executable_path: Path to the executable
+    :return: ConfigManager instance or None on error
+    """
     try:
+        temp_config_path = None
+        source_config_path = None
+        base_dir = os.path.dirname(executable_path)
+        potential_temp_config = os.path.join(base_dir, "config", args.config_name)
+        if os.path.exists(potential_temp_config):
+            temp_config_path = potential_temp_config
+            source_config_path = temp_config_path
+        else:
+            potential_temp_config_alt = os.path.join(base_dir, args.config_name)
+            if os.path.exists(potential_temp_config_alt):
+                temp_config_path = potential_temp_config_alt
+                source_config_path = temp_config_path
+
         config_file_path = os.path.join(storage_path, args.config_name)
         if not os.path.exists(config_file_path):
             if source_config_path and os.path.exists(source_config_path):
@@ -195,118 +204,194 @@ def main() -> int:
                 except Exception as copy_err:
                     logger.critical(f"Failed to copy config file: {copy_err}", exc_info=True)
                     display_error(f"Failed to copy config file: {copy_err}", "CRITICAL")
-                    return 1
+                    return None
             else:
                 logger.critical(f"Config file missing in storage ('{config_file_path}') and source ('{source_config_path or 'N/A'}').")
                 display_error(f"Config file missing in storage ('{config_file_path}') and source ('{source_config_path or 'N/A'}').", "CRITICAL")
-                return 1
+                return None
         config_manager = ConfigManager(config_file_path)
         logger.info(f"Using config file: {config_file_path}")
+        return config_manager
     except FileNotFoundError as e:
         logger.critical(f"Config file error: {e}", exc_info=True)
         display_error(f"Config file error: {e}", "CONFIG ERROR")
-        return 1
+        return None
     except ValueError as e:
         logger.critical(f"Config file error: {e}", exc_info=True)
         display_error(f"Config file error: {e}", "CONFIG ERROR")
-        return 1
+        return None
     except Exception as e:
         logger.critical(f"Unexpected error during config loading: {e}", exc_info=True)
         display_error(f"Unexpected error during config loading: {e}", "CONFIG ERROR")
-        return 1
+        return None
 
-    # Step 5: Initialize state manager
+
+def _initialize_state(config_manager, logger):
+    """
+    Initialize the state manager.
+    
+    :param config_manager: ConfigManager instance
+    :param logger: Logger instance
+    :return: StateManager instance or None on error
+    """
     try:
         state_manager = StateManager(config_manager)
+        return state_manager
     except ValueError as e:
         logger.critical(f"Failed to initialize State Manager: {e}")
         display_error(f"Failed to initialize State Manager: {e}", "STATE ERROR")
-        return 1
+        return None
     except Exception as e:
         logger.critical(f"Unexpected error initializing State Manager: {e}", exc_info=True)
         display_error(f"Unexpected error initializing State Manager: {e}", "STATE ERROR")
+        return None
+
+
+def _handle_force_command(args, logger, storage_path, state_manager):
+    """
+    Handle the --force flag if provided.
+    
+    :param args: Command line arguments
+    :param logger: Logger instance
+    :param storage_path: Path to the storage directory
+    :param state_manager: StateManager instance
+    :return: Boolean indicating whether to proceed normally
+    """
+    is_admin = is_running_as_admin()
+    if not args.force:
+        return True
+    
+    logger.info("'--force' argument detected. Attempting IPC request...")
+    device_id = state_manager.get_device_id()
+    agent_token = state_manager.load_token(device_id) if device_id else None
+    if agent_token is None:
+        agent_token = "FORCE_IPC_NO_TOKEN"
+        logger.warning("No agent token found for IPC...")
+    else:
+        logger.info(f"Using agent token for IPC authentication.")
+    
+    ipc_response = send_force_command(is_admin, sys.argv, agent_token)
+    status = ipc_response.get("status")
+    
+    if status == "acknowledged":
+        logger.info("Running agent acknowledged restart request. Waiting for lock release (up to 60s)...")
+        wait_start_time = time.monotonic()
+        lock_acquired_after_wait = False
+        temp_lock_manager = None
+        while time.monotonic() - wait_start_time < 60:
+            if not temp_lock_manager:
+                try:
+                    temp_lock_manager = LockManager(storage_path)
+                except ValueError as e:
+                    logger.error(f"Failed to initialize Lock Manager during wait: {e}")
+                    time.sleep(1)
+                    continue
+            if temp_lock_manager.acquire():
+                logger.info("Successfully acquired lock after waiting...")
+                temp_lock_manager.release()
+                lock_acquired_after_wait = True
+                break
+            else:
+                logger.debug("Lock still held... Waiting...")
+                time.sleep(1)
+        if not lock_acquired_after_wait:
+            logger.critical("Timed out waiting for lock release after --force. Exiting.")
+            display_error("Timed out waiting for lock release after --force.", "LOCK ERROR")
+            return False
+        return True
+    elif status == "agent_not_running":
+        logger.info("No running agent detected via IPC. Proceeding...")
+        return True
+    elif status == "busy_updating":
+        logger.warning("Running agent is busy updating. Cannot force restart. Exiting.")
+        display_error("Running agent is busy updating. Cannot force restart.", "BUSY ERROR")
+        return False
+    elif status == "invalid_token":
+        logger.error("IPC request failed: Invalid token. Exiting.")
+        display_error("IPC request failed: Invalid token.", "IPC ERROR")
+        return False
+    elif status == "error":
+        error_msg = ipc_response.get("message", "Unknown IPC error")
+        logger.error(f"IPC request failed: {error_msg}. Exiting.")
+        display_error(f"IPC request failed: {error_msg}.", "IPC ERROR")
+        return False
+    else:
+        logger.error(f"Received unexpected IPC status: {status}. Exiting.")
+        display_error(f"Received unexpected IPC status: {status}.", "IPC ERROR")
+        return False
+
+
+def _acquire_instance_lock(storage_path, logger):
+    """
+    Acquire the instance lock.
+    
+    :param storage_path: Path to the storage directory
+    :param logger: Logger instance
+    :return: LockManager instance or None on error
+    """
+    try:
+        logger.info("Acquiring instance lock...")
+        lock_manager = LockManager(storage_path)
+        if not lock_manager.acquire():
+            logger.critical("Failed to acquire instance lock. Another instance running? Use --force. Exiting.")
+            display_error("Failed to acquire instance lock. Another instance running? Use --force.", "LOCK ERROR")
+            return None
+        logger.info("Instance lock acquired successfully.")
+        return lock_manager
+    except ValueError as e:
+        logger.critical(f"Failed to initialize Lock Manager: {e}", exc_info=True)
+        display_error(f"Failed to initialize Lock Manager: {e}", "LOCK ERROR")
+        return None
+    except Exception as e:
+        logger.critical(f"Unexpected error acquiring lock: {e}", exc_info=True)
+        display_error(f"Unexpected error acquiring lock: {e}", "LOCK ERROR")
+        return None
+
+
+def main() -> int:
+    """
+    Main function to initialize and start the agent.
+
+    :return: Exit code
+    :rtype: int
+    """
+    # Step 1: Parse arguments (needed early for default app name and debug flag)
+    args = parse_arguments()
+    agent_instance = None
+    lock_manager = None
+    is_admin = is_running_as_admin()
+    
+    # Step 2: Set up storage and logging
+    storage_path, logger, executable_path = _setup_storage_and_logging(args)
+    if not storage_path or not logger:
+        return 1
+    
+    # Step 3: Handle autostart commands if provided
+    exit_code, should_exit = _handle_autostart_commands(args, executable_path)
+    if should_exit:
+        return exit_code
+    
+    # Step 4: Load configuration
+    config_manager = _load_configuration(args, logger, storage_path, executable_path)
+    if not config_manager:
+        return 1
+    
+    # Step 5: Initialize state manager
+    state_manager = _initialize_state(config_manager, logger)
+    if not state_manager:
+        return 1
+    
+    # Step 6: Handle force command if provided
+    proceed_normally = _handle_force_command(args, logger, storage_path, state_manager)
+    if not proceed_normally:
+        return 1
+    
+    # Step 7: Acquire instance lock
+    lock_manager = _acquire_instance_lock(storage_path, logger)
+    if not lock_manager:
         return 1
 
-    # Handle force flag if provided
-    proceed_normally = True
-    if args.force:
-        logger.info("'--force' argument detected. Attempting IPC request...")
-        device_id = state_manager.get_device_id()
-        agent_token = state_manager.load_token(device_id) if device_id else None
-        if agent_token is None:
-            agent_token = "FORCE_IPC_NO_TOKEN"
-            logger.warning("No agent token found for IPC...")
-        else:
-            logger.info(f"Using agent token for IPC authentication.")
-        ipc_response = send_force_command(is_admin, sys.argv, agent_token)
-        status = ipc_response.get("status")
-        if status == "acknowledged":
-            logger.info("Running agent acknowledged restart request. Waiting for lock release (up to 60s)...")
-            proceed_normally = True
-            wait_start_time = time.monotonic()
-            lock_acquired_after_wait = False
-            temp_lock_manager = None
-            while time.monotonic() - wait_start_time < 60:
-                if not temp_lock_manager:
-                    try:
-                        temp_lock_manager = LockManager(storage_path)
-                    except ValueError as e:
-                        logger.error(f"Failed to initialize Lock Manager during wait: {e}")
-                        time.sleep(1)
-                        continue
-                if temp_lock_manager.acquire():
-                    logger.info("Successfully acquired lock after waiting...")
-                    temp_lock_manager.release()
-                    lock_acquired_after_wait = True
-                    break
-                else:
-                    logger.debug("Lock still held... Waiting...")
-                    time.sleep(1)
-            if not lock_acquired_after_wait:
-                logger.critical("Timed out waiting for lock release after --force. Exiting.")
-                display_error("Timed out waiting for lock release after --force.", "LOCK ERROR")
-                return 1
-        elif status == "agent_not_running":
-            logger.info("No running agent detected via IPC. Proceeding...")
-            proceed_normally = True
-        elif status == "busy_updating":
-            logger.warning("Running agent is busy updating. Cannot force restart. Exiting.")
-            display_error("Running agent is busy updating. Cannot force restart.", "BUSY ERROR")
-            return 1
-        elif status == "invalid_token":
-            logger.error("IPC request failed: Invalid token. Exiting.")
-            display_error("IPC request failed: Invalid token.", "IPC ERROR")
-            return 1
-        elif status == "error":
-            error_msg = ipc_response.get("message", "Unknown IPC error")
-            logger.error(f"IPC request failed: {error_msg}. Exiting.")
-            display_error(f"IPC request failed: {error_msg}.", "IPC ERROR")
-            return 1
-        else:
-            logger.error(f"Received unexpected IPC status: {status}. Exiting.")
-            display_error(f"Received unexpected IPC status: {status}.", "IPC ERROR")
-            return 1
-
-    # Step 6: Acquire instance lock
-    if proceed_normally:
-        try:
-            logger.info("Acquiring instance lock...")
-            lock_manager = LockManager(storage_path)
-            if not lock_manager.acquire():
-                logger.critical("Failed to acquire instance lock. Another instance running? Use --force. Exiting.")
-                display_error("Failed to acquire instance lock. Another instance running? Use --force.", "LOCK ERROR")
-                return 1
-            logger.info("Instance lock acquired successfully.")
-        except ValueError as e:
-            logger.critical(f"Failed to initialize Lock Manager: {e}", exc_info=True)
-            display_error(f"Failed to initialize Lock Manager: {e}", "LOCK ERROR")
-            return 1
-        except Exception as e:
-            logger.critical(f"Unexpected error acquiring lock: {e}", exc_info=True)
-            display_error(f"Unexpected error acquiring lock: {e}", "LOCK ERROR")
-            return 1
-
-    # Step 7: Start the agent
+    # Step 8: Start the agent
     try:
         logger.info("Initializing remaining components...")
         state_manager.ensure_device_id()

@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-
 try:
     import keyring
     KEYRING_AVAILABLE = True
@@ -41,12 +40,7 @@ class StateManager:
         """
         self.config = config
         self.state_filename = self.config.get('agent.state_filename', 'agent_state.json')
-
-        # Determine storage path based on app name and privileges
-        app_name = self.config.get('agent.app_name', 'CMSAgent')
-        self.storage_path = determine_storage_path(app_name)
-        logger.info(f"Using storage path: {self.storage_path}")
-
+        self.storage_path = determine_storage_path()
         self.state_filepath = os.path.join(self.storage_path, self.state_filename)
         self._state_cache: Optional[Dict[str, Any]] = None
         logger.info(f"StateManager initialized. State file: {self.state_filepath}")

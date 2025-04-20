@@ -1,11 +1,7 @@
 {
     "server_url": "http://192.168.159.130:3000",
-    "log_level": {
-        "console": "INFO",
-        "file": "DEBUG"
-    },
+
     "agent": {
-        "app_name": "CMSAgent",
         "status_report_interval_sec": 30,
         "state_filename": "agent_state.json"
     },

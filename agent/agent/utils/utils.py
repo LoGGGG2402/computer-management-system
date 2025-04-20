@@ -6,7 +6,7 @@ import os
 from typing import Dict, Any, Optional
 from . import get_logger
 
-logger = get_logger("agent.utils.utils")
+logger = get_logger(__name__)
 
 def save_json(data: Dict[str, Any], filepath: str) -> bool:
     """
