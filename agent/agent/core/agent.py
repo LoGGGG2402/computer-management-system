@@ -171,16 +171,12 @@ class Agent:
             # --- Start Status Reporting ---
             self._schedule_next_status_report()
             # --- Status Reporting End ---
-            
-            # --- Start Update Check ---
-            from ..version import __version__ as current_version
-            self.update_handler.check_for_updates_proactively(
-                current_version=current_version,
-                current_state=self.get_state(),
-            )  # --- Update Check End ---
 
             self._set_state(AgentState.IDLE)
             logger.info("Agent started successfully. Monitoring for commands and reporting status.")
+            self.update_handler.check_for_updates_proactively(
+                self.get_state(),
+            )  # --- Update Check End ---
 
             while self._running.is_set():
                 time.sleep(5)

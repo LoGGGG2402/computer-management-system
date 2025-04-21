@@ -126,10 +126,9 @@ def setup_directory_structure() -> str:
             os.makedirs(logs_dir, exist_ok=True)
 
         # Create errors directory
-        errors_dir = os.path.join(storage_path, 'errors')
+        errors_dir = os.path.join(storage_path, 'error_reports')
         if not os.path.exists(errors_dir):
             os.makedirs(errors_dir, exist_ok=True)
-        
         return storage_path
         
     except Exception as e:

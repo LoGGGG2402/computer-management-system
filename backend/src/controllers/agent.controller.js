@@ -39,7 +39,7 @@ class AgentController {
    */
   async handleIdentifyRequest(req, res, next) {
     const { unique_agent_id, positionInfo, forceRenewToken } = req.body;
-    
+
     try {
       if (!unique_agent_id) {
         logger.warn('Agent identification attempt without agent ID', { ip: req.ip });
@@ -50,11 +50,11 @@ class AgentController {
       }
 
       const computer = await computerService.findComputerByAgentId(unique_agent_id);
-      
+
       if (forceRenewToken && computer) {
-        if (computer.room.name === positionInfo.roomName && 
-            computer.pos_x === positionInfo.posX &&
-            computer.pos_y === positionInfo.posY) {
+        if (computer.room.name === positionInfo.roomName &&
+          computer.pos_x === positionInfo.posX &&
+          computer.pos_y === positionInfo.posY) {
           try {
             const { plainToken } = await computerService.generateAndAssignAgentToken(
               unique_agent_id,
@@ -91,7 +91,7 @@ class AgentController {
           positionInfo.posX,
           positionInfo.posY
         );
-        
+
         if (result.valid) {
           const mfaCode = mfaService.generateAndStoreMfa(
             unique_agent_id,
@@ -120,7 +120,7 @@ class AgentController {
         }
       } catch (positionError) {
         logger.error(`Error checking position for agent ${unique_agent_id}:`, {
-          error: positionError.message, 
+          error: positionError.message,
           stack: positionError.stack,
           room: positionInfo.roomName,
           position: `(${positionInfo.posX},${positionInfo.posY})`
@@ -169,7 +169,7 @@ class AgentController {
           message: "Agent ID and MFA code are required",
         });
       }
-      
+
       const { valid, positionInfo } = mfaService.verifyMfa(
         unique_agent_id,
         mfaCode
@@ -237,7 +237,7 @@ class AgentController {
       const computerId = req.computerId;
       const agentId = req.agentId;
       const { total_disk_space, gpu_info, cpu_info, total_ram, os_info } = req.body;
-      
+
       if (!total_disk_space) {
         logger.warn(`Hardware info update missing total_disk_space for computer ${computerId}`);
         return res.status(400).json({
@@ -301,15 +301,15 @@ class AgentController {
   async handleCheckUpdate(req, res, next) {
     try {
       const { current_version } = req.query;
-      
+
       try {
         const updateInfo = await agentService.getLatestStableVersionInfo(current_version);
-        
+
         if (!updateInfo) {
           logger.debug(`No update available for agent: ${req.agentId}, Current version: ${current_version || 'unknown'}`);
           return res.status(204).end(); // 204 No Content
         }
-        
+
         logger.info(`Update available for agent: ${req.agentId}, Current: ${current_version || 'unknown'}, Latest: ${updateInfo.version}`);
         return res.status(200).json({
           status: "success",
@@ -346,11 +346,9 @@ class AgentController {
    * @param {number} req.computerId - Computer ID (attached by authAgentToken middleware)
    * @param {Object} req.body - Request body with error details
    * @param {string} req.body.error_type - Type of error
-   * @param {string} req.body.message - Error message
-   * @param {Object} req.body.details - Additional error details
-   * @param {string} req.body.timestamp - When the error occurred on agent
-   * @param {string} req.body.agent_version - Agent version when error occurred
-   * @param {string} req.body.stack_trace - Stack trace if available
+   * @param {string} req.body.error_message - Error message
+   * @param {Object} req.body.error_details - Additional error details including stack trace and agent version
+   * @param {string} [req.body.timestamp] - When the report was sent (used internally)
    * @param {Object} res - Express response object
    * @param {Function} next - Express next middleware function
    * @returns {Object} Empty response with 204 status code on success
@@ -358,9 +356,9 @@ class AgentController {
   async handleErrorReport(req, res, next) {
     try {
       const computerId = req.computerId;
-      const { error_type, message, details, timestamp, agent_version, stack_trace } = req.body;
-      
-      if (!error_type || !message) {
+      const { error_type, error_message, error_details } = req.body;
+
+      if (!error_type || !error_message) {
         logger.warn(`Error report missing required fields from agent: ${req.agentId}, Computer: ${computerId}`);
         return res.status(400).json({
           status: "error",
@@ -368,16 +366,11 @@ class AgentController {
         });
       }
 
-      // Prepare error data in standard format
+      // Extract data directly from the received format
       const errorData = {
         error_type,
-        error_message: message,
-        error_details: {
-          reported_at_agent: timestamp,
-          agent_version_at_error: agent_version,
-          stack_trace,
-          ...details
-        }
+        error_message,
+        error_details: error_details || {}
       };
 
       try {
@@ -423,19 +416,19 @@ class AgentController {
         logger.warn(`Download attempt without filename by agent ${req.agentId}`);
         return res.status(404).json({ status: 'error', message: 'File not found' });
       }
-      
-      const AGENT_PACKAGES_DIR = path.join(__dirname, '../../agent-packages');
+
+      const AGENT_PACKAGES_DIR = path.join(__dirname, '../../uploads/agent-packages');
       const filePath = path.join(AGENT_PACKAGES_DIR, filename);
-      
+
       logger.info(`Agent ${req.agentId} downloading package: ${filename}`, {
         computerId: req.computerId
       });
-      
+
       // Send the file securely (only to authenticated agents)
       res.sendFile(filePath, (err) => {
         if (err) {
-          logger.error(`Error serving agent package ${filename}:`, { 
-            error: err.message, 
+          logger.error(`Error serving agent package ${filename}:`, {
+            error: err.message,
             computerId: req.computerId,
             agentId: req.agentId
           });
@@ -451,9 +444,9 @@ class AgentController {
         stack: error.stack,
         agentId: req.agentId
       });
-      return res.status(500).json({ 
-        status: 'error', 
-        message: 'Error serving file' 
+      return res.status(500).json({
+        status: 'error',
+        message: 'Error serving file'
       });
     }
   }

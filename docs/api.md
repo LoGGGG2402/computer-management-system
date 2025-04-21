@@ -1092,7 +1092,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 
 ### Kiểm tra Bản cập nhật Agent (Cho Agent)
 * **Method:** `GET`
-* **Path:** `/api/agent/check_update`
+* **Path:** `/api/agent/check-update`
 * **Headers:**
   * `agent-id: string (unique_agent_id)` (Required)
   * `agent-token: string` (Required)

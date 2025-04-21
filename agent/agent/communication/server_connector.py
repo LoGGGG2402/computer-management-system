@@ -1,10 +1,9 @@
 """
 Server connector module for handling authentication and communication with the server.
 """
-from typing import Dict, Any, Optional, TYPE_CHECKING, Callable, Tuple
-import threading
+from typing import Dict, Any, Optional, TYPE_CHECKING, Tuple
 import datetime
-
+from pathlib import Path
 if TYPE_CHECKING:
     from ..config import ConfigManager, StateManager
     from . import HttpClient, WSClient
@@ -355,7 +354,7 @@ class ServerConnector:
         if not self.http_client.report_error(error_data):
             # If direct reporting fails, save to file for later reporting
             from ..utils.utils import save_error_report
-            error_dir = self.state_manager.get_error_directory()
+            error_dir = Path(self.state_manager.storage_path) / 'error_reports'
             if error_dir:
                 success, file_path = save_error_report(error_data, error_dir)
                 if success:

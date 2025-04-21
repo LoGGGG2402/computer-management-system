@@ -121,7 +121,7 @@ class AdminService {
 
       // Create download URL path (relative to API base)
       const filename = path.basename(file.path);
-      const downloadUrl = `/api/agent/agent-packages/${filename}`;
+      const downloadUrl = `/agent-packages/${filename}`;
 
       // Create agent version record
       const agentVersion = await AgentVersion.create({

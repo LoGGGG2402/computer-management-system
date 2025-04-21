@@ -60,3 +60,5 @@ package-lock.json
 .aiexclude
 agent/storage/
 agent/cms_agent.spec
+backend/uploads/
+agent/agent/__main__.py.bak

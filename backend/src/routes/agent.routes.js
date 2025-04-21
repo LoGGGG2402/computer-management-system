@@ -12,7 +12,7 @@ router.post('/verify-mfa', agentController.handleVerifyMfa);
 router.post('/hardware-info', verifyAgentToken, agentController.handleHardwareInfo);
 
 // Agent update related routes
-router.get('/check_update', verifyAgentToken, agentController.handleCheckUpdate);
+router.get('/check-update', verifyAgentToken, agentController.handleCheckUpdate);
 router.post('/report-error', verifyAgentToken, agentController.handleErrorReport);
 
 // Agent package download route

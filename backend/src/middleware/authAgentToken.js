@@ -9,9 +9,8 @@ const logger = require('../utils/logger');
  */
 const verifyAgentToken = async (req, res, next) => {
   try {
-    // Extract agent ID and token from headers
-    const agentId = req.headers['agent-id'];
-    const token = req.headers['agent-token'];
+    const agentId = req.headers['x-agent-id'];
+    const token = req.headers.authorization?.split(' ')[1];
 
     // Check if both agent ID and token are provided
     if (!agentId || !token) {

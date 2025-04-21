@@ -16,7 +16,7 @@ Main components:
 """
 
 # Version information
-from .version import __version__, __version_full__, __app_name__
+from .version import __version__, __app_name__
 
 # Core components
 from .core import Agent
@@ -36,7 +36,6 @@ from .monitoring import SystemMonitor
 __all__ = [
     # Version
     '__version__',
-    '__version_full__',
     '__app_name__',
     
     # Core

@@ -194,6 +194,9 @@ def _load_configuration(args, logger, storage_path, executable_path):
                 source_config_path = temp_config_path
 
         config_file_path = os.path.join(storage_path, args.config_name)
+        
+        print(f"INFO: Source config path: {config_file_path}")
+
         if not os.path.exists(config_file_path):
             if source_config_path and os.path.exists(source_config_path):
                 logger.info(f"Configuration file not found... Copying from {source_config_path}...")

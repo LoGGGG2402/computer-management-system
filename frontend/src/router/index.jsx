@@ -26,7 +26,7 @@ import AdminDashboard from '../pages/Admin/AdminDashboard';
 // Import User and Computer list pages for admin routes
 import UsersListPage from '../pages/user/UsersListPage'; 
 import ComputersListPageAdmin from '../pages/computer/ComputersListPage'; // Use alias if needed or ensure correct import path
-import AgentVersionManagementPage from '../pages/admin/AgentVersionManagementPage'; // Import the new page
+import AgentVersionManagementPage from '../pages/Admin/AgentVersionManagementPage'; // Import the new page
 
 /**
  * Not Found component displayed when no route matches the current URL
