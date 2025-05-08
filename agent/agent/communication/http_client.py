@@ -44,7 +44,7 @@ class HttpClient:
         if not parsed_url.scheme or not parsed_url.netloc:
              raise ValueError(f"Invalid server_url configured: {base_url_config}. Must include scheme (e.g., http:// or https://).")
 
-        # Construct the base API URL, ensuring no double slashes
+        
         self.base_url = urljoin(f"{parsed_url.scheme}://{parsed_url.netloc}", parsed_url.path.rstrip('/') + "/api/agent/")
         self.timeout = self.config.get('http_client.request_timeout_sec', 15)
         self._agent_id: Optional[str] = None
@@ -338,7 +338,7 @@ class HttpClient:
              logger.error(f"Failed to report error: {error_message}")
              return False
 
-    # Internal helper methods
+    
     def _make_request(self, method: str, endpoint: str, authenticated: bool = False, **kwargs) -> Tuple[Optional[Union[Dict[str, Any], List[Any]]], Optional[str]]:
         """
         Internal helper method to make HTTP requests and handle common errors.
@@ -377,18 +377,18 @@ class HttpClient:
         try:
             logger.debug(f"Making HTTP request: {method} {full_url} (Timeout: {request_timeout}s)")
             if 'json' in kwargs:
-                 pass # Avoid logging potentially sensitive payload data by default
+                 pass 
             if 'params' in kwargs:
                  logger.debug(f"Params: {kwargs['params']}")
 
             response = requests.request(method, full_url, headers=headers, timeout=request_timeout, **kwargs)
-            response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+            response.raise_for_status() 
 
-            if response.status_code == 204: # No Content
+            if response.status_code == 204: 
                 logger.debug(f"Request successful (204 No Content): {method} {full_url}")
-                return {}, None # Return empty dict for consistency, signal success
+                return {}, None 
             try:
-                # Attempt to parse JSON for other success codes (e.g., 200 OK)
+                
                 response_json = response.json()
                 logger.debug(f"Request successful ({response.status_code}): {method} {full_url}")
                 return response_json, None
@@ -406,28 +406,28 @@ class HttpClient:
         except requests.exceptions.HTTPError as e:
             status_code = e.response.status_code
             error_message = f"Server error {status_code}"
-            error_details = None # Store potential JSON error details
+            error_details = None 
             try:
-                # Try to get more specific error details from JSON response
+                
                 error_data = e.response.json()
                 error_details = error_data.get('message', json.dumps(error_data))
                 error_message = f"{error_message}: {error_details}"
                 logger.error(f"HTTP error {status_code}: {method} {full_url}. Server response: {error_details}")
-                # Return the parsed error data along with the message
+                
                 return error_data, error_message
             except json.JSONDecodeError:
-                # Server returned an error status but not valid JSON
-                error_text = e.response.text[:200] # Log snippet
+                
+                error_text = e.response.text[:200] 
                 error_message = f"{error_message} (non-JSON response)."
                 logger.error(f"HTTP error {status_code}: {method} {full_url}. Response: {error_text}...")
-                # Return None for data as we couldn't parse it
+                
                 return None, error_message
         except requests.exceptions.RequestException as e:
-            # Catch other potential requests library errors (e.g., URL formatting)
+            
             logger.error(f"An unexpected request error occurred: {method} {full_url} - {e}", exc_info=True)
             return None, f"Unexpected network error: {e}"
         except Exception as e:
-            # Catch-all for truly unexpected issues during the request process
+            
             logger.critical(f"An unexpected internal error occurred during HTTP request: {method} {full_url} - {e}", exc_info=True)
             return None, f"Unexpected internal error while processing request: {e}"
 
@@ -443,6 +443,6 @@ class HttpClient:
             headers['X-Agent-Id'] = self._agent_id
             headers['Authorization'] = f"Bearer {self._agent_token}"
         else:
-            # This case should ideally be caught before calling _make_request with authenticated=True
+            
             logger.warning("Attempting to get auth headers, but agent ID or token is not set.")
         return headers

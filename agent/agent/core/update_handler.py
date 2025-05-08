@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 """
 Update handler module for the Computer Management System Agent (Windows Only).
 

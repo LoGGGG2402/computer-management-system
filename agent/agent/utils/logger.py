@@ -12,13 +12,14 @@ from typing import Optional, Dict, Tuple
 DEFAULT_LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 DEFAULT_CONSOLE_LEVEL = logging.INFO
 DEFAULT_FILE_LEVEL = logging.DEBUG
-DEFAULT_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+DEFAULT_MAX_BYTES = 10 * 1024 * 1024  
 DEFAULT_BACKUP_COUNT = 5
 LOG_FILENAME_PREFIX = "log_"
 LOG_FILENAME_DATE_FORMAT = "%Y-%m-%d"
 LOG_FILENAME_SUFFIX = ".log"
 
 _loggers: Dict[str, logging.Logger] = {}
+_event_log_source_registered: Dict[str, bool] = {}
 
 
 def _check_directory_writable(directory_path: str) -> Tuple[bool, str]:
@@ -59,34 +60,52 @@ def _check_directory_writable(directory_path: str) -> Tuple[bool, str]:
 
 def setup_logger(
     name: str = "agent",
-    log_directory_path: Optional[str] = None
+    log_directory_path: Optional[str] = None,
+    level: int = logging.DEBUG,
+    for_cli: bool = False,
+    service_name: Optional[str] = None
 ) -> Tuple[logging.Logger, bool]:
     """
-    Sets up and configures a logger instance simply based on a directory.
+    Sets up and configures a logger instance. Assumes running on Windows.
 
-    Log filename will be 'log_YYYY-MM-DD.log'.
-    If log_directory_path is None or not writable, file logging is disabled.
+    File logging: 'log_YYYY-MM-DD.log' in log_directory_path.
+    Console logging: To sys.stdout.
+    Windows Event Log: If service_name is provided.
 
-    :param name: The name for the logger
-    :type name: str
-    :param log_directory_path: Path to the directory for storing log files.
-                               If None or invalid, only console logging is enabled.
-    :type log_directory_path: Optional[str]
-    :return: Tuple containing the configured logger instance and a boolean
-             indicating if file logging was successfully enabled.
-    :rtype: Tuple[logging.Logger, bool]
+    :param name: The name for the logger.
+    :param log_directory_path: Path for storing log files. If None, file logging disabled.
+    :param level: The logging level for the logger (e.g., logging.INFO, logging.DEBUG).
+    :param for_cli: If True, console log level might be different (more verbose).
+    :param service_name: The name of the service, used as Event Log source name.
+                       NTEventLogHandler will be added if provided.
+    :return: Tuple (logger instance, file_logging_enabled_flag).
     """
-    global _loggers
+    global _loggers, _event_log_source_registered
     file_logging_enabled = False
 
     if name in _loggers:
         existing_logger = _loggers[name]
-        has_file_handler = any(isinstance(h, logging.handlers.RotatingFileHandler) for h in existing_logger.handlers)
-        return existing_logger, has_file_handler
+        has_event_handler = any(isinstance(h, logging.handlers.NTEventLogHandler) for h in existing_logger.handlers)
+        
+        
+        if service_name and not has_event_handler:
+            
+            pass 
+        elif not service_name and has_event_handler:
+            
+            
+            pass
+        else:
+            
+            existing_logger.setLevel(level)
+            for handler in existing_logger.handlers:
+                if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout:
+                    handler.setLevel(DEFAULT_CONSOLE_LEVEL if for_cli else level)
+            has_file_handler = any(isinstance(h, logging.handlers.RotatingFileHandler) for h in existing_logger.handlers)
+            return existing_logger, has_file_handler
 
     logger = logging.getLogger(name)
-    lowest_level = min(DEFAULT_CONSOLE_LEVEL, DEFAULT_FILE_LEVEL)
-    logger.setLevel(lowest_level)
+    logger.setLevel(level)
     logger.propagate = False
 
     if logger.hasHandlers():
@@ -95,7 +114,7 @@ def setup_logger(
     formatter = logging.Formatter(DEFAULT_LOG_FORMAT)
 
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(DEFAULT_CONSOLE_LEVEL)
+    console_handler.setLevel(DEFAULT_CONSOLE_LEVEL if for_cli else level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
@@ -106,7 +125,7 @@ def setup_logger(
             try:
                 current_date = datetime.date.today()
                 today_str = current_date.strftime(LOG_FILENAME_DATE_FORMAT)
-                filename = f"{LOG_FILENAME_PREFIX}{today_str}{LOG_FILENAME_SUFFIX}"
+                filename = f"{LOG_FILENAME_PREFIX}{name}_{today_str}{LOG_FILENAME_SUFFIX}"
                 actual_log_path = os.path.join(log_directory_path, filename)
 
                 file_handler = logging.handlers.RotatingFileHandler(
@@ -115,21 +134,37 @@ def setup_logger(
                     backupCount=DEFAULT_BACKUP_COUNT,
                     encoding='utf-8'
                 )
-                file_handler.setLevel(DEFAULT_FILE_LEVEL)
+                file_handler.setLevel(level)
                 file_handler.setFormatter(formatter)
                 logger.addHandler(file_handler)
-
                 file_logging_enabled = True
-
-            except PermissionError as e:
-                print(f"ERROR: Permission denied creating log file handler for {actual_log_path}: {e}", file=sys.stderr)
-                logger.error(f"Permission denied creating log file handler for {actual_log_path}: {e}")
-            except Exception as e:
+                print(f"INFO: File logging for '{name}' enabled to: {actual_log_path}")
+            except PermissionError as e: 
+                print(f"ERROR: Permission denied for log file {actual_log_path}: {e}", file=sys.stderr)
+                logger.error(f"Permission denied for log file {actual_log_path}: {e}")
+            except Exception as e: 
                 print(f"ERROR: Failed to set up file logging to {actual_log_path}: {e}", file=sys.stderr)
                 logger.error(f"Failed to set up file logging to {actual_log_path}: {e}", exc_info=True)
         else:
-            print(f"ERROR: Provided log directory '{log_directory_path}' is not writable or could not be created: {msg}. File logging disabled.", file=sys.stderr)
-            logger.error(f"Provided log directory '{log_directory_path}' is not writable or could not be created: {msg}. File logging disabled.")
+            print(f"ERROR: Log directory '{log_directory_path}' not writable: {msg}. File logging disabled.", file=sys.stderr)
+            logger.error(f"Log directory '{log_directory_path}' not writable: {msg}. File logging disabled.")
+
+    
+    
+    if service_name:
+        try:
+            
+            from logging.handlers import NTEventLogHandler 
+            event_handler = NTEventLogHandler(service_name, logtype="Application")
+            event_handler.setLevel(logging.INFO) 
+            event_handler.setFormatter(formatter)
+            logger.addHandler(event_handler)
+            logger.info(f"Windows Event Log handler configured for source '{service_name}'.")
+        except ImportError: 
+            
+            logger.warning("pywin32 extensions not installed or NTEventLogHandler not found. Cannot use NTEventLogHandler.")
+        except Exception as e: 
+            logger.error(f"Failed to configure NTEventLogHandler for source '{service_name}': {e}", exc_info=True)
 
     _loggers[name] = logger
     return logger, file_logging_enabled

@@ -1,21 +1,21 @@
-# Kế Hoạch Phát Triển Hệ Thống Quản Lý Máy Tính
+
 
 Dự án này nhằm mục đích tạo ra một ứng dụng web để quản lý và giám sát các máy tính trong công ty, được tổ chức theo phòng (Room), với khả năng gửi lệnh (qua WebSocket), theo dõi trạng thái real-time (online/offline xác định qua WS, %CPU/%RAM Agent gửi qua HTTP), hiển thị vị trí trực quan, hệ thống phân quyền người dùng (Admin, User), cơ chế đăng ký Agent an toàn (MFA/Token), chức năng báo cáo và xử lý lỗi máy tính, và khả năng lọc dữ liệu trên các API danh sách. Agent sẽ được phát triển bằng Python.
 
-## 1. Kiến Trúc Hệ Thống
+#
 
 * **Agent:** Chạy trên máy Windows. Thu thập thông tin hệ thống (%CPU, %RAM). Giao tiếp với Backend chủ yếu qua HTTP(S) để đăng ký, gửi trạng thái CPU/RAM, gửi kết quả lệnh (xác thực bằng Agent Token). Duy trì kết nối WebSocket chỉ để nhận lệnh từ Backend (xác thực bằng Agent Token). Trạng thái online/offline được suy ra từ kết nối WS này.
 * **Backend (Node.js):** Trung tâm xử lý. Xử lý request HTTP(S) từ Agent và Frontend. Quản lý kết nối WebSocket với Agent (xác thực, gửi lệnh) và Frontend (gửi MFA, broadcast status, kết quả lệnh). Quản lý logic nghiệp vụ, phân quyền, giao tiếp DB (lưu lỗi vào JSONB). Quản lý bộ nhớ đệm trạng thái real-time. Xử lý tham số lọc API.
 * **Frontend (React):** Giao diện web. Hiển thị giao diện theo vai trò. Hiển thị thông báo MFA (Admin). Hiển thị trạng thái máy tính real-time và thông tin lỗi (nhận qua WS). Gửi yêu cầu HTTP(S) tới Backend (đăng nhập, quản lý, báo lỗi, xử lý lỗi, yêu cầu lệnh). Cung cấp bộ lọc và gửi tham số lọc tới API.
 * **Database (Ví dụ: PostgreSQL):** Lưu trữ dữ liệu cấu hình (users, rooms, computers, agent_token_hash, user assignments, errors JSONB).
 
-## 2. Lựa Chọn Công Nghệ Chi Tiết
+#
 
 * **Backend:** Node.js, Express.js, Socket.IO, PostgreSQL (hoặc MongoDB), Sequelize (hoặc Mongoose), JWT, bcrypt, node-cache (hoặc Redis), otp-generator, crypto/uuid. Middleware xác thực Agent Token HTTP header. Thư viện xử lý query parameters (vd: có sẵn trong Express).
 * **Frontend:** React, Vite, Tailwind CSS, React Router DOM, Socket.IO Client, axios. Context API/Zustand/Redux. CSS Positioning/SVG/Canvas. Thư viện quản lý form (vd: React Hook Form).
 * **Agent:** Python , `requests`, `websocket-client` (hoặc `python-socketio`), `psutil`, `keyring` (tùy chọn), `pyinstaller` / `cx_Freeze` (đóng gói). Cơ chế lưu trữ token an toàn.
 
-## 3. Thiết Kế Cơ Sở Dữ Liệu Chi Tiết (Ví dụ với PostgreSQL)
+#
 
 * **Bảng `users`:**
     * `id`: SERIAL PRIMARY KEY
@@ -67,33 +67,33 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
     * `room_id`: INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE
     * PRIMARY KEY (user_id, room_id)
 
-## 4. Backend API Endpoints Chi Tiết (Đặc Tả) bao gồm cả các agent api
+#
 
 (Phần này giữ nguyên đặc tả chi tiết như đã trình bày ở phiên bản trước)
 
-### 1. Xác thực User/Admin (Authentication)
+##
 * `POST /api/auth/login`
 * `GET /api/auth/me`
 
-### 2. Quản lý Users (Yêu cầu quyền Admin)
+##
 * `POST /api/users`
 * `GET /api/users` (Hỗ trợ lọc: `?role=`, `?is_active=`, `?username=`)
 * `PUT /api/users/:id`
 * `DELETE /api/users/:id`
 
-### 3. Quản lý Rooms
+##
 * `POST /api/rooms` (Admin Only)
 * `GET /api/rooms` (Hỗ trợ lọc: `?name=`, `?assigned_user_id=`)
 * `GET /api/rooms/:id`
 * `PUT /api/rooms/:id` (Admin Only)
 * `DELETE /api/rooms/:id` (Admin Only)
 
-### 4. Quản lý Phân công Room (Yêu cầu quyền Admin)
+##
 * `POST /api/rooms/:roomId/assign`
 * `DELETE /api/rooms/:roomId/unassign`
 * `GET /api/rooms/:roomId/users`
 
-### 5. Quản lý Computers (Bởi Admin/User Frontend)
+##
 * `GET /api/computers` (Hỗ trợ lọc: `?room_id=`, `?name=`, `?status=`, `?has_errors=`, `?unique_agent_id=`)
 * `PUT /api/computers/:id` (Admin cập nhật chi tiết)
 * `GET /api/computers/:id` (Response bao gồm `errors`)
@@ -102,15 +102,15 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
 * `POST /api/computers/:id/errors` (Báo cáo lỗi)
 * `PUT /api/computers/:computerId/errors/:errorId/resolve` (Xử lý lỗi - Admin Only)
 
-### 6. API Dành Riêng Cho Agent
+##
 * `POST /api/agent/identify`
 * `POST /api/agent/verify-mfa`
 * `PUT /api/agent/status` (Body: `cpu`, `ram`)
 * `POST /api/agent/command-result` (Body: `commandId`, `stdout`, `stderr`, `exitCode`)
 
-## 5. Các luồng hoạt động chi tiết (Elaborated)
+#
 
-### Luồng Đăng ký Agent (MFA qua HTTP):
+##
 1.  **Agent:** Gửi HTTP `POST /api/agent/identify` với body `{"unique_agent_id": "agent-uuid-123"}`.
 2.  **Backend:**
     * Nhận request, trích xuất `unique_agent_id`.
@@ -148,7 +148,7 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
     * Nếu thành công (có `agentToken`): Lưu token vào nơi an toàn (`tokenManager.save(agentToken)`). Tiến hành kết nối WebSocket.
     * Nếu thất bại: Báo lỗi cho người dùng.
 
-### Luồng Xác thực Agent (Token qua HTTP Header và WS Event):
+##
 
 * **HTTP Request (vd: Status Update):**
     1.  **Agent:** Gửi `PUT /api/agent/status` với header `X-Agent-ID: agent-uuid-123`, `Authorization: Bearer <saved_agent_token>`, và body `{ cpu, ram }`.
@@ -176,7 +176,7 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
             * (Trigger Luồng Cập nhật Online Status)
         * Nếu không `isValid`: Gửi event `agent:ws_auth_failed`, ngắt kết nối.
 
-### Luồng Cập nhật Trạng thái (%CPU/%RAM):
+##
 1.  **Agent:** Định kỳ (30s), dùng `psutil` lấy `cpu = psutil.cpu_percent()`, `ram = psutil.virtual_memory().percent`.
 2.  **Agent:** Gửi HTTP `PUT /api/agent/status` với header xác thực và body `{"cpu": cpu, "ram": ram}`.
 3.  **Backend (HTTP Controller):**
@@ -192,7 +192,7 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
     * Tạo payload: `{ computerId: req.computerId, status: isOnline ? 'online' : 'offline', cpu: currentStatus.cpu, ram: currentStatus.ram }`.
     * Broadcast qua WS tới room của Frontend: `io.to('room_' + roomId).emit('computer:status_updated', payload)`.
 
-### Luồng Cập nhật Trạng thái Online/Offline:
+##
 
 * **Online (Khi WS xác thực thành công):**
     1.  **Backend (WS Handler):** Sau khi `bcrypt.compare` thành công trong `agent:authenticate_ws`:
@@ -213,7 +213,7 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
             * Broadcast WS: `io.to('room_' + roomId).emit('computer:status_updated', { computerId: computerId, status: 'offline', cpu: lastCpu, ram: lastRam })`.
             * (Tùy chọn) Cập nhật `status_db` trong DB.
 
-### Luồng Gửi và Nhận Lệnh:
+##
 1.  **Frontend:** User nhập lệnh, nhấn gửi -> Gọi `POST /api/computers/:id/command` với body `{"command": "user_command"}` và header JWT.
 2.  **Backend (HTTP Controller):**
     * Xác thực JWT, kiểm tra quyền truy cập room cho computer `:id`.
@@ -244,7 +244,7 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
     * **Nếu không tìm thấy `commandInfo` (lỗi hoặc đã xử lý):**
         * Trả về HTTP Response (vd: 404 Not Found) cho Agent.
 
-### Luồng Báo cáo Lỗi:
+##
 1.  **Frontend:** User nhập `type`/`description` -> Gọi `POST /api/computers/:id/errors` với body `{ type, description }` và header JWT.
 2.  **Backend (HTTP Controller):**
     * Xác thực JWT, kiểm tra quyền truy cập room.
@@ -254,7 +254,7 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
     * Cập nhật DB (PostgreSQL ví dụ): `UPDATE computers SET errors = errors || jsonb_build_object('id', errorId, ...) WHERE id = computerId`. (Cần cú pháp chính xác để nối vào mảng JSONB).
     * Trả về HTTP Response (201 Created) với `newError`.
 
-### Luồng Xử lý/Xóa Lỗi:
+##
 1.  **Frontend (Admin):** Nhấn nút Resolve cho lỗi `errorId` trên máy `computerId` -> Gọi `PUT /api/computers/:computerId/errors/:errorId/resolve` với header JWT Admin.
 2.  **Backend (HTTP Controller):**
     * Xác thực JWT, kiểm tra quyền Admin.
@@ -267,7 +267,7 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
         * Trả về HTTP Response (200 OK) với `updatedError`.
     * **Nếu không tìm thấy:** Trả về lỗi 404 Not Found.
 
-## 6. Phát triển backend chi tiết
+#
 
 * **Thiết lập dự án Node.js:** Sử dụng Express.js, cài đặt các thư viện cần thiết (Sequelize/Mongoose, Socket.IO, bcrypt, JWT, node-cache/Redis client, otp-generator, ...). Cấu trúc thư mục (routes, controllers, models, services, middleware, config...).
 * **Kết nối Database:** Cấu hình và khởi tạo kết nối tới PostgreSQL/MongoDB. Định nghĩa Models/Schemas tương ứng với thiết kế DB.
@@ -277,7 +277,7 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
 * **Triển khai Logic Nghiệp vụ:** Xử lý đăng ký MFA. Xử lý cập nhật trạng thái CPU/RAM từ HTTP và broadcast WS. Xử lý gửi/nhận lệnh (HTTP request -> WS send -> Agent execute -> HTTP result -> WS notify). Xử lý báo cáo lỗi (tạo object, cập nhật JSONB). Xử lý/xóa lỗi (tìm, cập nhật JSONB).
 * **Logging và Error Handling:** Tích hợp hệ thống logging (vd: Winston), xây dựng cơ chế xử lý lỗi tập trung.
 
-## 7. Phát triển frontend chi tiết
+#
 
 * **Thiết lập dự án React:** Sử dụng Vite, cài đặt React Router DOM, Axios, Socket.IO Client, Tailwind CSS.
 * **Cấu trúc thư mục:** Sắp xếp components, pages, services, contexts, hooks, assets...
@@ -289,7 +289,7 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
 * **Xử lý WebSocket Events:** Lắng nghe `computer:status_updated` (cập nhật online/offline, CPU/RAM, chỉ báo lỗi nếu cần). Lắng nghe `command:completed`. Admin lắng nghe `admin:new_agent_mfa`, `admin:agent_registered`.
 * **Styling:** Sử dụng Tailwind CSS.
 
-## 8. Phát Triển Agent Chi Tiết (Python)
+#
 
 * **Thiết lập dự án Python:** Môi trường ảo, `requirements.txt` (`requests`, `websocket-client`/`python-socketio`, `psutil`, `keyring` (tùy chọn)).
 * **Khởi động & Cấu hình:** Đọc cấu hình (địa chỉ server). Tạo/Đọc `unique_agent_id`. Kiểm tra Agent Token đã lưu.

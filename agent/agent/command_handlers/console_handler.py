@@ -2,8 +2,9 @@
 Console command handler for executing console/shell commands using subprocess.
 """
 import subprocess
-import platform
-from typing import Dict, Any, TYPE_CHECKING
+import os
+import shlex
+from typing import Dict, Any, TYPE_CHECKING, List, Tuple
 from agent.command_handlers import BaseCommandHandler 
 
 if TYPE_CHECKING:
@@ -28,7 +29,7 @@ class ConsoleCommandHandler(BaseCommandHandler):
         """
         super().__init__(config)
         self.command_timeout: int = self.config.get('command_executor.default_timeout_sec', 300)
-        default_encoding = 'utf-8' if platform.system() != 'Windows' else 'cp1252'
+        default_encoding = 'cp1252'  
         self.output_encoding: str = self.config.get('command_executor.console_encoding', default_encoding)
 
         logger.info(f"ConsoleCommandHandler initialized with timeout={self.command_timeout}s, encoding='{self.output_encoding}'")
@@ -62,8 +63,6 @@ class ConsoleCommandHandler(BaseCommandHandler):
             logger.warning(f"Executing command '{command_id}' with shell=True. Ensure command source is trusted.")
 
         creationflags = 0
-        if platform.system() == 'Windows':
-            creationflags = subprocess.CREATE_NO_WINDOW
 
         try:
             process = subprocess.run(

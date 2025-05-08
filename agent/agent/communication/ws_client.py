@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 """
 WebSocket client module for real-time communication with the backend server.
 """

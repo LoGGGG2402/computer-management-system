@@ -1,96 +1,96 @@
-# Folder Structure of Computer Management System Project
+
 
 Below is the current folder structure of the project, including three main components: Backend (Node.js/Express), Frontend (React/Vite), and Agent (Python).
 
-## Folder Structure
+#
 
 ```
 computer-management-system/
-├── package.json              # Root level package.json
-├── readme.md                 # Project overview information
-├── maintain_agent.md         # Agent maintenance documentation
+├── package.json              
+├── readme.md                 
+├── maintain_agent.md         
 │
-├── agent/                    # Root directory for Agent (Python)
-│   ├── requirements.txt      # Required Python libraries
-│   ├── agent/                # Main source code of the Agent
-│   │   ├── __init__.py       # Initialization file
-│   │   ├── main.py           # Entry point of the Agent
-│   │   ├── version.py        # Version information
-│   │   ├── command_handlers/ # Command handlers module
+├── agent/                    
+│   ├── requirements.txt      
+│   ├── agent/                
+│   │   ├── __init__.py       
+│   │   ├── main.py           
+│   │   ├── version.py        
+│   │   ├── command_handlers/ 
 │   │   │   ├── __init__.py
-│   │   │   ├── base_handler.py       # Base abstract handler
-│   │   │   ├── console_handler.py    # Console command handler
-│   │   │   └── system_handler.py     # System command handler
-│   │   ├── communication/    # Communication module
+│   │   │   ├── base_handler.py       
+│   │   │   ├── console_handler.py    
+│   │   │   └── system_handler.py     
+│   │   ├── communication/    
 │   │   │   ├── __init__.py
-│   │   │   ├── http_client.py        # HTTP Client
-│   │   │   ├── server_connector.py   # Connection to server
-│   │   │   └── ws_client.py          # WebSocket Client
-│   │   ├── config/           # Configuration management module
+│   │   │   ├── http_client.py        
+│   │   │   ├── server_connector.py   
+│   │   │   └── ws_client.py          
+│   │   ├── config/           
 │   │   │   ├── __init__.py
-│   │   │   ├── config_manager.py     # Configuration management
-│   │   │   └── state_manager.py      # State management
-│   │   ├── core/             # Core processing module
+│   │   │   ├── config_manager.py     
+│   │   │   └── state_manager.py      
+│   │   ├── core/             
 │   │   │   ├── __init__.py
-│   │   │   ├── agent.py             # Main Agent logic
-│   │   │   ├── agent_state.py       # Agent state management
-│   │   │   └── command_executor.py  # Command execution
-│   │   ├── ipc/              # Inter-Process Communication
+│   │   │   ├── agent.py             
+│   │   │   ├── agent_state.py       
+│   │   │   └── command_executor.py  
+│   │   ├── ipc/              
 │   │   │   ├── __init__.py
-│   │   │   ├── named_pipe_client.py # IPC client via named pipe
-│   │   │   └── named_pipe_server.py # IPC server via named pipe
-│   │   ├── monitoring/       # Monitoring module
+│   │   │   ├── named_pipe_client.py 
+│   │   │   └── named_pipe_server.py 
+│   │   ├── monitoring/       
 │   │   │   ├── __init__.py
-│   │   │   └── system_monitor.py    # System monitoring
-│   │   ├── system/           # System interaction module
+│   │   │   └── system_monitor.py    
+│   │   ├── system/           
 │   │   │   ├── __init__.py
-│   │   │   ├── directory_utils.py   # Directory utilities
-│   │   │   ├── lock_manager.py      # Lock management
-│   │   │   └── windows_utils.py     # Windows utilities
-│   │   ├── ui/               # User interface module
+│   │   │   ├── directory_utils.py   
+│   │   │   ├── lock_manager.py      
+│   │   │   └── windows_utils.py     
+│   │   ├── ui/               
 │   │   │   ├── __init__.py
-│   │   │   └── ui_console.py        # Console interface
-│   │   └── utils/            # Support utilities
+│   │   │   └── ui_console.py        
+│   │   └── utils/            
 │   │       ├── __init__.py
-│   │       ├── logger.py            # Logging handler
-│   │       └── utils.py             # Utility functions
-│   └── config/               # Agent configuration
-│       └── agent_config.json # Agent configuration file
+│   │       ├── logger.py            
+│   │       └── utils.py             
+│   └── config/               
+│       └── agent_config.json 
 │
-├── backend/                  # Root directory for Backend (Node.js/Express)
-│   ├── create_db.sh          # Database creation script
-│   ├── package.json          # Backend dependencies management
-│   └── src/                  # Main source code of the Backend
-│       ├── app.js            # Express app initialization
-│       ├── server.js         # HTTP and Socket.IO server startup
-│       ├── config/           # Application configuration
-│       │   ├── auth.config.js # Authentication and JWT configuration
-│       │   └── db.config.js  # Database connection configuration
-│       ├── controllers/      # HTTP request handlers
-│       │   ├── admin.controller.js    # Admin request handler
-│       │   ├── agent.controller.js    # Agent request handler
-│       │   ├── auth.controller.js     # Authentication handler
-│       │   ├── computer.controller.js # Computer management
-│       │   ├── room.controller.js     # Room management
-│       │   └── user.controller.js     # User management
-│       ├── database/         # Database interaction
-│       │   ├── migrations/   # Database migrations
-│       │   ├── models/       # Model definitions
-│       │   └── seeders/      # Sample data
-│       ├── middleware/       # Middleware
-│       │   ├── authAccess.js           # Access control check
-│       │   ├── authAgentToken.js      # Agent token authentication
-│       │   ├── authUser.js            # JWT token authentication
-│       │   └── uploadFileMiddleware.js # File upload handling
-│       ├── routes/           # API route definitions
+├── backend/                  
+│   ├── create_db.sh          
+│   ├── package.json          
+│   └── src/                  
+│       ├── app.js            
+│       ├── server.js         
+│       ├── config/           
+│       │   ├── auth.config.js 
+│       │   └── db.config.js  
+│       ├── controllers/      
+│       │   ├── admin.controller.js    
+│       │   ├── agent.controller.js    
+│       │   ├── auth.controller.js     
+│       │   ├── computer.controller.js 
+│       │   ├── room.controller.js     
+│       │   └── user.controller.js     
+│       ├── database/         
+│       │   ├── migrations/   
+│       │   ├── models/       
+│       │   └── seeders/      
+│       ├── middleware/       
+│       │   ├── authAccess.js           
+│       │   ├── authAgentToken.js      
+│       │   ├── authUser.js            
+│       │   └── uploadFileMiddleware.js 
+│       ├── routes/           
 │       │   ├── admin.routes.js
 │       │   ├── agent.routes.js
 │       │   ├── auth.routes.js
 │       │   ├── computer.routes.js
-│       │   ├── index.js      # Aggregation and export of all routes
+│       │   ├── index.js      
 │       │   ├── room.routes.js
 │       │   └── user.routes.js
-│       ├── services/         # Business logic
+│       ├── services/         
 │       │   ├── admin.service.js
 │       │   ├── auth.service.js
 │       │   ├── computer.service.js
@@ -98,68 +98,68 @@ computer-management-system/
 │       │   ├── room.service.js
 │       │   ├── user.service.js
 │       │   └── websocket.service.js
-│       ├── sockets/          # WebSocket connections handling
+│       ├── sockets/          
 │       │   ├── index.js
-│       │   └── handlers/     # WebSocket event handlers
-│       └── utils/            # Utilities
-│           └── logger.js     # Logging handler
+│       │   └── handlers/     
+│       └── utils/            
+│           └── logger.js     
 │
-├── docs/                     # Project documentation
-│   ├── activity_flows.md     # Description of activity flows
-│   ├── api.md                # Detailed API documentation
-│   └── folder_structure.md   # Folder structure description (this file)
+├── docs/                     
+│   ├── activity_flows.md     
+│   ├── api.md                
+│   └── folder_structure.md   
 │
-└── frontend/                 # Root directory for Frontend (React/Vite)
-    ├── eslint.config.js      # ESLint configuration
-    ├── index.html            # Main HTML page
-    ├── package.json          # Frontend dependencies management
-    ├── README.md             # Information and instructions for Frontend
-    ├── vite.config.js        # Vite configuration
-    ├── public/               # Static resources
-    │   └── vite.svg          # Vite logo
-    └── src/                  # Main source code of the Frontend
-        ├── App.jsx           # Main application component
-        ├── index.css         # Global CSS
-        ├── main.jsx          # React application entry point
-        ├── assets/           # Resources like images, fonts
-        │   └── react.svg     # React logo
-        ├── components/       # Reusable components
-        │   ├── common/       # Common reusable components
-        │   ├── computer/     # Computer management components
-        │   └── room/         # Room management components
-        ├── contexts/         # React Contexts
-        │   ├── AuthContext.jsx       # Authentication state management
-        │   ├── CommandHandleContext.jsx # Command handling management
-        │   └── SocketContext.jsx     # Socket connection management
-        ├── hooks/            # Custom React hooks
-        │   ├── useCopyToClipboard.js # Hook for clipboard copying
-        │   ├── useFormatting.js      # Hook for data formatting
-        │   ├── useModalState.js      # Hook for modal state management
-        │   └── useSimpleFetch.js     # Hook for simple API calls
-        ├── layouts/          # Layout components
-        │   ├── Header.jsx    # Header component
-        │   └── MainLayout.jsx # Main application layout
-        ├── pages/            # Main pages
-        │   ├── LoginPage.jsx # Login page
-        │   ├── Admin/        # Admin pages
-        │   ├── computer/     # Computer management pages
-        │   ├── dashboard/    # Dashboard page
-        │   ├── room/         # Room management pages
-        │   └── user/         # User management pages
-        ├── router/           # Routing configuration
-        │   └── index.jsx     # Main route definitions
-        └── services/         # Services for Backend communication
-            ├── api.js        # Axios configuration and common HTTP handlers
-            ├── auth.service.js     # Authentication service
-            ├── computer.service.js # Computer management service
-            ├── room.service.js     # Room management service
-            ├── user.service.js     # User management service
-            └── admin.service.js    # System administration service
+└── frontend/                 
+    ├── eslint.config.js      
+    ├── index.html            
+    ├── package.json          
+    ├── README.md             
+    ├── vite.config.js        
+    ├── public/               
+    │   └── vite.svg          
+    └── src/                  
+        ├── App.jsx           
+        ├── index.css         
+        ├── main.jsx          
+        ├── assets/           
+        │   └── react.svg     
+        ├── components/       
+        │   ├── common/       
+        │   ├── computer/     
+        │   └── room/         
+        ├── contexts/         
+        │   ├── AuthContext.jsx       
+        │   ├── CommandHandleContext.jsx 
+        │   └── SocketContext.jsx     
+        ├── hooks/            
+        │   ├── useCopyToClipboard.js 
+        │   ├── useFormatting.js      
+        │   ├── useModalState.js      
+        │   └── useSimpleFetch.js     
+        ├── layouts/          
+        │   ├── Header.jsx    
+        │   └── MainLayout.jsx 
+        ├── pages/            
+        │   ├── LoginPage.jsx 
+        │   ├── Admin/        
+        │   ├── computer/     
+        │   ├── dashboard/    
+        │   ├── room/         
+        │   └── user/         
+        ├── router/           
+        │   └── index.jsx     
+        └── services/         
+            ├── api.js        
+            ├── auth.service.js     
+            ├── computer.service.js 
+            ├── room.service.js     
+            ├── user.service.js     
+            └── admin.service.js    
 ```
 
-## Structure Characteristics:
+#
 
-### Agent (Python)
+##
 - Modular structure with entry point in `main.py`
 - Main logic in `core/agent.py` and state management in `core/agent_state.py`
 - The `command_handlers/` module contains handlers for various commands
@@ -170,7 +170,7 @@ computer-management-system/
 - The `config/` module manages Agent configuration and state
 - The `utils/` module provides utilities such as logging
 
-### Backend (Node.js/Express)
+##
 - MVC pattern with Sequelize ORM
 - Controllers in `controllers/` handle API requests
 - Routes in `routes/` define endpoints
@@ -179,7 +179,7 @@ computer-management-system/
 - Database migrations in `database/migrations/`
 - Authentication and access control middleware
 
-### Frontend (React/Vite)
+##
 - Feature-based structure with directories `components/`, `pages/`, `contexts/`, `hooks/`
 - Uses React Router for routing management
 - Services in `services/` handle communication with Backend API

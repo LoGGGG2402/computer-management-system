@@ -2,7 +2,8 @@
 System monitoring functionality for tracking computer resources.
 """
 import json
-import platform
+
+
 import subprocess
 import psutil
 import socket
@@ -34,6 +35,7 @@ class SystemMonitor:
         """
         Initialize the system monitor.
         """
+        
         logger.debug("SystemMonitor initialized for Windows")
 
     def get_usage_stats(self) -> Dict[str, float]:
@@ -74,6 +76,7 @@ class SystemMonitor:
         :rtype: str
         """
         gpu_info = "N/A"
+        
         logger.debug("Attempting GPU detection on Windows")
 
         try:
@@ -93,9 +96,10 @@ class SystemMonitor:
             else:
                 logger.warning(f"WMIC command for GPU failed or returned empty. Code: {result.returncode}, Stderr: {result.stderr.strip()}")
 
-        except FileNotFoundError as e:
-            logger.warning(f"Command for GPU detection not found: {e.filename}")
-        except Exception as e:
+        except FileNotFoundError as e: 
+            
+            logger.warning(f"WMIC command for GPU detection not found: {e.filename}")
+        except Exception as e: 
             logger.error(f"Error getting GPU info: {e}", exc_info=True)
 
         logger.debug(f"Detected GPU info: {gpu_info}")
@@ -103,7 +107,7 @@ class SystemMonitor:
 
     def get_hardware_info(self) -> Dict[str, Any]:
         """
-        Gathers basic hardware and network information for Windows systems.
+        Gathers basic hardware and network information for Windows systems using WMIC and psutil.
 
         :return: Dictionary containing hardware details
         :rtype: Dict[str, Any]
@@ -119,20 +123,63 @@ class SystemMonitor:
         }
 
         try:
-            windows_version = platform.version()
-            windows_edition = platform.win32_edition() if hasattr(platform, 'win32_edition') else ""
-            hardware_info["os_info"] = f"Windows {platform.release()} {windows_edition} ({windows_version})"
             
-            hardware_info["cpu_info"] = platform.processor() if platform.processor() else "N/A"
+            try:
+                result_os = subprocess.run(
+                    ["wmic", "os", "get", "Caption,Version"],
+                    capture_output=True, text=True, check=False, creationflags=subprocess.CREATE_NO_WINDOW
+                )
+                if result_os.returncode == 0 and result_os.stdout:
+                    lines_os = result_os.stdout.strip().splitlines()
+                    if len(lines_os) > 1 and lines_os[1].strip():
+                        hardware_info["os_info"] = lines_os[1].strip()
+                    else: 
+                        logger.warning("Could not parse OS details from WMIC. Using generic 'Windows'.")
+                        hardware_info["os_info"] = "Windows"
+                else: 
+                    logger.warning(f"WMIC command for OS info failed or returned empty. Using generic 'Windows'. Stderr: {result_os.stderr.strip()}")
+                    hardware_info["os_info"] = "Windows"
+            except Exception as e_wmic_os: 
+                logger.error(f"Error getting OS info via WMIC: {e_wmic_os}. Using generic 'Windows'.", exc_info=True)
+                hardware_info["os_info"] = "Windows"
+
             
+            try:
+                result_cpu = subprocess.run(
+                    ["wmic", "cpu", "get", "name"],
+                    capture_output=True, text=True, check=False, creationflags=subprocess.CREATE_NO_WINDOW
+                )
+                if result_cpu.returncode == 0 and result_cpu.stdout:
+                    lines_cpu = result_cpu.stdout.strip().splitlines()
+                    if len(lines_cpu) > 1 and lines_cpu[1].strip():
+                        hardware_info["cpu_info"] = lines_cpu[1].strip()
+                    else: 
+                        logger.warning("Could not parse CPU info from WMIC.")
+                else: 
+                     logger.warning(f"WMIC command for CPU info failed or returned empty. Stderr: {result_cpu.stderr.strip()}")
+            except Exception as e_wmic_cpu: 
+                logger.error(f"Error getting CPU info via WMIC: {e_wmic_cpu}", exc_info=True)
+
             hardware_info["gpu_info"] = self._get_gpu_info()
             
             hardware_info["total_ram"] = psutil.virtual_memory().total
-            hardware_info["total_disk_space"] = psutil.disk_usage('C:\\').total
             
-            hardware_info["ip_address"] = socket.gethostbyname(socket.gethostname())
+            try:
+                hardware_info["total_disk_space"] = psutil.disk_usage('C:\\').total
+            except FileNotFoundError: 
+                logger.warning("System drive C: not found for total disk space. Returning 0.")
+                hardware_info["total_disk_space"] = 0
+            except Exception as e_disk_total: 
+                logger.error(f"Error getting total disk space for C:: {e_disk_total}", exc_info=True)
+                hardware_info["total_disk_space"] = 0
+            
+            try:
+                hardware_info["ip_address"] = socket.gethostbyname(socket.gethostname())
+            except socket.gaierror: 
+                logger.warning("Could not determine IP address (hostname not resolvable).")
+                hardware_info["ip_address"] = "N/A"
 
-        except Exception as e:
+        except Exception as e: 
             logger.error(f"Unexpected error collecting hardware information: {e}", exc_info=True)
 
         logger.info("Hardware information collection completed.")

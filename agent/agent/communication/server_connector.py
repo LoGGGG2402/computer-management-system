@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from . import HttpClient, WSClient
     from ..monitoring import SystemMonitor
 
-from ..ui import prompt_for_mfa, display_registration_success
+from ..ui import prompt_for_mfa
 from ..utils import get_logger
 
 logger = get_logger(__name__)
@@ -72,12 +72,10 @@ class ServerConnector:
             self.agent_token = response['agentToken']
             if self.state_manager.save_token(self.device_id, self.agent_token):
                 logger.info("MFA verification successful. Agent registered, token saved.")
-                display_registration_success()
                 return True
             else:
                 
                 logger.critical("MFA successful but FAILED TO SAVE TOKEN LOCALLY! Agent may not work after restart.")
-                display_registration_success() 
                 return True
         else:
             mfa_error = response.get('message', 'Invalid MFA code or it has expired.')
@@ -336,7 +334,7 @@ class ServerConnector:
             import traceback
             stack_trace = ''.join(traceback.format_stack()[:-1])
             
-        # Create standardized error data
+        
         error_details = details.copy()
         error_details['stack_trace'] = stack_trace
         error_details['agent_version'] = current_version
@@ -350,9 +348,9 @@ class ServerConnector:
         
         logger.error(f"Reporting error to backend: {error_type} - {message}")
         
-        # Try to report error directly
+        
         if not self.http_client.report_error(error_data):
-            # If direct reporting fails, save to file for later reporting
+            
             from ..utils.utils import save_error_report
             error_dir = Path(self.state_manager.storage_path) / 'error_reports'
             if error_dir:
@@ -378,7 +376,7 @@ class ServerConnector:
         """
         from ..utils.utils import read_buffered_error_reports
         
-        # Read all buffered error reports
+        
         error_reports = read_buffered_error_reports(error_dir)
         if not error_reports:
             logger.info("No buffered error reports found to send")
@@ -389,17 +387,17 @@ class ServerConnector:
         successfully_reported = 0
         
         for report in error_reports:
-            # Get the file path and remove it from the report data before sending
+            
             file_path = report.pop('_file_path', None)
             if not file_path:
                 logger.warning("Error report missing file path, skipping")
                 continue
                 
-            # Try to send the error report with retries
+            
             success = False
             for attempt in range(max_retries):
                 if self.http_client.report_error(report):
-                    # Successfully reported, delete the file
+                    
                     try:
                         import os
                         if os.path.exists(file_path):
@@ -410,18 +408,18 @@ class ServerConnector:
                             break
                         else:
                             logger.warning(f"Error file not found (already removed?): {file_path}")
-                            success = True  # Consider it successful if file is already gone
+                            success = True  
                             break
                     except Exception as e:
                         logger.error(f"Failed to delete error file {file_path} after successful reporting: {e}")
-                        # Consider it a partial success even if file deletion fails
+                        
                         successfully_reported += 1
                         success = True
                         break
                 else:
                     logger.warning(f"Failed to report error (attempt {attempt + 1}/{max_retries}): {file_path}")
                     import time
-                    time.sleep(2)  # Wait before retry
+                    time.sleep(2)  
             
             if not success:
                 logger.error(f"Failed to report error after {max_retries} attempts: {file_path}")
@@ -443,13 +441,13 @@ class ServerConnector:
         try:
             logger.info(f"Checking for stored error reports in {error_dir}")
             
-            # Report buffered errors
+            
             successfully_reported, total_reports = self.process_error_reports(error_dir)
             
             if successfully_reported > 0:
                 logger.info(f"Successfully reported {successfully_reported} error files")
             
-            # Check if there are any remaining error files
+            
             remaining_reports = read_buffered_error_reports(error_dir)
             
             if remaining_reports:

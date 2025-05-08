@@ -1,141 +1,148 @@
 """
-Directory and permission management utilities for the agent.
+Utilities for determining and creating the Agent's directory structure.
+Handles different storage locations based on platform and user permissions.
 """
 import os
-import uuid
+import sys
+import ctypes
+import logging
+from typing import Optional, Tuple
+from agent.utils import get_logger
 
-import win32security
-import ntsecuritycon as win32con
+logger = get_logger(__name__)
 
-from agent.system.windows_utils import is_running_as_admin
-from agent import __app_name__
 
-def determine_storage_path() -> str:
+PROGRAMDATA_BASE_DIR = os.environ.get('PROGRAMDATA', 'C:\\ProgramData')
+AGENT_DATA_DIR_NAME = "CMSAgent"
+DEFAULT_USER_DATA_DIR = os.path.expanduser(os.path.join("~", ".cms-agent"))
+
+CSIDL_COMMON_APPDATA = 0x0023
+CSIDL_LOCAL_APPDATA = 0x001c
+SHGFP_TYPE_CURRENT = 0
+
+
+def _is_windows() -> bool:
     """
-    Determines the appropriate storage path based on execution privileges.
-    Uses ProgramData for Admin, LocalAppData for standard user.
-
-    :return: The absolute path to the storage directory
-    :rtype: str
-    :raises: ValueError: If a suitable path cannot be determined
+    Checks if the current operating system is Windows.
+    
+    :return: Always True as the code assumes Windows
+    :rtype: bool
     """
-    is_admin = is_running_as_admin()
+    return True
 
-    if is_admin:
-        base_path = os.getenv('PROGRAMDATA')
-        if not base_path:
-            raise ValueError("Cannot determine ProgramData path for admin storage.")
-        storage_dir = os.path.join(base_path, __app_name__)
+
+def determine_storage_path(app_name: str = "CMSAgent", system_wide: bool = True) -> str:
+    """
+    Determines the appropriate storage path for application data.
+    Now assumes Windows. If system_wide is True, uses ProgramData.
+    Otherwise, uses user's Local AppData.
+    """
+    if system_wide:
+        
+        path_buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+        ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_COMMON_APPDATA, None, SHGFP_TYPE_CURRENT, path_buf)
+        base_path = os.path.join(path_buf.value, app_name)
     else:
-        base_path = os.getenv('LOCALAPPDATA')
-        if not base_path:
-            raise ValueError("Cannot determine LocalAppData path for user storage.")
-        storage_dir = os.path.join(base_path, __app_name__)
-
-    return storage_dir
-
-def ensure_directory_permissions(path: str, is_admin: bool):
-    """
-    Sets strict permissions (SYSTEM:F, Administrators:F) on the directory
-    if running as Admin and win32security is available. Disables inheritance.
+        
+        path_buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+        ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_LOCAL_APPDATA, None, SHGFP_TYPE_CURRENT, path_buf)
+        base_path = os.path.join(path_buf.value, app_name)
     
-    :param path: Path to the directory to set permissions on
-    :type path: str
-    :param is_admin: Whether running as admin
-    :type is_admin: bool
-    """
-    if not is_admin:
-        return
-
     try:
-        sid_system = win32security.LookupAccountName("", "SYSTEM")[0]
-        sid_admins = win32security.LookupAccountName("", "Administrators")[0]
-
-        dacl = win32security.ACL()
-        dacl.AddAccessAllowedAceEx(win32security.ACL_REVISION_DS,
-                                   win32con.OBJECT_INHERIT_ACE | win32con.CONTAINER_INHERIT_ACE,
-                                   win32con.GENERIC_ALL,
-                                   sid_system)
-        dacl.AddAccessAllowedAceEx(win32security.ACL_REVISION_DS,
-                                   win32con.OBJECT_INHERIT_ACE | win32con.CONTAINER_INHERIT_ACE,
-                                   win32con.GENERIC_ALL,
-                                   sid_admins)
-
-        sd = win32security.SECURITY_DESCRIPTOR()
-        sd.SetSecurityDescriptorOwner(sid_admins, False)
-        sd.SetSecurityDescriptorGroup(sid_system, False)
-        sd.SetSecurityDescriptorDacl(True, dacl, False)
-
-        security_info = win32security.DACL_SECURITY_INFORMATION | win32security.PROTECTED_DACL_SECURITY_INFORMATION | win32security.OWNER_SECURITY_INFORMATION | win32security.GROUP_SECURITY_INFORMATION
-        win32security.SetFileSecurity(path, security_info, sd)
-    except Exception:
-        pass
-
-def ensure_storage_directory(storage_path: str) -> None:
-    """
-    Ensures the storage directory exists, is accessible,
-    and sets appropriate permissions if running as Admin.
-    
-    :param storage_path: Path to the storage directory
-    :type storage_path: str
-    :raises: ValueError: On critical errors
-    """
-    is_admin = is_running_as_admin()
-    try:
-        if not os.path.exists(storage_path):
-            os.makedirs(storage_path, exist_ok=True)
-            ensure_directory_permissions(storage_path, is_admin)
-        elif not os.path.isdir(storage_path):
-            raise ValueError(f"Storage path '{storage_path}' is not a directory.")
-        else:
-            test_file = os.path.join(storage_path, f".writetest_{uuid.uuid4()}")
-            try:
-                with open(test_file, 'w') as f:
-                    f.write('test')
-                os.remove(test_file)
-            except (IOError, OSError):
-                raise ValueError(f"Storage path '{storage_path}' is not writable.")
-            ensure_directory_permissions(storage_path, is_admin)
-
-    except PermissionError:
-        raise ValueError(f"Permission denied for storage path: {storage_path}")
+        os.makedirs(base_path, exist_ok=True)
     except OSError as e:
-        raise ValueError(f"Could not create/access storage directory: {e}")
-    except Exception as e:
-        raise ValueError(f"Unexpected error ensuring storage directory: {e}")
+        logger.error(f"Error creating or accessing storage path {base_path}: {e}")
+        raise
+    return base_path
+
 
 def setup_directory_structure() -> str:
     """
-    Sets up the directory structure for the application.
-    This is a high-level function that should be called early in the application startup.
+    Sets up the directory structure for the agent, creating necessary subdirectories.
     
-    :return: The path to the storage directory
+    :return: Base storage path that was set up
     :rtype: str
-    :raises: ValueError: If setup fails
     """
-    try:
-        # Determine the appropriate storage path
-        storage_path = determine_storage_path()
-        
-        # Ensure the storage directory exists and has proper permissions
-        ensure_storage_directory(storage_path)
-        
-        # Create logs directory
-        logs_dir = os.path.join(storage_path, 'logs')
-        if not os.path.exists(logs_dir):
-            os.makedirs(logs_dir, exist_ok=True)
+    storage_path = determine_storage_path()
+    if not storage_path:
+        logger.critical("Failed to determine storage path")
+        raise RuntimeError("Failed to determine agent storage path")
+    
+    
+    subdirs = ["config", "logs", "error_reports", "cache", "updates"]
+    for subdir in subdirs:
+        subdir_path = os.path.join(storage_path, subdir)
+        try:
+            os.makedirs(subdir_path, exist_ok=True)
+            logger.debug(f"Created/verified directory: {subdir_path}")
+        except Exception as e:
+            logger.error(f"Failed to create directory {subdir_path}: {e}")
+    
+    return storage_path
 
-        # Create errors directory
-        errors_dir = os.path.join(storage_path, 'error_reports')
-        if not os.path.exists(errors_dir):
-            os.makedirs(errors_dir, exist_ok=True)
-            
-        # Create config directory
-        config_dir = os.path.join(storage_path, 'config')
-        if not os.path.exists(config_dir):
-            os.makedirs(config_dir, exist_ok=True)
-            
-        return storage_path
+
+def set_directory_permissions_for_system(directory_path: str) -> bool:
+    """
+    Sets permissions on a directory to allow the SYSTEM account full access.
+    Windows-specific function. Used for service installation.
+    
+    :param directory_path: Path to the directory
+    :type directory_path: str
+    :return: True if successful, False otherwise
+    :rtype: bool
+    """
+    if not _is_windows():
+        logger.warning("set_directory_permissions_for_system() is Windows-specific")
+        return False
+    
+    try:
+        import win32security
+        import win32con
+        import win32file
         
+        
+        system_sid = win32security.CreateWellKnownSid(win32security.WinLocalSystemSid)
+        administrators_sid = win32security.CreateWellKnownSid(win32security.WinBuiltinAdministratorsSid)
+        
+        
+        sd = win32security.GetFileSecurity(
+            directory_path, 
+            win32security.DACL_SECURITY_INFORMATION
+        )
+        
+        
+        dacl = win32security.ACL()
+        
+        
+        dacl.AddAccessAllowedAce(
+            win32security.ACL_REVISION,
+            win32con.FILE_ALL_ACCESS,
+            system_sid
+        )
+        
+        
+        dacl.AddAccessAllowedAce(
+            win32security.ACL_REVISION,
+            win32con.FILE_ALL_ACCESS,
+            administrators_sid
+        )
+        
+        
+        sd.SetSecurityDescriptorDacl(1, dacl, 0)
+        
+        
+        win32security.SetFileSecurity(
+            directory_path,
+            win32security.DACL_SECURITY_INFORMATION,
+            sd
+        )
+        
+        logger.info(f"Set SYSTEM and Administrators permissions on: {directory_path}")
+        return True
+        
+    except ImportError:
+        logger.error("win32security module not available, cannot set directory permissions")
+        return False
     except Exception as e:
-        raise ValueError(f"Failed to set up directory structure: {e}")
+        logger.error(f"Failed to set directory permissions: {e}", exc_info=True)
+        return False

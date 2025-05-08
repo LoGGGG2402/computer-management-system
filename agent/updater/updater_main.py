@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 """
 Standalone Agent Updater Script (Windows Only).
 
@@ -32,14 +32,14 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 import psutil
 
-# --- Constants ---
+
 BACKUP_SUFFIX = ".bak" #: Suffix appended to the backup directory name.
 PROCESS_WAIT_TIMEOUT = 60  #: Max seconds to wait for the agent process to terminate.
 PROCESS_START_WAIT = 5     #: Seconds to wait after starting the new agent before checking its status.
 ERROR_REPORT_DIR = "error_reports" #: Subdirectory name for storing JSON error reports.
 LOG_DIR = "logs" #: Subdirectory name for storing log files.
 
-# --- Logging Setup ---
+
 def setup_updater_logging(log_dir: Path):
     """Sets up logging for the updater process.
 
@@ -64,12 +64,12 @@ def setup_updater_logging(log_dir: Path):
         )
         logging.info("="*10 + " Updater Logging Started " + "="*10)
     except Exception as e:
-        # Fallback to console-only logging if file setup fails.
+        
         print(f"CRITICAL: Failed to set up file logging to {log_file}: {e}", file=sys.stderr)
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         logging.error("Using basic console logging due to setup error.")
 
-# --- Error Reporting ---
+
 def save_error_report(error_type: str, error_message: str, details: Optional[Dict[str, Any]], error_dir: Path) -> bool:
     """Saves a simplified error report to a JSON file.
 
@@ -94,7 +94,7 @@ def save_error_report(error_type: str, error_message: str, details: Optional[Dic
         filename = f"error_{timestamp_str}_{error_type.lower()}.json"
         file_path = error_dir / filename
 
-        # Convert Path objects in details to strings for JSON serialization
+        
         serializable_details = {}
         if details:
             for k, v in details.items():
@@ -105,7 +105,7 @@ def save_error_report(error_type: str, error_message: str, details: Optional[Dic
             "error_message": error_message,
             "details": serializable_details,
             "timestamp": datetime.datetime.now().isoformat(),
-            "stack_trace": traceback.format_exc() # Include stack trace if called within an exception handler
+            "stack_trace": traceback.format_exc() 
         }
 
         with open(file_path, 'w', encoding='utf-8') as f:
@@ -117,7 +117,7 @@ def save_error_report(error_type: str, error_message: str, details: Optional[Dic
         logging.critical(f"Failed to save error report: {e}", exc_info=True)
         return False
 
-# --- Process Management ---
+
 def wait_for_process_termination(pid: int, timeout: int = PROCESS_WAIT_TIMEOUT) -> bool:
     """Waits for the process with the given PID to terminate.
 
@@ -145,7 +145,7 @@ def wait_for_process_termination(pid: int, timeout: int = PROCESS_WAIT_TIMEOUT) 
         logging.error(f"Process {pid} did not terminate within {timeout}s. Attempting to kill.")
         try:
             process.kill()
-            process.wait(timeout=5) # Allow a moment for the kill signal to take effect
+            process.wait(timeout=5) 
             if not process.is_running():
                 logging.info(f"Process {pid} killed successfully.")
                 return True
@@ -185,7 +185,7 @@ def start_agent(agent_file_path: Path) -> bool:
         logging.error(f"Agent path is not a file: {agent_file_path}")
         return False
 
-    # Determine the command based on file extension
+    
     cmd = []
     if agent_file_path.suffix.lower() == '.py':
         cmd = [python_exe, "-m", "agent.main"]
@@ -198,19 +198,19 @@ def start_agent(agent_file_path: Path) -> bool:
     logging.info(f"Executing command: {' '.join(cmd)} in CWD: {working_dir}")
 
     try:
-        # DETACHED_PROCESS and CREATE_NEW_PROCESS_GROUP flags are used for running
-        # the process independently in the background on Windows.
+        
+        
         creationflags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
         process = subprocess.Popen(
-            cmd,                                # Execute the command list
-            cwd=str(working_dir),               # Set working directory
-            close_fds=True,                     # Recommended for security and resource management
+            cmd,                                
+            cwd=str(working_dir),               
+            close_fds=True,                     
             creationflags=creationflags
         )
         logging.info(f"Launched agent process with PID: {process.pid}. Checking status in {PROCESS_START_WAIT}s...")
         time.sleep(PROCESS_START_WAIT)
 
-        # Verify the process is actually running after the short wait.
+        
         try:
             launched_process = psutil.Process(process.pid)
             if launched_process.is_running() and launched_process.status() != psutil.STATUS_ZOMBIE:
@@ -228,7 +228,7 @@ def start_agent(agent_file_path: Path) -> bool:
         logging.error(f"Failed to start agent process from {agent_file_path}: {e}", exc_info=True)
         return False
 
-# --- File Operations ---
+
 def move_path(src: Path, dst: Path, max_retries=3, delay=1) -> bool:
     """Moves a file or directory with a retry mechanism.
 
@@ -246,8 +246,8 @@ def move_path(src: Path, dst: Path, max_retries=3, delay=1) -> bool:
     :return: True if the move was successful, False otherwise.
     :rtype: bool
     """
-    src  = src.parent if src.is_file() else src # Ensure src is a directory
-    dst  = dst.parent if dst.is_file() else dst # Ensure dst is a directory
+    src  = src.parent if src.is_file() else src 
+    dst  = dst.parent if dst.is_file() else dst 
     for attempt in range(max_retries):
         try:
             shutil.move(str(src), str(dst))
@@ -260,7 +260,7 @@ def move_path(src: Path, dst: Path, max_retries=3, delay=1) -> bool:
             else:
                 logging.error(f"Failed to move '{src}' after {max_retries} attempts.")
                 return False
-    return False # Should logically not be reached
+    return False 
 
 def remove_path(path: Path, max_retries=3, delay=1) -> bool:
     """Removes a file or directory with a retry mechanism.
@@ -291,11 +291,11 @@ def remove_path(path: Path, max_retries=3, delay=1) -> bool:
             elif path.is_file():
                 os.remove(path)
                 logging.info(f"Removed file '{path}'")
-            else: # Handle cases like broken symlinks
+            else: 
                 logging.warning(f"Path '{path}' exists but is neither file nor directory. Attempting os.remove.")
                 os.remove(path)
                 logging.info(f"Removed '{path}' (was not file/dir).")
-            return True # Success
+            return True 
         except OSError as e:
             logging.warning(f"Remove attempt {attempt + 1}/{max_retries} failed for '{path}': {e}")
             if attempt < max_retries - 1:
@@ -303,9 +303,9 @@ def remove_path(path: Path, max_retries=3, delay=1) -> bool:
             else:
                 logging.error(f"Failed to remove '{path}' after {max_retries} attempts.")
                 return False
-    return False # Should logically not be reached
+    return False 
 
-# --- Main Update Logic ---
+
 def main():
     """Parses arguments and executes the main agent update workflow."""
     parser = argparse.ArgumentParser(
@@ -318,19 +318,19 @@ def main():
     parser.add_argument("--storage_dir", type=str, required=True, help="Base directory for updater storage (logs, error reports).")
     args = parser.parse_args()
 
-    # --- Path Setup & Validation ---
+    
     storage_dir = Path(args.storage_dir).resolve()
     log_dir = storage_dir / LOG_DIR
     error_dir = storage_dir / ERROR_REPORT_DIR
 
     try:
-        current_agent_path = Path(args.current_agent).resolve(strict=True) # Ensure current agent file exists
-        new_agent_path = Path(args.new_agent).resolve(strict=True) # Ensure new agent file exists
+        current_agent_path = Path(args.current_agent).resolve(strict=True) 
+        new_agent_path = Path(args.new_agent).resolve(strict=True) 
     except FileNotFoundError as e:
         print(f"ERROR: Agent executable path not found: {e}", file=sys.stderr)
         logging.error(f"Agent executable path not found: {e}")
 
-    backup_agent_path = current_agent_path.parent.with_name(current_agent_path.parent.name + BACKUP_SUFFIX) # Backup dir name based on current agent dir name
+    backup_agent_path = current_agent_path.parent.with_name(current_agent_path.parent.name + BACKUP_SUFFIX) 
 
     setup_updater_logging(log_dir)
     logging.info("Updater starting...")
@@ -341,105 +341,105 @@ def main():
     logging.info(f"  Backup directory target: {backup_agent_path}")
 
 
-    final_exit_code = 1 # Default to error exit code
+    final_exit_code = 1 
     backup_created = False
 
     try:
-        # Step 1: Wait for the old agent process to terminate.
+        
         if not wait_for_process_termination(args.pid):
             save_error_report("TERMINATION_FAILED", f"Agent process {args.pid} did not terminate.", {"pid": args.pid}, error_dir)
-            raise SystemExit(1) # Critical failure, cannot proceed.
+            raise SystemExit(1) 
 
-        # Step 2: Backup the directory containing the current agent executable.
+        
         logging.info(f"Backing up current agent file '{current_agent_path}' to '{backup_agent_path}'...")
         if current_agent_path.exists():
-            # Ensure any previous backup attempt is cleaned up.
+            
             if backup_agent_path.exists():
                 logging.warning(f"Removing existing backup directory: {backup_agent_path}")
                 if not remove_path(backup_agent_path):
                     save_error_report("BACKUP_CLEANUP_FAILED", f"Failed to remove old backup {backup_agent_path}", {"backup_dir": backup_agent_path}, error_dir)
-                    # Log error but attempt to continue if backup fails to delete.
-                    # This is a non-critical error, but we should log it
-            # Perform the backup by moving the current agent's directory.
+                    
+                    
+            
             if move_path(current_agent_path, backup_agent_path):
                 backup_created = True
                 logging.info(f"Backup of directory '{backup_agent_path}' created at '{backup_agent_path}'")
             else:
                 save_error_report("BACKUP_FAILED", f"Failed to move {current_agent_path} to {backup_agent_path}", {"src": current_agent_path, "dst": backup_agent_path}, error_dir)
-                raise SystemExit(1) # Critical failure, cannot proceed without backup.
+                raise SystemExit(1) 
         else:
-            # This case should ideally not happen if current_agent_path resolved, but handle defensively.
+            
             logging.warning(f"Current agent directory '{current_agent_path}' does not exist, cannot back up. Skipping backup.")
 
 
-        # Step 3: Deploy the directory containing the new agent executable.
+        
         logging.info(f"Deploying new agent from '{new_agent_path}' to '{current_agent_path}'...")
         if not new_agent_path.exists():
-             # Should have been caught by resolve(), but double-check
+             
              save_error_report("DEPLOY_SOURCE_DIR_MISSING", f"New agent source not found: {new_agent_path}", {"source_dir": new_agent_path}, error_dir)
-             raise SystemExit(1) # Critical failure, cannot deploy non-existent source dir.
+             raise SystemExit(1) 
 
-        # Move the directory containing the new agent into the target directory location.
+        
         if move_path(new_agent_path, current_agent_path):
             logging.info("New agent directory deployed successfully.")
         else:
             save_error_report("DEPLOY_FAILED", f"Failed to move {new_agent_path} to {current_agent_path}", {"src": new_agent_path, "dst": current_agent_path}, error_dir)
-            raise SystemExit(1) # Critical failure, deployment failed.
+            raise SystemExit(1) 
 
-        # Step 4: Start the newly deployed agent using its specific file path.
-        # The new agent executable should now be at the original current_agent_path location
-        # within the newly deployed current_agent_path.
-        deployed_agent_executable = current_agent_path # Reconstruct the path to the new agent executable
+        
+        
+        
+        deployed_agent_executable = current_agent_path 
         logging.info(f"Starting new agent executable: {deployed_agent_executable}...")
         if start_agent(deployed_agent_executable):
             logging.info("Update successful! New agent started.")
-            final_exit_code = 0 # Success!
-            # Clean up the backup directory after successful update.
+            final_exit_code = 0 
+            
             if backup_created and backup_agent_path.exists():
                 logging.info(f"Removing successful backup directory: {backup_agent_path}")
                 if not remove_path(backup_agent_path):
                     logging.warning(f"Could not remove backup directory {backup_agent_path} after successful update.")
-                    # Non-critical, log warning but don't fail the update.
+                    
         else:
             save_error_report("START_FAILED", "Failed to start the newly deployed agent.", {"agent_executable": deployed_agent_executable}, error_dir)
             logging.error("Failed to start new agent. Initiating rollback...")
-            raise SystemExit(1) # Trigger rollback via exception handling.
+            raise SystemExit(1) 
 
     except SystemExit as e:
-        # Handle controlled exits from failed steps.
+        
         final_exit_code = e.code if isinstance(e.code, int) else 1
-        if final_exit_code != 0: # Only perform rollback if exiting due to an error.
+        if final_exit_code != 0: 
              logging.error("Update process failed. Attempting rollback if possible.")
-             # --- Rollback Logic ---
+             
              if backup_created and backup_agent_path.exists():
                  logging.info(f"Restoring agent directory from backup: {backup_agent_path} to {current_agent_path}...")
-                 # Attempt to restore the backup directory to its original location.
-                 # Attempt to remove the failed/incomplete new deployment directory first.
+                 
+                 
                  if current_agent_path.exists():
                      if not remove_path(current_agent_path):
-                         # This is a critical state - cannot remove failed deployment.
+                         
                          logging.critical(f"ROLLBACK FAILED: Could not remove failed deployment directory at {current_agent_path}. Manual intervention needed.")
                          save_error_report("ROLLBACK_CLEANUP_FAILED", f"Could not remove {current_agent_path} during rollback", {"target_dir": current_agent_path}, error_dir)
-                         final_exit_code = 2 # Indicate critical failure state.
-                     # If removal succeeded, attempt to restore the backup directory.
+                         final_exit_code = 2 
+                     
                      elif move_path(backup_agent_path, current_agent_path):
                          logging.info("Rollback successful. Attempting to restart old agent...")
-                         # Reconstruct the path to the *original* agent executable within the restored directory
+                         
                          old_agent_executable = current_agent_path
                          if start_agent(old_agent_executable):
                              logging.info("Old agent restarted successfully after rollback.")
                          else:
-                             # Rollback succeeded, but old agent didn't start.
+                             
                              logging.error("ROLLBACK WARNING: Failed to restart the old agent after restoring backup.")
                              save_error_report("ROLLBACK_RESTART_FAILED", "Failed to restart old agent after rollback", {"agent_executable": old_agent_executable}, error_dir)
-                             # Keep exit code 1 (update failed), but rollback itself was okay.
+                             
                      else:
-                         # This is a critical state - couldn't restore backup.
+                         
                          logging.critical(f"ROLLBACK FAILED: Could not move backup {backup_agent_path} to {current_agent_path}. Manual intervention needed.")
                          save_error_report("ROLLBACK_MOVE_FAILED", f"Could not restore backup from {backup_agent_path}", {"backup_dir": backup_agent_path, "target_dir": current_agent_path}, error_dir)
-                         final_exit_code = 2 # Indicate critical failure state.
+                         final_exit_code = 2 
                  else:
-                     # If current_agent_path didn't exist (e.g., deployment failed early).
+                     
                      if move_path(backup_agent_path, current_agent_path):
                           logging.info("Rollback successful (restored backup directory). Attempting to restart old agent...")
                           old_agent_executable = current_agent_path / current_agent_path.name
@@ -454,37 +454,37 @@ def main():
                           final_exit_code = 2
 
              else:
-                 # No backup available to restore from.
+                 
                  logging.error("Rollback impossible: No backup was created or backup path not found.")
                  save_error_report("ROLLBACK_NO_BACKUP", "Cannot rollback because backup is missing.", {"backup_dir": backup_agent_path}, error_dir)
-                 final_exit_code = 2 # Indicate critical failure state.
+                 final_exit_code = 2 
 
     except Exception as e:
-        # Catch any other unexpected errors during the update process.
+        
         logging.critical(f"Unexpected critical error during update: {e}", exc_info=True)
         save_error_report("CRITICAL_ERROR", f"An unexpected error occurred: {e}", {}, error_dir)
-        # Attempt an emergency rollback if possible.
+        
         if backup_created and backup_agent_path.exists():
              logging.warning("Attempting emergency rollback due to critical error...")
-             if current_agent_path.exists(): remove_path(current_agent_path) # Best effort cleanup
+             if current_agent_path.exists(): remove_path(current_agent_path) 
              if move_path(backup_agent_path, current_agent_path):
                  logging.info("Emergency rollback successful. Attempting restart.")
                  old_agent_executable = current_agent_path / current_agent_path.name
-                 start_agent(old_agent_executable) # Best effort restart
+                 start_agent(old_agent_executable) 
              else:
                  logging.critical("EMERGENCY ROLLBACK FAILED.")
                  save_error_report("EMERGENCY_ROLLBACK_FAILED", "Emergency rollback failed", {"backup_dir": backup_agent_path, "target_dir": current_agent_path}, error_dir)
-        final_exit_code = 2 # Indicate critical failure
+        final_exit_code = 2 
 
     finally:
-        # This block always executes, ensuring the script exits with a status code.
+        
         logging.info(f"Updater process finished with exit code {final_exit_code}.")
         sys.exit(final_exit_code)
 
 if __name__ == "__main__":
-    # Ensure psutil is available before starting the main logic.
+    
     if psutil is None:
-        # This check might be redundant if the import itself fails, but good practice.
+        
         print("Error: psutil library is required. Please install it (`pip install psutil`)", file=sys.stderr)
-        sys.exit(3) # Use a distinct exit code for dependency issues.
+        sys.exit(3) 
     main()

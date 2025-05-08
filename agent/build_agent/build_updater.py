@@ -3,13 +3,13 @@ import os
 import shutil
 import sys
 
-# Thêm đường dẫn để tìm thấy các module trong project
+
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(ROOT_DIR)
 
-# Xác định các đường dẫn tương đối với vị trí hiện tại của script
+
 UPDATER_MAIN_PY = os.path.join(ROOT_DIR, "updater", "updater_main.py")
-ICON_PATH = os.path.abspath("./icon.ico")  # Đường dẫn đến file icon.ico
+ICON_PATH = os.path.abspath("./icon.ico")  
 OUTPUT_DIR = os.path.abspath("./dist_updater")
 BUILD_DIR = os.path.abspath("./build_updater")
 SPEC_FILE = os.path.abspath("./updater.spec")
@@ -23,7 +23,7 @@ def build_updater():
     """
     print("Starting updater build...")
 
-    # Kiểm tra sự tồn tại của thư mục và file nguồn
+    
     if not os.path.exists(os.path.dirname(UPDATER_MAIN_PY)):
         print(f"Error: Updater source directory not found: {os.path.dirname(UPDATER_MAIN_PY)}")
         return False
@@ -32,7 +32,7 @@ def build_updater():
         print(f"Error: Updater main.py file not found: {UPDATER_MAIN_PY}")
         return False
 
-    # Kiểm tra file icon tồn tại
+    
     if not os.path.exists(ICON_PATH):
         print(f"Warning: Icon file not found: {ICON_PATH}, will use default icon")
         icon_option = []
@@ -40,7 +40,7 @@ def build_updater():
         print(f"Will use icon from file: {ICON_PATH}")
         icon_option = [f'--icon={ICON_PATH}']
 
-    # Chuẩn bị thư mục output nếu chưa tồn tại
+    
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 
@@ -61,7 +61,7 @@ def build_updater():
         PyInstaller.__main__.run(pyinstaller_options)
         print(f"Updater build successful! Updater.exe saved at: {os.path.join(OUTPUT_DIR, 'updater.exe')}")
 
-        # Dọn dẹp các file tạm thời
+        
         cleanup_temp_files()
         return True
 

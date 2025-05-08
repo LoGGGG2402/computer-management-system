@@ -36,7 +36,7 @@ class AgentState(Enum):
     SHUTTING_DOWN = auto()
     STOPPED = auto()
     
-    # Update-related states
+    
     UPDATING_STARTING = auto()
     UPDATING_DOWNLOADING = auto()
     UPDATING_VERIFYING = auto()

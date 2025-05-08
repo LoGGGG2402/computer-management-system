@@ -3,7 +3,6 @@ Core Agent module for the Computer Management System.
 """
 import time
 import threading
-import pywintypes
 import os
 import sys
 from typing import Optional, TYPE_CHECKING, Dict, Any
@@ -11,17 +10,24 @@ from typing import Optional, TYPE_CHECKING, Dict, Any
 if TYPE_CHECKING:
     from agent.communication import WSClient, ServerConnector
     from agent.config import StateManager, ConfigManager
-    from agent.system import LockManager
+    from agent.system import NamedMutexManager
     from agent.core import CommandExecutor
     
 from agent.core import AgentState
 from agent.core.update_handler import UpdateHandler
-from agent.ipc import NamedPipeIPCServer
+from agent.system import (
+    create_admin_only_named_event, 
+    wait_for_named_event, 
+    close_handle
+)
 
 from agent.utils import get_logger
 from agent.ui import get_or_prompt_room_config
 
 logger = get_logger("agent")
+
+
+AGENT_SHUTDOWN_EVENT_NAME = "Global\\CMSAgentSystemShutdownRequestEvent"
 
 class Agent:
     """
@@ -31,7 +37,7 @@ class Agent:
     - Authentication with the management server using device identification
     - Establishing and maintaining secure WebSocket connections for real-time communication
     - Sending regular status updates about system resource usage (CPU, RAM, disk)
-    - Handling IPC for agent restart commands and inter-process coordination
+    - Handling Windows-specific synchronization for single instance and shutdown coordination
     - Managing the agent's lifecycle through various operational states
     - Transmitting detailed system hardware information for inventory purposes
     - Coordinating command execution received from the management server
@@ -41,8 +47,8 @@ class Agent:
     It also handles various error conditions including authentication failures,
     network connectivity issues, and unexpected exceptions.
     
-    The class uses a singleton pattern enforced through file locking to prevent
-    multiple agent instances from running simultaneously on the same machine.
+    The class uses Windows synchronization primitives (Named Mutex) enforced through
+    the Windows API to prevent multiple agent instances from running simultaneously.
     """
 
     def __init__(self,
@@ -50,9 +56,9 @@ class Agent:
                  state_manager: 'StateManager',
                  ws_client: 'WSClient',
                  command_executor: 'CommandExecutor',
-                 lock_manager: 'LockManager',
+                 named_mutex_manager: 'NamedMutexManager',
                  server_connector: 'ServerConnector',
-                 is_admin: bool):
+                 shutdown_event_name: str):
         """
         Initialize the agent with its dependencies.
 
@@ -60,9 +66,9 @@ class Agent:
         :param state_manager: State manager for persistence
         :param ws_client: WebSocket client for real-time communication
         :param command_executor: Command execution component
-        :param lock_manager: Lock manager for single instance control
+        :param named_mutex_manager: Windows Named Mutex manager for single instance control
         :param server_connector: Handles server communication logic
-        :param is_admin: Whether agent is running with admin privileges
+        :param shutdown_event_name: Name of the global shutdown event
         :raises: RuntimeError if device ID or room configuration can't be determined
         """
         logger.info("Initializing Agent...")
@@ -72,20 +78,20 @@ class Agent:
 
         self._running = threading.Event()
         self._status_timer: Optional[threading.Timer] = None
-        self._ipc_server: Optional[NamedPipeIPCServer] = None
-        self._error_reporting_thread: Optional[threading.Thread] = None
-        self._error_reporting_complete = threading.Event()
+        self._shutdown_event_handle = None
+        self._event_listener_thread: Optional[threading.Thread] = None
+        self._should_stop_listening = threading.Event()
 
         self.config = config_manager
         self.state_manager = state_manager
         self.ws_client = ws_client
         self.command_executor = command_executor
-        self.lock_manager = lock_manager
+        self.named_mutex_manager = named_mutex_manager
         self.server_connector = server_connector
-        self.is_admin = is_admin
         self.http_client = self.server_connector.http_client
+        self.shutdown_event_name = shutdown_event_name
 
-        # Initialize update handler
+        
         self.update_handler = UpdateHandler(
             state_manager=self.state_manager,
             http_client=self.http_client,
@@ -100,18 +106,21 @@ class Agent:
         self.device_id = self.state_manager.get_device_id()
         if not self.device_id:
             self._set_state(AgentState.STOPPED)
+            if self.named_mutex_manager:
+                self.named_mutex_manager.release()
             raise RuntimeError("Could not determine Device ID via StateManager.")
 
         self.room_config = get_or_prompt_room_config(self.state_manager)
         if not self.room_config:
             self._set_state(AgentState.STOPPED)
+            if self.named_mutex_manager:
+                self.named_mutex_manager.release()
             raise RuntimeError("Could not determine Room Configuration.")
 
-        # Register handlers for commands and update notifications
+        
         self.ws_client.register_message_handler(self.command_executor.handle_incoming_command)
         
-        # Register update handler - only register with WebSocket client
-        # Server connector will get updates through WebSocket events
+        
         self.ws_client.register_update_handler(self._handle_new_version_event)
 
         logger.info(f"Agent initialized (pre-auth). Device ID: {self.device_id}, Room: {self.room_config.get('room', 'N/A')}")
@@ -119,6 +128,7 @@ class Agent:
     def start(self):
         """
         Starts the agent's main lifecycle. Uses ServerConnector for communication tasks.
+        Also sets up the listener for the shutdown event.
         """
         if self._running.is_set():
             logger.warning("Agent start requested but already running.")
@@ -130,33 +140,16 @@ class Agent:
         self._running.set()
 
         try:
-            default_token = "123"
-            logger.info("Initializing Named Pipe IPC Server with default token...")
-            try:
-                self._ipc_server = NamedPipeIPCServer(self, self.is_admin, default_token)
-                logger.info("Starting Named Pipe IPC Server...")
-                self._ipc_server.start()
-            except (ImportError, ValueError, pywintypes.error) as e:
-                logger.error(f"Failed to initialize or start Named Pipe IPC Server: {e}", exc_info=True)
-                self._ipc_server = None            # --- IPC Server End ---
+            
+            self._setup_shutdown_event_listener()
 
-            # --- Authentication with Retry Logic ---
+            
             auth_successful = False
             while not auth_successful and self._running.is_set():
                 logger.info("Attempting to authenticate with server...")
                 if self.server_connector.authenticate_agent(self.room_config):
                     auth_successful = True
                     logger.info("Authentication successful!")
-                    
-                    agent_token_for_ipc = self.server_connector.get_agent_token()
-                    
-                    if self._ipc_server and agent_token_for_ipc:
-                        logger.info("Updating IPC Server with real authentication token...")
-                        self._ipc_server.update_token(agent_token_for_ipc)
-                        logger.info("IPC Server token updated successfully.")
-                    
-                    # Start error reporting thread after successful authentication
-                    self._start_error_reporting_thread()
                 else:
                     logger.warning("Authentication failed, retrying in 10 seconds...")
                     time.sleep(10)
@@ -165,18 +158,18 @@ class Agent:
                 logger.critical("Authentication process aborted. Agent is shutting down.")
                 self.graceful_shutdown()
                 return
-            # --- Authentication End ---
+            
             self.command_executor.start_workers()
 
-            # --- Start Status Reporting ---
+            
             self._schedule_next_status_report()
-            # --- Status Reporting End ---
+            
 
             self._set_state(AgentState.IDLE)
             logger.info("Agent started successfully. Monitoring for commands and reporting status.")
             self.update_handler.check_for_updates_proactively(
                 self.get_state(),
-            )  # --- Update Check End ---
+            )  
 
             while self._running.is_set():
                 time.sleep(5)
@@ -191,31 +184,27 @@ class Agent:
 
     def graceful_shutdown(self):
         """
-        Stops the agent gracefully, including IPC server and lock release.
+        Stops the agent gracefully, including event threads and mutex release.
         """
         if not self._running.is_set() and self.get_state() in [AgentState.SHUTTING_DOWN, AgentState.STOPPED, AgentState.FORCE_RESTARTING]:
             logger.debug("Graceful shutdown called but agent already stopping/stopped.")
             return
 
         current_state = self.get_state()
-        if current_state != AgentState.FORCE_RESTARTING:
+        is_updating = current_state == AgentState.UPDATING_PREPARING_SHUTDOWN
+
+        if not is_updating and current_state != AgentState.FORCE_RESTARTING:
             self._set_state(AgentState.SHUTTING_DOWN)
-        else:
+        elif current_state == AgentState.FORCE_RESTARTING:
             logger.info("Proceeding with shutdown due to force restart request.")
+        elif is_updating:
+            logger.info("Proceeding with shutdown as part of update process.")
 
         logger.info("================ Initiating Graceful Shutdown ================")
         self._running.clear()
 
-        # Wait for error reporting thread to complete if it's running
-        if self._error_reporting_thread and self._error_reporting_thread.is_alive():
-            logger.debug("Waiting for error reporting thread to complete...")
-            self._error_reporting_complete.wait(timeout=10.0)
-            if not self._error_reporting_complete.is_set():
-                logger.warning("Error reporting thread did not complete within timeout")
-
-        if self._ipc_server and self._ipc_server.is_alive():
-            logger.debug("Stopping Named Pipe IPC server...")
-            self._ipc_server.stop()
+        
+        self._stop_shutdown_event_listener()
 
         logger.debug("Cancelling timers...")
         if self._status_timer and self._status_timer.is_alive():
@@ -232,39 +221,135 @@ class Agent:
             self.ws_client.disconnect()
             logger.debug("WebSocket client disconnected.")
 
-        if self._ipc_server and self._ipc_server.is_alive():
-            logger.debug("Waiting for IPC server thread to join...")
-            self._ipc_server.join(timeout=5.0)
-            if self._ipc_server.is_alive():
-                logger.warning("IPC server thread did not join within timeout.")
-            else:
-                logger.debug("IPC server thread joined.")
-
-        if self.lock_manager:
-            logger.info("Releasing agent lock file...")
-            self.lock_manager.release()
-            logger.info("Agent lock file released.")
+        if self.named_mutex_manager:
+            logger.info("Releasing named mutex...")
+            self.named_mutex_manager.release()
+            logger.info("Named mutex released.")
         else:
-            logger.warning("Lock manager instance not found, cannot release lock explicitly.")
+            logger.warning("Mutex manager instance not found, cannot release mutex explicitly.")
 
-        self._set_state(AgentState.STOPPED)
+        if not is_updating:
+            self._set_state(AgentState.STOPPED)
         logger.info("================ Agent Shutdown Complete ================")
         
-        # Flush all log handlers to ensure logs are written to disk
+        
         import logging
         logging.shutdown()
         
-        # Exit the process if this is part of a complete shutdown (not an update preparation)
-        if current_state != AgentState.UPDATING_PREPARING_SHUTDOWN:
-            sys.exit(0)
+        
+        is_service_context = 'servicemanager' in sys.modules
 
-    def request_restart(self):
+        if not is_service_context and not is_updating:
+            logger.info("Exiting process (not in service context and not updating).")
+            sys.exit(0)
+        else:
+            logger.info("Graceful shutdown complete. Process will not exit (service context or updating).")
+
+    def _setup_shutdown_event_listener(self):
         """
-        Called by the IPC server when a valid force_restart command is received.
+        Sets up the named event for external shutdown requests and starts a listener thread.
         """
-        logger.info("Restart requested via IPC. Initiating graceful shutdown.")
+        if not self.shutdown_event_name:
+            logger.error("Shutdown event name not configured. Cannot set up listener.")
+            return
+
+        try:
+            
+            self._shutdown_event_handle = create_admin_only_named_event(self.shutdown_event_name)
+            
+            if not self._shutdown_event_handle:
+                logger.warning(f"Failed to create named event '{self.shutdown_event_name}'. External shutdown triggers will not work.")
+                return
+                
+            logger.info(f"Created shutdown event: {self.shutdown_event_name}")
+            
+            
+            self._should_stop_listening.clear()
+            
+            
+            self._event_listener_thread = threading.Thread(
+                target=self._event_listener_thread_target,
+                name="ShutdownEventListener"
+            )
+            self._event_listener_thread.daemon = True
+            self._event_listener_thread.start()
+            
+            logger.info("Shutdown event listener thread started")
+            
+        except Exception as e:
+            logger.error(f"Error setting up shutdown event listener: {e}", exc_info=True)
+            
+            if self._shutdown_event_handle:
+                try:
+                    close_handle(self._shutdown_event_handle)
+                    self._shutdown_event_handle = None
+                except Exception:
+                    pass
+
+    def _stop_shutdown_event_listener(self):
+        """
+        Stops the shutdown event listener thread and cleans up resources.
+        """
+        
+        if self._event_listener_thread and self._event_listener_thread.is_alive():
+            logger.debug("Stopping shutdown event listener thread...")
+            self._should_stop_listening.set()
+            
+            
+            self._event_listener_thread.join(timeout=5.0)
+            if self._event_listener_thread.is_alive():
+                logger.warning("Shutdown event listener thread did not stop gracefully")
+            else:
+                logger.debug("Shutdown event listener thread stopped gracefully")
+        
+        
+        if self._shutdown_event_handle:
+            try:
+                close_handle(self._shutdown_event_handle)
+                logger.debug(f"Closed shutdown event handle for '{self.shutdown_event_name}'")
+            except Exception as e:
+                logger.error(f"Error closing shutdown event handle: {e}")
+            finally:
+                self._shutdown_event_handle = None
+
+    def _event_listener_thread_target(self):
+        """
+        Thread that waits for the shutdown event to be signaled.
+        """
+        logger.debug("Shutdown event listener thread started")
+        
+        while not self._should_stop_listening.is_set():
+            try:
+                if not self._shutdown_event_handle:
+                    logger.warning("Shutdown event handle is not valid, listener cannot wait.")
+                    self._should_stop_listening.set()
+                    break
+
+                
+                if wait_for_named_event(self._shutdown_event_handle, 5000):  
+                    if self._should_stop_listening.is_set():
+                        logger.debug("Shutdown event signaled, but listener is stopping. Ignoring.")
+                        break
+                    self._handle_shutdown_request()
+                    break
+            except Exception as e:
+                logger.error(f"Error in shutdown event listener thread: {e}", exc_info=True)
+                time.sleep(5)  
+        
+        logger.debug("Shutdown event listener thread exiting")
+
+    def _handle_shutdown_request(self):
+        """
+        Handles an external shutdown request received via the named event.
+        """
+        logger.info("External shutdown request received. Initiating graceful shutdown.")
         self._set_state(AgentState.FORCE_RESTARTING)
-        threading.Thread(target=self.graceful_shutdown, name="GracefulShutdownThread").start()
+        
+        
+        threading.Thread(
+            target=self.graceful_shutdown,
+            name="GracefulShutdownThread"
+        ).start()
 
     def get_state(self) -> AgentState:
         """
@@ -278,28 +363,14 @@ class Agent:
 
     def _set_state(self, new_state: AgentState):
         """
-        Sets the agent's state thread-safely and logs the transition.
+        Sets the agent state thread-safely.
         
-        :param new_state: New state to set
+        :param new_state: New agent state to set
         :type new_state: AgentState
-        :return: True if state was changed, False if the transition is not allowed
+        :return: True if state changed, False otherwise
         :rtype: bool
         """
-        if not isinstance(new_state, AgentState):
-            logger.warning(f"Attempted to set invalid state type: {type(new_state)}")
-            return False
-
         with self._state_lock:
-            current_state = self._state
-            
-            # Special case: don't allow transitions from update-related states back to IDLE
-            # unless coming from UPDATING_STARTING (allows rollback if update initialization fails)
-            if (current_state.name.startswith('UPDATING_') and 
-                current_state != AgentState.UPDATING_STARTING and 
-                new_state == AgentState.IDLE):
-                logger.warning(f"Blocked state transition: {current_state.name} -> {new_state.name} (not allowed during update)")
-                return False
-                
             if self._state != new_state:
                 logger.info(f"State transition: {self._state.name} -> {new_state.name}")
                 self._state = new_state
@@ -308,62 +379,60 @@ class Agent:
 
     def _schedule_next_status_report(self):
         """
-        Schedules the next status report using a Timer thread.
-        The timer calls server_connector.send_status_update directly.
+        Schedules the next status report to be sent.
         """
-        if not self._running.is_set(): return
-        
-        if self._status_timer and self._status_timer.is_alive():
-            self._status_timer.cancel()
+        if not self._running.is_set():
+            return
             
-        def status_update_callback():
-            if not self._running.is_set(): return
-            
-            logger.debug("Sending status update via ServerConnector.")
-            self.server_connector.send_status_update()
-            
-            if self._running.is_set():
-                self._schedule_next_status_report()
+        try:
+            if self._status_timer:
+                self._status_timer.cancel()
                 
-        self._status_timer = threading.Timer(self.status_report_interval, status_update_callback)
-        self._status_timer.daemon = True
-        self._status_timer.start()
-        logger.debug(f"Next status report scheduled in {self.status_report_interval} seconds.")
+            
+            self._status_timer = threading.Timer(
+                self.status_report_interval,
+                self._send_status_report
+            )
+            self._status_timer.daemon = True
+            self._status_timer.start()
+            
+        except Exception as e:
+            logger.error(f"Error scheduling next status report: {e}", exc_info=True)
+
+    def _send_status_report(self):
+        """
+        Sends a status report to the server and schedules the next one.
+        """
+        if not self._running.is_set():
+            return
+            
+        try:
+            
+            success = self.server_connector.send_status_report()
+            
+            if not success:
+                logger.warning("Failed to send status report")
+                
+        except Exception as e:
+            logger.error(f"Error sending status report: {e}", exc_info=True)
+            
+        finally:
+            
+            self._schedule_next_status_report()
 
     def _handle_new_version_event(self, payload: Dict[str, Any]):
         """
-        Handles new version notifications by delegating to the update handler.
+        Handles the 'new_version_available' event from the server.
         
-        :param payload: New version event payload
+        :param payload: Event payload with update information
         :type payload: Dict[str, Any]
         """
-        # Delegate to update handler
-        self.update_handler.handle_new_version_event(payload, self.get_state())
-
-    def _start_error_reporting_thread(self):
-        """
-        Starts a thread to read and report any buffered error files from previous runs.
-        """
-        if self._error_reporting_thread and self._error_reporting_thread.is_alive():
-            logger.warning("Error reporting thread is already running")
-            return
-
-        self._error_reporting_complete.clear()
-        
-        # Get the error directory from the state manager
-        error_dir = os.path.join(self.state_manager.storage_path, "error_reports")
-        if not error_dir:
-            logger.warning("Cannot determine error directory path, skipping error reporting")
-            self._error_reporting_complete.set()
+        if not self._running.is_set():
+            logger.warning("Received update notification but agent is shutting down. Ignoring.")
             return
             
-        # Create and start the thread
-        self._error_reporting_thread = threading.Thread(
-            target=self.server_connector.process_error_reports_thread,
-            args=(error_dir, self._error_reporting_complete.set),
-            name="ErrorReportingThread", 
-            daemon=True
-        )
-        
-        logger.info("Starting error reporting thread")
-        self._error_reporting_thread.start()
+        try:
+            
+            self.update_handler.handle_new_version_event(payload, self.get_state())
+        except Exception as e:
+            logger.error(f"Error handling new version event: {e}", exc_info=True)

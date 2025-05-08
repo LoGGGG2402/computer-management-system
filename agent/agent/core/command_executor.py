@@ -76,7 +76,7 @@ class CommandExecutor:
             except Exception as e:
                 logger.error(f"Failed to initialize or register handler '{handler_type}' ({handler_class.__name__}): {e}", exc_info=True)
 
-    # === PUBLIC METHODS ===
+    
     
     def start_workers(self):
         """
@@ -198,7 +198,7 @@ class CommandExecutor:
 
         logger.info("CommandExecutor stopped.")
 
-    # === COMMAND VALIDATION AND QUEUEING ===
+    
     
     def _validate_incoming_command(self, command_data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         """
@@ -246,7 +246,7 @@ class CommandExecutor:
              )
              self._send_result(command_id, error_result)
     
-    # === WORKER AND EXECUTION LOGIC ===
+    
     
     def _worker_loop(self):
         """
@@ -356,7 +356,7 @@ class CommandExecutor:
         if result_data['success'] and result_data.get('result') is None:
              logger.warning(f"Handler '{command_type}' for command '{command_id}' succeeded but did not set 'result' field. Sending null.")
     
-    # === RESULT AND ERROR HANDLING ===
+    
     
     def _send_result(self, command_id: str, result_data: Dict[str, Any]):
         """Sends the final result dictionary back via the WebSocket client."""

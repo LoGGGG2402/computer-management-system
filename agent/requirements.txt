@@ -1,15 +1,15 @@
-# Core dependencies
+
 requests>=2.25.1,<3.0.0
 websocket-client>=1.0.0,<2.0.0
-python-socketio[client]>=5.0.0,<6.0.0 # Specify client extra for clarity
+python-socketio[client]>=5.0.0,<6.0.0 
 psutil>=5.8.0,<6.0.0
 
-# Build dependencies
-pyinstaller>=6.10.0,<7.0.0  # Updated version range
 
-# Optional dependency for secure token storage
-# keyring>=23.0.0,<24.0.0
+pywin32>=306  
 
-# Windows specific dependencies for advanced features
-pywin32>=306
-pyuac>=0.0.3 # Corrected version constraint
+
+
+pyinstaller>=6.10.0,<7.0.0  
+
+
+
