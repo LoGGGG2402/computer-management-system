@@ -5,9 +5,9 @@ Handles interactions like prompting for MFA codes and room configuration.
 from typing import Optional, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..config import StateManager
+    from agent.config import StateManager
 
-from ..utils import get_logger
+from agent.utils import get_logger
 
 logger = get_logger(__name__)
 

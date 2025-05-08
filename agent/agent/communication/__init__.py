@@ -1,9 +1,9 @@
 """
-Communication modules for interactions with the management server.
+Communication components for the Computer Management System Agent.
 """
-from .http_client import HttpClient
-from .ws_client import WSClient
-from .server_connector import ServerConnector
+from agent.communication.http_client import HttpClient
+from agent.communication.ws_client import WSClient
+from agent.communication.server_connector import ServerConnector
 
 __all__ = [
     'HttpClient',

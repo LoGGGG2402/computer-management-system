@@ -1,13 +1,12 @@
 """
-Utility modules for common functionality across the agent.
+Utility functions for the Computer Management System Agent.
 """
-# Update the import line if needed, otherwise just update __all__
-from .logger import get_logger, setup_logger
-from .utils import save_json, load_json
+from agent.utils.logger import get_logger, setup_logger
+from agent.utils.utils import save_json, load_json
 
 __all__ = [
     'get_logger',
     'setup_logger',
     'save_json',
-    'load_json',
+    'load_json'
 ]

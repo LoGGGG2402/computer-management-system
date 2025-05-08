@@ -9,7 +9,7 @@ import threading
 import psutil
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Tuple
-from ..utils import get_logger
+from agent.utils import get_logger
 
 logger = get_logger(__name__)
 

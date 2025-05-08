@@ -1,15 +1,15 @@
 """
-System utilities for operating system interactions.
+System utilities for the Computer Management System Agent.
 """
-from .lock_manager import LockManager
-from .windows_utils import (
+from agent.system.lock_manager import LockManager
+from agent.system.windows_utils import (
     is_running_as_admin,
     register_autostart,
     unregister_autostart
 )
-from .directory_utils import (
-    determine_storage_path,
-    setup_directory_structure
+from agent.system.directory_utils import (
+    setup_directory_structure,
+    determine_storage_path
 )
 
 __all__ = [
@@ -17,6 +17,6 @@ __all__ = [
     'is_running_as_admin',
     'register_autostart',
     'unregister_autostart',
-    'determine_storage_path',
-    'setup_directory_structure'
+    'setup_directory_structure',
+    'determine_storage_path'
 ]

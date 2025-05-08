@@ -62,3 +62,7 @@ agent/storage/
 agent/cms_agent.spec
 backend/uploads/
 agent/agent/__main__.py.bak
+agent/build_agent/dist_agent/agent.exe
+agent/build_agent/dist_updater/updater.exe
+agent/build_agent/CMSAgent_Setup_1.0.1.exe
+agent/build_agent/CMSAgent_Setup_1.0.2.exe

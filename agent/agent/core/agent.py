@@ -9,17 +9,17 @@ import sys
 from typing import Optional, TYPE_CHECKING, Dict, Any
 
 if TYPE_CHECKING:
-    from ..communication import WSClient, ServerConnector
-    from ..config import StateManager, ConfigManager
-    from ..system import LockManager
-    from . import CommandExecutor
+    from agent.communication import WSClient, ServerConnector
+    from agent.config import StateManager, ConfigManager
+    from agent.system import LockManager
+    from agent.core import CommandExecutor
     
-from . import AgentState
-from .update_handler import UpdateHandler
-from ..ipc import NamedPipeIPCServer
+from agent.core import AgentState
+from agent.core.update_handler import UpdateHandler
+from agent.ipc import NamedPipeIPCServer
 
-from ..utils import get_logger
-from ..ui import get_or_prompt_room_config
+from agent.utils import get_logger
+from agent.ui import get_or_prompt_room_config
 
 logger = get_logger("agent")
 

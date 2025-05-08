@@ -17,15 +17,15 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, TYPE_CHECKING, Optional, Callable
 
-from . import AgentState
+from agent.core import AgentState
 
 if TYPE_CHECKING:
-    from ..config import StateManager
-    from ..communication import HttpClient, ServerConnector
+    from agent.config import StateManager
+    from agent.communication import HttpClient, ServerConnector
 
-from ..utils import get_logger
-from ..utils.utils import check_disk_space, calculate_sha256, extract_package
-from ..version import __version__ as current_version
+from agent.utils import get_logger
+from agent.utils.utils import check_disk_space, calculate_sha256, extract_package
+from agent.version import __version__ as current_version
 
 logger = get_logger(__name__)
 

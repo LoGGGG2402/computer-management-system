@@ -17,19 +17,18 @@ if project_root not in sys.path:
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
+from agent.ipc import send_force_command
+from agent.utils import setup_logger, get_logger
+from agent.ui import display_error
 
-from .ipc import send_force_command
-from .utils import setup_logger, get_logger
-from .ui import display_error
-
-from .system import (
+from agent.system import (
     LockManager,
     is_running_as_admin,
     register_autostart,
     unregister_autostart,
     setup_directory_structure,
 )
-from . import (
+from agent import (
     ConfigManager,
     StateManager,
     HttpClient,
@@ -43,13 +42,6 @@ from . import (
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Computer Management System Agent")
-    default_config_name = "agent_config.json"
-    parser.add_argument(
-        "--config-name",
-        type=str,
-        default=default_config_name,
-        help=f"Name of the agent configuration file within the storage directory (default: {default_config_name})",
-    )
     parser.add_argument(
         "--debug",
         action="store_true",
@@ -182,18 +174,20 @@ def _load_configuration(args, logger, storage_path, executable_path):
     try:
         temp_config_path = None
         source_config_path = None
+        config_filename = "agent_config.json"
         base_dir = os.path.dirname(executable_path)
-        potential_temp_config = os.path.join(base_dir, "config", args.config_name)
+        potential_temp_config = os.path.join(base_dir, "config", config_filename)
         if os.path.exists(potential_temp_config):
             temp_config_path = potential_temp_config
             source_config_path = temp_config_path
         else:
-            potential_temp_config_alt = os.path.join(base_dir, args.config_name)
+            potential_temp_config_alt = os.path.join(base_dir, config_filename)
             if os.path.exists(potential_temp_config_alt):
                 temp_config_path = potential_temp_config_alt
                 source_config_path = temp_config_path
 
-        config_file_path = os.path.join(storage_path, args.config_name)
+        config_dir = os.path.join(storage_path, "config")
+        config_file_path = os.path.join(config_dir, config_filename)
         
         print(f"INFO: Source config path: {config_file_path}")
 

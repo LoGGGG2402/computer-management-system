@@ -1,17 +1,16 @@
 """
-Windows specific utility functions for the agent.
+Windows-specific utilities for the Computer Management System Agent.
 """
-import ctypes
 import os
-from typing import Optional
+import ctypes
 import winreg
 import win32security
 import win32api
 import pywintypes
+from typing import Optional
 
-from ..utils import get_logger
-from .. import __app_name__
-
+from agent.utils import get_logger
+from agent import __app_name__
 
 logger = get_logger(__name__)
 

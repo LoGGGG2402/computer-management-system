@@ -2,20 +2,19 @@
 Named Pipe server for Inter-Process Communication (IPC).
 """
 
-import threading
 import json
+import threading
 import time
-from typing import TYPE_CHECKING, Optional
-
-from agent.utils.logger import get_logger
 import win32pipe
 import win32file
 import win32security
-import ntsecuritycon as win32con
 import pywintypes
+import ntsecuritycon as win32con
+from typing import Optional, TYPE_CHECKING
 
-from ..system.windows_utils import get_user_sid_string, determine_pipe_name
-from ..core import AgentState
+from agent.utils import get_logger
+from agent.system.windows_utils import get_user_sid_string, determine_pipe_name
+from agent.core import AgentState
 
 if TYPE_CHECKING:
     from agent.core.agent import Agent

@@ -1,17 +1,18 @@
 """
-General utility functions for the Computer Management System Agent.
+Utility functions for the Computer Management System Agent.
 """
-import json
+import datetime
 import os
 import hashlib
+import json
+import tarfile
 import zipfile
 import shutil
 import traceback
-import tarfile
-import datetime
 import uuid
-from typing import Dict, Any, Optional, List, Tuple, Union
-from . import get_logger
+from typing import Dict, Any, Optional, List, Tuple
+
+from agent.utils import get_logger
 
 logger = get_logger(__name__)
 

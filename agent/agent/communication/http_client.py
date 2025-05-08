@@ -8,9 +8,9 @@ from urllib.parse import urljoin, urlparse
 from typing import Dict, Any, Tuple, Optional, TYPE_CHECKING, List, Union
 
 if TYPE_CHECKING:
-    from ..config import ConfigManager
+    from agent.config import ConfigManager
 
-from ..utils import get_logger
+from agent.utils import get_logger
 
 logger = get_logger(__name__)
 

@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from ..monitoring import SystemMonitor
 
 from ..ui import prompt_for_mfa, display_registration_success
-from ..utils import get_logger, utils
+from ..utils import get_logger
 
 logger = get_logger(__name__)
 

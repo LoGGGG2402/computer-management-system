@@ -2,12 +2,12 @@
 System command handler for handling system-related commands.
 """
 from typing import Dict, Any, TYPE_CHECKING
-from . import BaseCommandHandler 
+from agent.command_handlers import BaseCommandHandler 
 
 if TYPE_CHECKING:
-    from ..config import ConfigManager
+    from agent.config import ConfigManager
 
-from ..utils import get_logger
+from agent.utils import get_logger
 
 logger = get_logger(__name__)
 

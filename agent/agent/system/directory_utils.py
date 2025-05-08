@@ -7,8 +7,8 @@ import uuid
 import win32security
 import ntsecuritycon as win32con
 
-from .windows_utils import is_running_as_admin
-from .. import __app_name__
+from agent.system.windows_utils import is_running_as_admin
+from agent import __app_name__
 
 def determine_storage_path() -> str:
     """
@@ -129,6 +129,12 @@ def setup_directory_structure() -> str:
         errors_dir = os.path.join(storage_path, 'error_reports')
         if not os.path.exists(errors_dir):
             os.makedirs(errors_dir, exist_ok=True)
+            
+        # Create config directory
+        config_dir = os.path.join(storage_path, 'config')
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir, exist_ok=True)
+            
         return storage_path
         
     except Exception as e:

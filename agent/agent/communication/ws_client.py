@@ -4,7 +4,6 @@ WebSocket client module for real-time communication with the backend server.
 """
 import socketio
 import threading
-import time
 import json
 from typing import Dict, Any, Callable, Optional, TYPE_CHECKING
 

@@ -6,9 +6,9 @@ This package provides handlers for different command types:
     - ConsoleCommandHandler: Executes shell/console commands
     - SystemCommandHandler: Handles system management operations
 """
-from .base_handler import BaseCommandHandler
-from .console_handler import ConsoleCommandHandler
-from .system_handler import SystemCommandHandler
+from agent.command_handlers.base_handler import BaseCommandHandler
+from agent.command_handlers.console_handler import ConsoleCommandHandler
+from agent.command_handlers.system_handler import SystemCommandHandler
 
 __all__ = [
     'BaseCommandHandler',

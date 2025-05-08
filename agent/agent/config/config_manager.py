@@ -4,7 +4,7 @@ Configuration Manager module for the Computer Management System Agent.
 import json
 import os
 from typing import Any, Optional, Dict
-from ..utils import get_logger
+from agent.utils import get_logger
 
 logger = get_logger(__name__)
 

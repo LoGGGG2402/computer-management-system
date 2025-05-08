@@ -1,13 +1,14 @@
 """
-System monitor module for tracking system resource usage.
+System monitoring functionality for tracking computer resources.
 """
+import json
 import platform
+import subprocess
 import psutil
 import socket
-import json
-import subprocess
 from typing import Dict, Any
-from ..utils import get_logger
+
+from agent.utils import get_logger
 
 logger = get_logger(__name__)
 

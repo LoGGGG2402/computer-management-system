@@ -4,10 +4,10 @@ Base command handler class providing common functionality for all command handle
 from typing import Dict, Any, TYPE_CHECKING
 from abc import ABC, abstractmethod
 
-from ..utils import get_logger
+from agent.utils import get_logger
 
 if TYPE_CHECKING:
-    from ..config import ConfigManager
+    from agent.config import ConfigManager
 
 logger = get_logger(__name__)
 

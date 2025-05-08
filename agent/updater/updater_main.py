@@ -188,7 +188,7 @@ def start_agent(agent_file_path: Path) -> bool:
     # Determine the command based on file extension
     cmd = []
     if agent_file_path.suffix.lower() == '.py':
-        cmd = [python_exe, "-m", "agent"]
+        cmd = [python_exe, "-m", "agent.main"]
     elif agent_file_path.suffix.lower() == '.exe':
         cmd = [str(agent_file_path)]
     else:
