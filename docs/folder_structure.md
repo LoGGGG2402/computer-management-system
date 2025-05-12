@@ -7,56 +7,7 @@ Below is the current folder structure of the project, including three main compo
 ```
 computer-management-system/
 ├── package.json              
-├── readme.md                 
-├── maintain_agent.md         
-│
-├── agent/                    
-│   ├── requirements.txt      
-│   ├── agent/                
-│   │   ├── __init__.py       
-│   │   ├── main.py           
-│   │   ├── version.py        
-│   │   ├── command_handlers/ 
-│   │   │   ├── __init__.py
-│   │   │   ├── base_handler.py       
-│   │   │   ├── console_handler.py    
-│   │   │   └── system_handler.py     
-│   │   ├── communication/    
-│   │   │   ├── __init__.py
-│   │   │   ├── http_client.py        
-│   │   │   ├── server_connector.py   
-│   │   │   └── ws_client.py          
-│   │   ├── config/           
-│   │   │   ├── __init__.py
-│   │   │   ├── config_manager.py     
-│   │   │   └── state_manager.py      
-│   │   ├── core/             
-│   │   │   ├── __init__.py
-│   │   │   ├── agent.py             
-│   │   │   ├── agent_state.py       
-│   │   │   └── command_executor.py  
-│   │   ├── ipc/              
-│   │   │   ├── __init__.py
-│   │   │   ├── named_pipe_client.py 
-│   │   │   └── named_pipe_server.py 
-│   │   ├── monitoring/       
-│   │   │   ├── __init__.py
-│   │   │   └── system_monitor.py    
-│   │   ├── system/           
-│   │   │   ├── __init__.py
-│   │   │   ├── directory_utils.py   
-│   │   │   ├── lock_manager.py      
-│   │   │   └── windows_utils.py     
-│   │   ├── ui/               
-│   │   │   ├── __init__.py
-│   │   │   └── ui_console.py        
-│   │   └── utils/            
-│   │       ├── __init__.py
-│   │       ├── logger.py            
-│   │       └── utils.py             
-│   └── config/               
-│       └── agent_config.json 
-│
+├── readme.md              
 ├── backend/                  
 │   ├── create_db.sh          
 │   ├── package.json          
@@ -107,7 +58,6 @@ computer-management-system/
 ├── docs/                     
 │   ├── activity_flows.md     
 │   ├── api.md                
-│   └── folder_structure.md   
 │
 └── frontend/                 
     ├── eslint.config.js      

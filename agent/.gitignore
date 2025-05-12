@@ -1,0 +1,7 @@
+/build/output/
+/CMSAgent/bin/
+/CMSAgent/obj/
+/CMSUpdater/bin/
+/CMSUpdater/obj/
+
+.fake
