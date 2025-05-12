@@ -1,7 +1,7 @@
 # Tài liệu Toàn Diện: Hoạt động, Giao tiếp và Cấu hình CMSAgent
 
 **Phiên bản Tài liệu:** 7.4
-**Ngày cập nhật:** 12 tháng 5 năm 2025
+**Ngày cập nhật:** 13 tháng 5 năm 2025
 
 ## I. Tổng Quan về Agent
 
@@ -65,7 +65,7 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     - Một gói cài đặt (ví dụ: Setup.CMSAgent.exe) được tạo ra, chứa các thành phần:
         - CMSAgent.exe: File thực thi chính của agent.
         - CMSUpdater.exe: File thực thi cho tiến trình tự cập nhật.
-        - `appsettings.json` (mặc định): File cấu hình chính mặc định. *Lưu ý: Từ phiên bản này (7.3), `appsettings.json` đã thay thế hoàn toàn `agent_config.json` làm file cấu hình chính cho các thiết lập hoạt động của agent và logging.*
+        - `appsettings.json` (mặc định): File cấu hình chính mặc định.
         - Các thư viện DLL cần thiết khác.
 2. **Thực Thi Trình Cài Đặt (Bởi Người Dùng/Quản Trị Viên):**
     - Người dùng chạy Setup.CMSAgent.exe với quyền Administrator.
@@ -102,11 +102,26 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
 7. **Khởi Tạo Module:** HTTP client, WebSocket client, giám sát tài nguyên, thực thi lệnh, xử lý cập nhật.
 8. **Lưu Ý Khi Hoạt Động Như Windows Service:** Quyền hạn cần thiết, tính sẵn sàng của file cấu hình, kết nối mạng ổn định, xử lý lỗi an toàn trong `OnStart()`, không tương tác với desktop, quản lý tài nguyên cẩn thận, luôn sử dụng đường dẫn tuyệt đối hoặc tương đối với file thực thi, và `CMSUpdater.exe` cần quyền tương tác SCM.
 9. **Xác Thực và Kết Nối Ban Đầu với Server:**
-    - Chuyển trạng thái `AUTHENTICATING`.
-    - Kết nối WebSocket, xác thực qua Header hoặc sự kiện `agent:authenticate`.
-    - Nhận `agent:ws_auth_success` -> trạng thái `CONNECTED`.
-    - Nhận `agent:ws_auth_failed` -> thử `POST /api/agent/identify` lại, nếu thất bại hoặc yêu cầu MFA (không thể xử lý) -> trạng thái `DISCONNECTED`, thử lại sau.
-    - Gửi thông tin phần cứng ban đầu (POST `/api/agent/hardware-info`).
+    - Agent chuyển sang trạng thái `AUTHENTICATING`. Ghi log trạng thái.
+    - **Kết Nối WebSocket (Socket.IO):**
+        - Agent sử dụng `agent_id` (là `device_id`) và `agent_token` để thiết lập kết nối WebSocket đến server.
+        - **Trong quá trình handshake của WebSocket, Agent BẮT BUỘC gửi header `x-client-type: agent`.**
+        - **Agent NÊN gửi các header sau trong quá trình handshake:**
+            - `Authorization: Bearer <agent_token>`
+            - `agent-id: <device_id>` (Hoặc `X-Agent-Id` tùy theo quy ước cuối cùng, server hiện tại kiểm tra `agent-id`).
+        - Server middleware sẽ tự động cố gắng trích xuất `authToken` và `agentId` từ các header này và lưu vào `socket.data`.
+        - Logic xác thực đầy đủ phía server (trong `setupAgentHandlers`) sẽ sử dụng thông tin trong `socket.data` (nếu có từ header) hoặc có thể chờ sự kiện `agent:authenticate` nếu thông tin từ header không đủ hoặc không được gửi.
+        - **Xác thực qua Sự kiện (Dự phòng):** Nếu agent không gửi các header xác thực, hoặc nếu logic phía server (trong `setupAgentHandlers`) xác định thông tin từ header không hợp lệ/đủ, server có thể chờ agent gửi sự kiện `agent:authenticate` với payload `{ agentId, token }`.
+        - Lắng nghe sự kiện `agent:ws_auth_success` từ server. Khi nhận được, chuyển sang trạng thái `CONNECTED`. Ghi log trạng thái.
+        - Nếu nhận `agent:ws_auth_failed` (ví dụ, token hết hạn/không hợp lệ):
+            - Ghi log lỗi.
+            - Thử thực hiện lại quy trình POST `/api/agent/identify` (sử dụng `device_id` và `room_config` đã lưu, không `forceRenewToken`).
+            - Nếu `identify` thành công và nhận được token mới, cập nhật token cục bộ (mã hóa và lưu vào `runtime_config.json`), quay lại bước kết nối WebSocket (bao gồm gửi các header cần thiết).
+            - Nếu `identify` yêu cầu MFA, agent trong ngữ cảnh service không thể xử lý, sẽ ghi log lỗi và chuyển sang trạng thái `DISCONNECTED`, thử lại sau một khoảng thời gian.
+            - Nếu `identify` thất bại vì lý do khác, ghi log lỗi, chuyển sang trạng thái `DISCONNECTED`, thử lại sau.
+    - **Gửi Thông Tin Phần Cứng Ban Đầu (HTTP POST `/api/agent/hardware-info`):**
+        - Sau khi kết nối WebSocket được xác thực (`CONNECTED`) hoặc sau khi có token hợp lệ từ HTTP `identify`, thu thập thông tin phần cứng chi tiết.
+        - Gửi thông tin này lên server. Nếu thất bại, ghi log lỗi và tiếp tục.
 10. **Vòng Lặp Hoạt Động Chính (Trạng thái `CONNECTED`):**
     - Gửi báo cáo trạng thái định kỳ (WebSocket `agent:status_update`).
     - Kiểm tra cập nhật (GET `/api/agent/check-update` hoặc WebSocket `agent:new_version_available`). Nếu có, chuyển trạng thái `UPDATING`.
@@ -401,7 +416,9 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
 ### B. Giao Tiếp WebSocket (Socket.IO)
 
 - **URL Kết Nối:** Từ `ServerUrl` trong `appsettings.json`.
-- **Xác thực:** Agent gửi `agentId` và `token` trong `socket.auth` hoặc `socket.handshake.query`.
+- **Xác thực:**
+    - Agent **BẮT BUỘC** gửi header `x-client-type: agent` trong quá trình handshake.
+    - Agent **BẮT BUỘC** gửi `agentId` và `token` trong `socket.handshake.headers` (cụ thể là `agent-id` và `Authorization: Bearer <token>`). Server middleware (`io.use`) sẽ trích xuất các thông tin này.
 - **Các Sự Kiện Server Gửi Cho Agent:**
     - `agent:ws_auth_success`: Payload: `{ "status": "success", "message": "Authentication successful" }`. Ý nghĩa: Xác thực WebSocket thành công.
     - `agent:ws_auth_failed`: Payload: `{ "status": "error", "message": "Authentication failed (Invalid ID or token)" }`. Ý nghĩa: Xác thực WebSocket thất bại.
@@ -511,7 +528,6 @@ File `appsettings.json` là file cấu hình chính. *Lưu ý: Từ phiên bản
 ```
 
 **2. Cấu Hình Runtime (Lưu trong `runtime_config/runtime_config.json`)**
-File này vẫn giữ vai trò lưu trữ các thông tin được tạo ra hoặc thu thập trong quá trình agent chạy lần đầu (lệnh `configure`) và không nên đặt trong `appsettings.json` vì chúng là đặc thù cho từng instance agent.
 
 ```
 {
@@ -568,9 +584,8 @@ File này vẫn giữ vai trò lưu trữ các thông tin được tạo ra ho�
 
 **2. Bảo Mật Kết Nối**
 
-- **HTTPS cho API Calls:** Tất cả các giao tiếp HTTP với server (API Endpoints) phải được thực hiện qua HTTPS. Điều này đảm bảo dữ liệu truyền đi (bao gồm cả token trong header) được mã hóa giữa agent và server.
-- **WSS (Secure WebSocket) cho Socket.IO:** Kết nối WebSocket cũng phải được thiết lập qua WSS. Thư viện SocketIOClient.Net hỗ trợ kết nối WSS nếu URL server bắt đầu bằng `https://`.
-- **Xác Thực Server Certificate (Nâng cao):** Trong môi trường doanh nghiệp, cần cấu hình để tin cậy các Certificate Authority (CA) nội bộ hoặc thực hiện ghim chứng chỉ (certificate pinning) để tăng cường bảo mật chống lại tấn công Man-in-the-Middle.
+- Bắt buộc HTTPS cho API và WSS cho WebSocket.
+- Cân nhắc certificate pinning.
 
 **3. Quyền Truy Cập Thư Mục và Thiết Lập**
 
@@ -891,7 +906,7 @@ CMSAgentSolution/
 
 Để tăng tính trực quan và dễ hiểu, đề xuất bổ sung các sơ đồ luồng (flowchart) chi tiết cho các quy trình chính sau:
 
-- Luồng Cài đặt và Cấu hình Ban đầu (Phần III)
+- Luồng Cài đặt và Cấu hình Ban Đầu (Phần III)
 - Luồng Hoạt động Thường xuyên (Phần IV, bao gồm xử lý kết nối/mất kết nối)
 - Luồng Xử lý Lệnh từ Server (Phần IV.10)
 - Luồng Cập nhật Agent (Phần V, bao gồm các bước của Updater và Rollback)
