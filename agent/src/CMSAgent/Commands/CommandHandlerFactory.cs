@@ -9,7 +9,7 @@ namespace CMSAgent.Commands
     /// <summary>
     /// Factory tạo ra các command handler phù hợp với từng loại command.
     /// </summary>
-    public class CommandHandlerFactory : ICommandHandlerFactory
+    public class CommandHandlerFactory
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<CommandHandlerFactory> _logger;

@@ -6,6 +6,7 @@ using CMSAgent.Common.DTOs;
 using CMSAgent.Common.Interfaces;
 using CMSAgent.Common.Models;
 using CMSAgent.Persistence.Models;
+using CMSAgent.Security;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -20,12 +21,11 @@ namespace CMSAgent.Persistence
         private readonly IConfigLoader _configLoader;
         private readonly IWebSocketConnector _wsConnector;
         private readonly IHttpClientWrapper _httpClient;
-        private readonly ITokenProtector _tokenProtector;
-        private readonly IDateTimeProvider _dateTimeProvider;
-        private readonly FileQueue<StatusUpdatePayload> _statusQueue;
+        private readonly TokenProtector _tokenProtector;
         private readonly FileQueue<CommandResultPayload> _commandResultQueue;
         private readonly FileQueue<ErrorReportPayload> _errorReportQueue;
         private readonly string _basePath;
+        private readonly FileQueue _fileQueue;
 
         /// <summary>
         /// Khởi tạo một instance mới của OfflineQueueManager.
@@ -33,42 +33,29 @@ namespace CMSAgent.Persistence
         /// <param name="logger">Logger để ghi nhật ký.</param>
         /// <param name="configLoader">ConfigLoader để tải cấu hình.</param>
         /// <param name="queueSettings">Cấu hình cho hàng đợi offline.</param>
-        /// <param name="dateTimeProvider">Provider để lấy thời gian hiện tại.</param>
+        /// <param name="tokenProtector">Protector để mã hóa/giải mã token.</param>
         /// <param name="wsConnector">Connector để kết nối WebSocket.</param>
         /// <param name="httpClient">HTTP client để gửi request.</param>
-        /// <param name="tokenProtector">Protector để mã hóa/giải mã token.</param>
         public OfflineQueueManager(
             ILogger<OfflineQueueManager> logger,
             IConfigLoader configLoader,
             IOptions<OfflineQueueSettingsOptions> queueSettings,
-            IDateTimeProvider dateTimeProvider,
+            TokenProtector tokenProtector,
             IWebSocketConnector wsConnector,
-            IHttpClientWrapper httpClient,
-            ITokenProtector tokenProtector)
+            IHttpClientWrapper httpClient)
         {
             _logger = logger;
             _configLoader = configLoader;
-            _dateTimeProvider = dateTimeProvider;
+            _tokenProtector = tokenProtector;
             _wsConnector = wsConnector;
             _httpClient = httpClient;
-            _tokenProtector = tokenProtector;
 
             // Xác định đường dẫn cơ sở cho hàng đợi offline
             _basePath = queueSettings.Value.BasePath ?? Path.Combine(configLoader.GetDataPath(), "offline_queue");
 
-            // Khởi tạo các hàng đợi
-            _statusQueue = new FileQueue<StatusUpdatePayload>(
-                Path.Combine(_basePath, "status_reports"),
-                logger,
-                dateTimeProvider,
-                queueSettings.Value.StatusReportsMaxCount,
-                queueSettings.Value.MaxSizeMb,
-                queueSettings.Value.MaxAgeHours);
-
             _commandResultQueue = new FileQueue<CommandResultPayload>(
                 Path.Combine(_basePath, "command_results"),
                 logger,
-                dateTimeProvider,
                 queueSettings.Value.CommandResultsMaxCount,
                 queueSettings.Value.MaxSizeMb,
                 queueSettings.Value.MaxAgeHours);
@@ -76,27 +63,17 @@ namespace CMSAgent.Persistence
             _errorReportQueue = new FileQueue<ErrorReportPayload>(
                 Path.Combine(_basePath, "error_reports"),
                 logger,
-                dateTimeProvider,
                 queueSettings.Value.ErrorReportsMaxCount,
                 queueSettings.Value.MaxSizeMb,
                 queueSettings.Value.MaxAgeHours);
-        }
 
-        /// <summary>
-        /// Thêm một báo cáo trạng thái vào hàng đợi.
-        /// </summary>
-        /// <param name="payload">Payload chứa thông tin cập nhật trạng thái.</param>
-        /// <returns>Task đại diện cho thao tác thêm vào hàng đợi.</returns>
-        public async Task EnqueueStatusReportAsync(StatusUpdatePayload payload)
-        {
-            try
-            {
-                await _statusQueue.EnqueueAsync(payload);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Lỗi khi thêm báo cáo trạng thái vào hàng đợi offline");
-            }
+            var settings = queueSettings.Value;
+            _fileQueue = new FileQueue(
+                settings.QueueDirectory,
+                logger,
+                settings.MaxCount,
+                settings.MaxSizeMb,
+                settings.MaxAgeHours);
         }
 
         /// <summary>
@@ -159,11 +136,6 @@ namespace CMSAgent.Persistence
             }
 
             var agentId = runtimeConfig.agentId;
-
-            await ProcessSpecificQueueAsync(
-                _statusQueue,
-                async (item) => await _wsConnector.SendStatusUpdateAsync(item.Data),
-                cancellationToken);
             
             await ProcessSpecificQueueAsync(
                 _commandResultQueue,

@@ -1,14 +1,13 @@
 using System;
 using Microsoft.Extensions.Logging;
 using CMSAgent.Common.Enums;
-using CMSAgent.Common.Interfaces;
 
 namespace CMSAgent.Core
 {
     /// <summary>
     /// Quản lý trạng thái hiện tại của agent và thông báo khi có sự thay đổi trạng thái.
     /// </summary>
-    public class StateManager : IStateManager
+    public class StateManager
     {
         private readonly object _lock = new object();
         private AgentState _currentState = AgentState.INITIALIZING;

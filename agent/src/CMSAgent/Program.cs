@@ -175,18 +175,15 @@ namespace CMSAgent
             .AddPolicyHandler(httpTimeoutPolicy);
 
             // Đăng ký singleton services
-            services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
-            services.AddSingleton<IStateManager, StateManager>();
-            services.AddSingleton<IConfigLoader, ConfigLoader>();
-            services.AddSingleton<ITokenProtector, TokenProtector>();
-            services.AddSingleton<IHttpClientWrapper, HttpClientWrapper>();
-            services.AddSingleton<IWebSocketConnector, WebSocketConnector>();
-            services.AddSingleton<ISystemMonitor, SystemMonitor>();
-            services.AddSingleton<IHardwareInfoCollector, HardwareInfoCollector>();
-            services.AddSingleton<IUpdateHandler, UpdateHandler>();
-            services.AddSingleton<ICommandHandlerFactory, CommandHandlerFactory>();
-            services.AddSingleton<ICommandExecutor, CommandExecutor>();
-            services.AddSingleton<IOfflineQueueManager, OfflineQueueManager>();
+            services.AddSingleton<StateManager>();
+            services.AddSingleton<ConfigLoader>();
+            services.AddSingleton<HttpClientWrapper>();
+            services.AddSingleton<WebSocketConnector>();
+            services.AddSingleton<SystemMonitor>();
+            services.AddSingleton<HardwareInfoCollector>();
+            services.AddSingleton<UpdateHandler>();
+            services.AddSingleton<CommandExecutor>();
+            services.AddSingleton<OfflineQueueManager>();
             
             // Đăng ký singleton mutex
             services.AddSingleton<SingletonMutex>(provider =>
@@ -212,6 +209,10 @@ namespace CMSAgent
 
             // Đăng ký dịch vụ chính
             services.AddHostedService<AgentService>();
+
+            // Thay thế bằng
+            services.AddSingleton<TokenProtector>();
+            services.AddSingleton<CommandHandler>();
         }
     }
 

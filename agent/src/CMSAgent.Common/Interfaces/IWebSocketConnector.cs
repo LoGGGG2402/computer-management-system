@@ -51,12 +51,5 @@ namespace CMSAgent.Common.Interfaces
         /// <param name="payload">Dữ liệu kết quả thực thi lệnh.</param>
         /// <returns>Task đại diện cho việc gửi dữ liệu.</returns>
         Task SendCommandResultAsync(CommandResultPayload payload);
-
-        /// <summary>
-        /// Gửi trạng thái cập nhật lên server.
-        /// </summary>
-        /// <param name="payload">Dữ liệu trạng thái cập nhật.</param>
-        /// <returns>Task đại diện cho việc gửi dữ liệu.</returns>
-        Task SendUpdateStatusAsync(UpdateStatusPayload payload);
     }
 }

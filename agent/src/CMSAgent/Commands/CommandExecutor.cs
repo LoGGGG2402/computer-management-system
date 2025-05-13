@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 using CMSAgent.Common.DTOs;
-using CMSAgent.Common.Interfaces;
 using CMSAgent.Common.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -13,10 +12,10 @@ namespace CMSAgent.Commands
     /// <summary>
     /// Quản lý hàng đợi lệnh và thực thi lệnh.
     /// </summary>
-    public class CommandExecutor : ICommandExecutor
+    public class CommandExecutor
     {
         private readonly ILogger<CommandExecutor> _logger;
-        private readonly ICommandHandlerFactory _handlerFactory;
+        private readonly CommandHandler _commandHandler;
         private readonly IWebSocketConnector _webSocketConnector;
         private readonly IOfflineQueueManager _offlineQueueManager;
         private readonly CommandExecutorSettingsOptions _settings;
@@ -29,22 +28,22 @@ namespace CMSAgent.Commands
         /// Khởi tạo một instance mới của CommandExecutor.
         /// </summary>
         /// <param name="logger">Logger để ghi nhật ký.</param>
-        /// <param name="handlerFactory">Factory để tạo command handler.</param>
+        /// <param name="commandHandler">Handler để thực thi lệnh.</param>
         /// <param name="webSocketConnector">WebSocket connector để gửi kết quả lệnh.</param>
         /// <param name="offlineQueueManager">Manager của queue offline.</param>
-        /// <param name="options">Cấu hình thực thi lệnh.</param>
+        /// <param name="settingsOptions">Cấu hình thực thi lệnh.</param>
         public CommandExecutor(
             ILogger<CommandExecutor> logger,
-            ICommandHandlerFactory handlerFactory,
+            CommandHandler commandHandler,
             IWebSocketConnector webSocketConnector,
             IOfflineQueueManager offlineQueueManager,
-            IOptions<CommandExecutorSettingsOptions> options)
+            IOptions<CommandExecutorSettingsOptions> settingsOptions)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _handlerFactory = handlerFactory ?? throw new ArgumentNullException(nameof(handlerFactory));
+            _commandHandler = commandHandler ?? throw new ArgumentNullException(nameof(commandHandler));
             _webSocketConnector = webSocketConnector ?? throw new ArgumentNullException(nameof(webSocketConnector));
             _offlineQueueManager = offlineQueueManager ?? throw new ArgumentNullException(nameof(offlineQueueManager));
-            _settings = options?.Value ?? throw new ArgumentNullException(nameof(options));
+            _settings = settingsOptions?.Value ?? throw new ArgumentNullException(nameof(settingsOptions));
             
             // Khởi tạo semaphore với số lượng lệnh có thể thực thi đồng thời
             _executionSemaphore = new SemaphoreSlim(_settings.MaxParallelCommands, _settings.MaxParallelCommands);
@@ -155,11 +154,8 @@ namespace CMSAgent.Commands
 
             try
             {
-                // Lấy handler phù hợp cho loại lệnh
-                var handler = _handlerFactory.GetHandler(command.commandType);
-                
                 // Thực thi lệnh
-                result = await handler.ExecuteAsync(command, cancellationToken);
+                result = await _commandHandler.ExecuteAsync(command, cancellationToken);
                 
                 _logger.LogInformation("Đã thực thi lệnh {CommandId} với kết quả: {Success}", 
                     command.commandId, result.success ? "Thành công" : "Thất bại");

@@ -21,12 +21,12 @@ namespace CMSAgent.Communication
     public class WebSocketConnector : IWebSocketConnector, IDisposable
     {
         private readonly ILogger<WebSocketConnector> _logger;
-        private readonly IConfigLoader _configLoader;
-        private readonly ITokenProtector _tokenProtector;
-        private readonly IStateManager _stateManager;
-        private readonly ICommandExecutor _commandExecutor;
-        private readonly IUpdateHandler _updateHandler;
-        private readonly IHttpClientWrapper _httpClient;
+        private readonly ConfigLoader _configLoader;
+        private readonly TokenProtector _tokenProtector;
+        private readonly StateManager _stateManager;
+        private readonly CommandExecutor _commandExecutor;
+        private readonly UpdateHandler _updateHandler;
+        private readonly HttpClientWrapper _httpClient;
         private readonly WebSocketSettingsOptions _settings;
         
         private SocketIOClient.SocketIO _socket;
@@ -64,13 +64,13 @@ namespace CMSAgent.Communication
         /// <param name="httpClient">HttpClient để gửi request HTTP.</param>
         public WebSocketConnector(
             ILogger<WebSocketConnector> logger,
-            IConfigLoader configLoader,
-            ITokenProtector tokenProtector,
-            IStateManager stateManager,
+            ConfigLoader configLoader,
+            TokenProtector tokenProtector,
+            StateManager stateManager,
             IOptions<WebSocketSettingsOptions> options,
-            ICommandExecutor commandExecutor,
-            IUpdateHandler updateHandler,
-            IHttpClientWrapper httpClient)
+            CommandExecutor commandExecutor,
+            UpdateHandler updateHandler,
+            HttpClientWrapper httpClient)
         {
             _logger = logger;
             _configLoader = configLoader;

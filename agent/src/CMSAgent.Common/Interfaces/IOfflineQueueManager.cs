@@ -9,12 +9,6 @@ namespace CMSAgent.Common.Interfaces
     /// </summary>
     public interface IOfflineQueueManager
     {
-        /// <summary>
-        /// Thêm bản ghi trạng thái vào hàng đợi.
-        /// </summary>
-        /// <param name="payload">Payload chứa thông tin cập nhật trạng thái.</param>
-        /// <returns>Task đại diện cho thao tác thêm vào hàng đợi.</returns>
-        Task EnqueueStatusReportAsync(StatusUpdatePayload payload);
 
         /// <summary>
         /// Thêm kết quả command vào hàng đợi.
@@ -29,13 +23,6 @@ namespace CMSAgent.Common.Interfaces
         /// <param name="payload">Payload chứa thông tin lỗi.</param>
         /// <returns>Task đại diện cho thao tác thêm vào hàng đợi.</returns>
         Task EnqueueErrorReportAsync(ErrorReportPayload payload);
-
-        /// <summary>
-        /// Thêm trạng thái cập nhật vào hàng đợi.
-        /// </summary>
-        /// <param name="payload">Payload chứa thông tin trạng thái cập nhật.</param>
-        /// <returns>Task đại diện cho thao tác thêm vào hàng đợi.</returns>
-        Task EnqueueUpdateStatusAsync(UpdateStatusPayload payload);
 
         /// <summary>
         /// Xử lý tất cả các hàng đợi offline và gửi dữ liệu lên server.

@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using CMSAgent.Common.Interfaces;
-using CMSAgent.Persistence.Models;
+using CMSAgent.Common.Models;
 using Microsoft.Extensions.Logging;
 
 namespace CMSAgent.Persistence
@@ -18,7 +18,6 @@ namespace CMSAgent.Persistence
     {
         private readonly string _queueDirectory;
         private readonly ILogger _logger;
-        private readonly IDateTimeProvider _dateTimeProvider;
         private readonly int _maxCount;
         private readonly long _maxSizeBytes;
         private readonly int _maxAgeHours;
@@ -33,21 +32,18 @@ namespace CMSAgent.Persistence
         /// </summary>
         /// <param name="queueDirectory">Đường dẫn thư mục để lưu trữ các file hàng đợi.</param>
         /// <param name="logger">Logger để ghi nhật ký.</param>
-        /// <param name="dateTimeProvider">Provider để lấy thời gian hiện tại.</param>
         /// <param name="maxCount">Số lượng item tối đa trong hàng đợi.</param>
         /// <param name="maxSizeMb">Kích thước tối đa (MB) của hàng đợi.</param>
         /// <param name="maxAgeHours">Thời gian tối đa (giờ) một item có thể lưu trong hàng đợi.</param>
         public FileQueue(
             string queueDirectory, 
-            ILogger logger, 
-            IDateTimeProvider dateTimeProvider,
+            ILogger logger,
             int maxCount, 
             int maxSizeMb, 
             int maxAgeHours)
         {
             _queueDirectory = queueDirectory;
             _logger = logger;
-            _dateTimeProvider = dateTimeProvider;
             _maxCount = maxCount;
             _maxSizeBytes = (long)maxSizeMb * 1024 * 1024;
             _maxAgeHours = maxAgeHours;
@@ -69,7 +65,7 @@ namespace CMSAgent.Persistence
             {
                 ItemId = Guid.NewGuid().ToString(),
                 Data = item,
-                EnqueuedTimestampUtc = _dateTimeProvider.UtcNow
+                EnqueuedTimestampUtc = DateTime.UtcNow
             };
 
             var filePath = Path.Combine(_queueDirectory, $"{queuedItem.ItemId}.json");
@@ -132,7 +128,7 @@ namespace CMSAgent.Persistence
         public async Task RequeueAsync(QueuedItem<T> queuedItem)
         {
             queuedItem.RetryAttempts++;
-            queuedItem.EnqueuedTimestampUtc = _dateTimeProvider.UtcNow;
+            queuedItem.EnqueuedTimestampUtc = DateTime.UtcNow;
 
             var filePath = Path.Combine(_queueDirectory, $"{queuedItem.ItemId}.json");
 
@@ -231,7 +227,7 @@ namespace CMSAgent.Persistence
                 }
 
                 // Xóa file cũ hơn maxAgeHours
-                var cutoffTime = _dateTimeProvider.UtcNow.AddHours(-_maxAgeHours);
+                var cutoffTime = DateTime.UtcNow.AddHours(-_maxAgeHours);
                 var oldFiles = files.Where(f => f.CreationTimeUtc < cutoffTime);
                 
                 foreach (var file in oldFiles)

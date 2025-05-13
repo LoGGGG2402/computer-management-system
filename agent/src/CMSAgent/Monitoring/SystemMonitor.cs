@@ -5,7 +5,6 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using CMSAgent.Common.DTOs;
-using CMSAgent.Common.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace CMSAgent.Monitoring
@@ -13,7 +12,7 @@ namespace CMSAgent.Monitoring
     /// <summary>
     /// Thu thập thông tin tài nguyên hệ thống.
     /// </summary>
-    public class SystemMonitor : ISystemMonitor
+    public class SystemMonitor
     {
         private readonly ILogger<SystemMonitor> _logger;
         private PerformanceCounter _cpuCounter;

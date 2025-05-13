@@ -5,7 +5,6 @@ using System.Management;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using CMSAgent.Common.DTOs;
-using CMSAgent.Common.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace CMSAgent.Monitoring
@@ -13,7 +12,7 @@ namespace CMSAgent.Monitoring
     /// <summary>
     /// Thu thập thông tin phần cứng của hệ thống.
     /// </summary>
-    public class HardwareInfoCollector : IHardwareInfoCollector
+    public class HardwareInfoCollector
     {
         private readonly ILogger<HardwareInfoCollector> _logger;
 

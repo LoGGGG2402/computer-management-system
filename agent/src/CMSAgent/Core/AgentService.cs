@@ -16,17 +16,16 @@ namespace CMSAgent.Core
     /// </summary>
     public class AgentService : WorkerServiceBase
     {
-        private readonly IStateManager _stateManager;
-        private readonly IConfigLoader _configLoader;
-        private readonly IWebSocketConnector _webSocketConnector;
-        private readonly ISystemMonitor _systemMonitor;
-        private readonly ICommandExecutor _commandExecutor;
-        private readonly IUpdateHandler _updateHandler;
+        private readonly StateManager _stateManager;
+        private readonly ConfigLoader _configLoader;
+        private readonly WebSocketConnector _webSocketConnector;
+        private readonly SystemMonitor _systemMonitor;
+        private readonly CommandExecutor _commandExecutor;
+        private readonly UpdateHandler _updateHandler;
         private readonly SingletonMutex _singletonMutex;
-        private readonly IOfflineQueueManager _offlineQueueManager;
-        private readonly ITokenProtector _tokenProtector;
+        private readonly OfflineQueueManager _offlineQueueManager;
+        private readonly TokenProtector _tokenProtector;
         private readonly AgentSpecificSettingsOptions _agentSettings;
-        private readonly IDateTimeProvider _dateTimeProvider;
         private readonly IServiceProvider _serviceProvider;
         private readonly IHostApplicationLifetime _applicationLifetime;
 
@@ -54,22 +53,20 @@ namespace CMSAgent.Core
         /// <param name="offlineQueueManager">Quản lý hàng đợi offline.</param>
         /// <param name="tokenProtector">Bảo vệ token agent.</param>
         /// <param name="agentSettings">Cấu hình đặc thù cho agent.</param>
-        /// <param name="dateTimeProvider">Cung cấp thời gian hiện tại.</param>
         /// <param name="serviceProvider">Service provider để resolve các dependency.</param>
         /// <param name="applicationLifetime">Quản lý vòng đời của ứng dụng.</param>
         public AgentService(
             ILogger<AgentService> logger,
-            IStateManager stateManager,
-            IConfigLoader configLoader,
-            IWebSocketConnector webSocketConnector,
-            ISystemMonitor systemMonitor,
-            ICommandExecutor commandExecutor,
-            IUpdateHandler updateHandler,
+            StateManager stateManager,
+            ConfigLoader configLoader,
+            WebSocketConnector webSocketConnector,
+            SystemMonitor systemMonitor,
+            CommandExecutor commandExecutor,
+            UpdateHandler updateHandler,
             SingletonMutex singletonMutex,
-            IOfflineQueueManager offlineQueueManager,
-            ITokenProtector tokenProtector,
+            OfflineQueueManager offlineQueueManager,
+            TokenProtector tokenProtector,
             IOptions<AgentSpecificSettingsOptions> agentSettings,
-            IDateTimeProvider dateTimeProvider,
             IServiceProvider serviceProvider,
             IHostApplicationLifetime applicationLifetime) 
             : base(logger)
@@ -84,7 +81,6 @@ namespace CMSAgent.Core
             _offlineQueueManager = offlineQueueManager ?? throw new ArgumentNullException(nameof(offlineQueueManager));
             _tokenProtector = tokenProtector ?? throw new ArgumentNullException(nameof(tokenProtector));
             _agentSettings = agentSettings?.Value ?? throw new ArgumentNullException(nameof(agentSettings));
-            _dateTimeProvider = dateTimeProvider ?? throw new ArgumentNullException(nameof(dateTimeProvider));
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _applicationLifetime = applicationLifetime ?? throw new ArgumentNullException(nameof(applicationLifetime));
 
@@ -277,7 +273,7 @@ namespace CMSAgent.Core
             }
 
             // Kiểm tra thời gian giữa các lần thử kết nối
-            var now = _dateTimeProvider.UtcNow;
+            var now = DateTime.UtcNow;
             if (_lastConnectionAttempt != default && (now - _lastConnectionAttempt).TotalSeconds < GetExponentialBackoffDelay())
             {
                 return false;
@@ -420,11 +416,6 @@ namespace CMSAgent.Core
                 {
                     await _webSocketConnector.SendStatusUpdateAsync(statusPayload);
                     _logger.LogTrace("Đã gửi báo cáo trạng thái tài nguyên lên server.");
-                }
-                else
-                {
-                    await _offlineQueueManager.EnqueueStatusReportAsync(statusPayload);
-                    _logger.LogDebug("Đã lưu báo cáo trạng thái tài nguyên vào hàng đợi offline.");
                 }
             }
             catch (Exception ex)

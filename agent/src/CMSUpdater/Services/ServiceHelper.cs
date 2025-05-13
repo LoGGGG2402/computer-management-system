@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.ServiceProcess;
 
-namespace CMSUpdater;
+namespace CMSUpdater.Services;
 
 /// <summary>
 /// Lớp tiện ích tương tác với Windows Service Control Manager (SCM) cho Updater
@@ -159,4 +159,4 @@ public class ServiceHelper
             return false;
         }
     }
-}
+} 

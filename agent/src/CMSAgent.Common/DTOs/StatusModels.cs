@@ -1,3 +1,5 @@
+using System;
+
 namespace CMSAgent.Common.DTOs
 {
     /// <summary>
@@ -20,4 +22,4 @@ namespace CMSAgent.Common.DTOs
         /// </summary>
         public double diskUsage { get; set; }
     }
-}
+} 

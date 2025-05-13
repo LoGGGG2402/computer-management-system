@@ -1,8 +1,11 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Configuration;
+using System.IO;
 using CMSAgent.Common.Enums;
-
-namespace CMSUpdater;
+using CMSUpdater.Helpers;
+using CMSUpdater.Services;
+using CMSUpdater.Core;
 
 /// <summary>
 /// Lớp Program chính của CMSUpdater
@@ -15,6 +18,11 @@ public class Program
     private static ILogger _logger = NullLogger.Instance;
     
     /// <summary>
+    /// Cấu hình ứng dụng
+    /// </summary>
+    private static IConfiguration _configuration;
+    
+    /// <summary>
     /// Điểm vào chính của ứng dụng
     /// </summary>
     /// <param name="args">Tham số dòng lệnh</param>
@@ -23,24 +31,55 @@ public class Program
     {
         try
         {
-            var updateParams = ParseArguments(args);
+            // Đọc cấu hình từ appsettings.json
+            _configuration = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                .Build();
             
-            if (updateParams == null)
+            // Log tạm thời để hiển thị khởi động, sẽ được thay thế bởi logger được cấu hình
+            Console.WriteLine($"CMSUpdater bắt đầu khởi động vào lúc {DateTime.Now:yyyy-MM-dd HH:mm:ss}...");
+            Console.WriteLine($"Đã đọc cấu hình từ appsettings.json");
+            
+            var (isValid, agentProcessIdToWait, newAgentPath, currentAgentInstallDir, updaterLogDir, currentAgentVersion) = ParseArguments(args);
+            
+            if (!isValid)
             {
                 Console.Error.WriteLine("Tham số không hợp lệ cho CMSUpdater.");
                 PrintUsage();
                 return (int)UpdaterExitCodes.InvalidArguments;
             }
             
-            _logger = LoggingSetup.CreateUpdaterLogger(updateParams.UpdaterLogDir, updateParams.CurrentAgentVersion);
+            // Khởi tạo logger với cấu hình từ appsettings.json
+            _logger = LoggingSetup.CreateUpdaterLogger(updaterLogDir, currentAgentVersion, _configuration);
             
             _logger.LogInformation("CMSUpdater đã khởi động với PID: {PID}, NewPath: {NewPath}, CurrentDir: {CurrentDir}, LogDir: {LogDir}, CurrentVersion: {Version}", 
-                updateParams.AgentProcessIdToWait, updateParams.NewAgentPath, updateParams.CurrentAgentInstallDir, 
-                updateParams.UpdaterLogDir, updateParams.CurrentAgentVersion);
+                agentProcessIdToWait, newAgentPath, currentAgentInstallDir, updaterLogDir, currentAgentVersion);
+            
+            // Đọc các cấu hình từ appsettings.json 
+            int retryAttempts = _configuration.GetValue<int>("Updater:RetryAttempts", 3);
+            int retryDelayMs = _configuration.GetValue<int>("Updater:RetryDelayMilliseconds", 1000);
+            int processTimeoutSec = _configuration.GetValue<int>("Updater:WaitForProcessTimeoutSeconds", 30);
+            var filesToExclude = _configuration.GetSection("Updater:FilesToExcludeFromUpdate").Get<string[]>() ?? Array.Empty<string>();
+            
+            _logger.LogInformation("Cấu hình từ appsettings.json: RetryAttempts={Attempts}, RetryDelay={Delay}ms, ProcessTimeout={Timeout}s, FilesToExclude={ExcludeCount} mục", 
+                retryAttempts, retryDelayMs, processTimeoutSec, filesToExclude.Length);
             
             var serviceHelper = new ServiceHelper(_logger);
-            var rollbackManager = new RollbackManager(_logger, updateParams, serviceHelper);
-            var updaterLogic = new UpdaterLogic(_logger, rollbackManager, serviceHelper, updateParams);
+            var rollbackManager = new RollbackManager(_logger, agentProcessIdToWait, newAgentPath, currentAgentInstallDir, updaterLogDir, currentAgentVersion, serviceHelper);
+            var updaterLogic = new UpdaterLogic(
+                _logger, 
+                rollbackManager, 
+                serviceHelper, 
+                agentProcessIdToWait, 
+                newAgentPath, 
+                currentAgentInstallDir, 
+                updaterLogDir, 
+                currentAgentVersion,
+                retryAttempts,
+                retryDelayMs,
+                processTimeoutSec,
+                filesToExclude);
             
             return await updaterLogic.ExecuteUpdateAsync();
         }
@@ -63,15 +102,20 @@ public class Program
     /// Phân tích tham số dòng lệnh
     /// </summary>
     /// <param name="args">Mảng tham số dòng lệnh</param>
-    /// <returns>UpdateParameters hoặc null nếu không hợp lệ</returns>
-    private static UpdateParameters? ParseArguments(string[] args)
+    /// <returns>Tuple chứa tính hợp lệ và các giá trị tham số</returns>
+    private static (bool isValid, int agentProcessIdToWait, string newAgentPath, string currentAgentInstallDir, string updaterLogDir, string currentAgentVersion) ParseArguments(string[] args)
     {
         if (args.Length < 5)
         {
-            return null;
+            return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty);
         }
         
-        var parameters = new UpdateParameters();
+        int agentProcessIdToWait = 0;
+        string newAgentPath = string.Empty;
+        string currentAgentInstallDir = string.Empty;
+        string updaterLogDir = string.Empty;
+        string currentAgentVersion = string.Empty;
+        
         bool hasPid = false;
         bool hasNewAgentPath = false;
         bool hasCurrentInstallDir = false;
@@ -86,32 +130,32 @@ public class Program
                 case "--pid":
                     if (int.TryParse(args[i + 1], out int pid))
                     {
-                        parameters.AgentProcessIdToWait = pid;
+                        agentProcessIdToWait = pid;
                         hasPid = true;
                     }
                     break;
                 
                 case "new-agent-path":
                 case "--new-agent-path":
-                    parameters.NewAgentPath = args[i + 1].Trim('"');
+                    newAgentPath = args[i + 1].Trim('"');
                     hasNewAgentPath = true;
                     break;
                 
                 case "current-agent-install-dir":
                 case "--current-agent-install-dir":
-                    parameters.CurrentAgentInstallDir = args[i + 1].Trim('"');
+                    currentAgentInstallDir = args[i + 1].Trim('"');
                     hasCurrentInstallDir = true;
                     break;
                 
                 case "updater-log-dir":
                 case "--updater-log-dir":
-                    parameters.UpdaterLogDir = args[i + 1].Trim('"');
+                    updaterLogDir = args[i + 1].Trim('"');
                     hasUpdaterLogDir = true;
                     break;
                 
                 case "current-agent-version":
                 case "--current-agent-version":
-                    parameters.CurrentAgentVersion = args[i + 1].Trim('"');
+                    currentAgentVersion = args[i + 1].Trim('"');
                     hasCurrentVersion = true;
                     break;
             }
@@ -120,23 +164,23 @@ public class Program
         // Kiểm tra xem tất cả tham số bắt buộc đã có hay chưa
         if (!hasPid || !hasNewAgentPath || !hasCurrentInstallDir || !hasUpdaterLogDir || !hasCurrentVersion)
         {
-            return null;
+            return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty);
         }
         
         // Kiểm tra tính hợp lệ của đường dẫn
-        if (!Directory.Exists(parameters.NewAgentPath))
+        if (!Directory.Exists(newAgentPath))
         {
-            Console.Error.WriteLine($"Lỗi: Thư mục agent mới không tồn tại: {parameters.NewAgentPath}");
-            return null;
+            Console.Error.WriteLine($"Lỗi: Thư mục agent mới không tồn tại: {newAgentPath}");
+            return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty);
         }
         
-        if (!Directory.Exists(parameters.CurrentAgentInstallDir))
+        if (!Directory.Exists(currentAgentInstallDir))
         {
-            Console.Error.WriteLine($"Lỗi: Thư mục cài đặt hiện tại không tồn tại: {parameters.CurrentAgentInstallDir}");
-            return null;
+            Console.Error.WriteLine($"Lỗi: Thư mục cài đặt hiện tại không tồn tại: {currentAgentInstallDir}");
+            return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty);
         }
         
-        return parameters;
+        return (true, agentProcessIdToWait, newAgentPath, currentAgentInstallDir, updaterLogDir, currentAgentVersion);
     }
     
     /// <summary>
@@ -155,4 +199,4 @@ public class Program
         Console.WriteLine("Ví dụ:");
         Console.WriteLine("  CMSUpdater.exe --pid 1234 --new-agent-path \"C:\\ProgramData\\CMSAgent\\updates\\extracted\\v1.1.0\" --current-agent-install-dir \"C:\\Program Files\\CMSAgent\" --updater-log-dir \"C:\\ProgramData\\CMSAgent\\logs\" --current-agent-version \"1.0.2\"");
     }
-}
+} 

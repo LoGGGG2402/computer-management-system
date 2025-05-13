@@ -1,7 +1,5 @@
 using Microsoft.Extensions.Logging;
-using CMSAgent.Common.Enums;
-
-namespace CMSUpdater;
+namespace CMSUpdater.Services;
 
 /// <summary>
 /// Lớp quản lý quá trình rollback khi cập nhật thất bại
@@ -9,7 +7,11 @@ namespace CMSUpdater;
 public class RollbackManager
 {
     private readonly ILogger<RollbackManager> _logger;
-    private readonly UpdateParameters _params;
+    private readonly int _agentProcessIdToWait;
+    private readonly string _newAgentPath;
+    private readonly string _currentAgentInstallDir;
+    private readonly string _updaterLogDir;
+    private readonly string _currentAgentVersion;
     private readonly ServiceHelper _serviceHelper;
     private readonly string _agentServiceName = "CMSAgentService";
     private readonly string _backupFolderPath;
@@ -18,14 +20,29 @@ public class RollbackManager
     /// Khởi tạo RollbackManager
     /// </summary>
     /// <param name="logger">Logger để ghi log</param>
-    /// <param name="parameters">Tham số cập nhật</param>
+    /// <param name="agentProcessIdToWait">PID của tiến trình agent cũ cần dừng</param>
+    /// <param name="newAgentPath">Đường dẫn đến thư mục chứa file agent mới đã giải nén</param>
+    /// <param name="currentAgentInstallDir">Đường dẫn thư mục cài đặt hiện tại</param>
+    /// <param name="updaterLogDir">Nơi ghi file log của updater</param>
+    /// <param name="currentAgentVersion">Phiên bản agent hiện tại</param>
     /// <param name="serviceHelper">Helper để tương tác với Windows Service</param>
-    public RollbackManager(ILogger<RollbackManager> logger, UpdateParameters parameters, ServiceHelper serviceHelper)
+    public RollbackManager(
+        ILogger<RollbackManager> logger, 
+        int agentProcessIdToWait, 
+        string newAgentPath, 
+        string currentAgentInstallDir, 
+        string updaterLogDir, 
+        string currentAgentVersion, 
+        ServiceHelper serviceHelper)
     {
         _logger = logger;
-        _params = parameters;
+        _agentProcessIdToWait = agentProcessIdToWait;
+        _newAgentPath = newAgentPath;
+        _currentAgentInstallDir = currentAgentInstallDir;
+        _updaterLogDir = updaterLogDir;
+        _currentAgentVersion = currentAgentVersion;
         _serviceHelper = serviceHelper;
-        _backupFolderPath = Path.Combine(_params.CurrentAgentInstallDir, "backup_" + _params.CurrentAgentVersion);
+        _backupFolderPath = Path.Combine(_currentAgentInstallDir, "backup_" + _currentAgentVersion);
     }
     
     /// <summary>
@@ -33,7 +50,7 @@ public class RollbackManager
     /// </summary>
     /// <param name="reason">Lý do rollback</param>
     /// <returns>Task đại diện cho quá trình rollback bất đồng bộ</returns>
-    public async Task RollbackAsync(RollbackReason reason)
+    public async Task RollbackAsync(string reason)
     {
         _logger.LogWarning("Bắt đầu quá trình rollback. Lý do: {Reason}", reason);
         
@@ -62,12 +79,13 @@ public class RollbackManager
             
             // Xóa nội dung hiện tại của thư mục cài đặt (trừ thư mục backup)
             _logger.LogInformation("Xóa nội dung thư mục cài đặt hiện tại (trừ backup)...");
-            foreach (var entry in Directory.GetFileSystemEntries(_params.CurrentAgentInstallDir))
+            foreach (var entry in Directory.GetFileSystemEntries(_currentAgentInstallDir))
             {
                 var entryName = Path.GetFileName(entry);
+                var backupFolderName = Path.GetFileName(_backupFolderPath);
                 
                 // Bỏ qua thư mục backup
-                if (entryName.Equals(Path.GetFileName(_backupFolderPath), StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(entryName, backupFolderName, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -94,7 +112,7 @@ public class RollbackManager
             foreach (var entry in Directory.GetFileSystemEntries(_backupFolderPath))
             {
                 var entryName = Path.GetFileName(entry);
-                var destPath = Path.Combine(_params.CurrentAgentInstallDir, entryName);
+                var destPath = Path.Combine(_currentAgentInstallDir, entryName);
                 
                 try
                 {
@@ -160,4 +178,4 @@ public class RollbackManager
             CopyDirectory(dir, destSubDir);
         }
     }
-}
+} 

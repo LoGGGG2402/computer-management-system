@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using CMSAgent.Common.Constants;
 using CMSAgent.Common.DTOs;
 using CMSAgent.Common.Enums;
-using CMSAgent.Common.Interfaces;
 using CMSAgent.Common.Models;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -19,15 +18,12 @@ namespace CMSAgent.Update
     /// <summary>
     /// Xử lý logic kiểm tra, tải xuống và khởi chạy quá trình cập nhật.
     /// </summary>
-    public class UpdateHandler : IUpdateHandler
+    public class UpdateHandler
     {
         private readonly ILogger<UpdateHandler> _logger;
         private readonly IHttpClientWrapper _httpClient;
         private readonly IConfigLoader _configLoader;
-        private readonly IWebSocketConnector _webSocketConnector;
         private readonly IStateManager _stateManager;
-        private readonly IOfflineQueueManager _offlineQueueManager;
-        private readonly IDateTimeProvider _dateTimeProvider;
         private readonly IHostApplicationLifetime _applicationLifetime;
         private readonly AgentSpecificSettingsOptions _settings;
 
@@ -40,30 +36,21 @@ namespace CMSAgent.Update
         /// <param name="logger">Logger để ghi nhật ký.</param>
         /// <param name="httpClient">HttpClient để tải xuống các gói cập nhật.</param>
         /// <param name="configLoader">ConfigLoader để tải cấu hình agent.</param>
-        /// <param name="webSocketConnector">WebSocket connector để thông báo trạng thái cập nhật.</param>
         /// <param name="stateManager">Quản lý trạng thái agent.</param>
-        /// <param name="offlineQueueManager">Quản lý hàng đợi offline.</param>
-        /// <param name="dateTimeProvider">Provider cung cấp thời gian hệ thống.</param>
         /// <param name="applicationLifetime">ApplicationLifetime để dừng agent sau khi cập nhật.</param>
         /// <param name="options">Cấu hình đặc biệt cho agent.</param>
         public UpdateHandler(
             ILogger<UpdateHandler> logger,
             IHttpClientWrapper httpClient,
             IConfigLoader configLoader,
-            IWebSocketConnector webSocketConnector,
             IStateManager stateManager,
-            IOfflineQueueManager offlineQueueManager,
-            IDateTimeProvider dateTimeProvider,
             IHostApplicationLifetime applicationLifetime,
             IOptions<AgentSpecificSettingsOptions> options)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             _configLoader = configLoader ?? throw new ArgumentNullException(nameof(configLoader));
-            _webSocketConnector = webSocketConnector ?? throw new ArgumentNullException(nameof(webSocketConnector));
             _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
-            _offlineQueueManager = offlineQueueManager ?? throw new ArgumentNullException(nameof(offlineQueueManager));
-            _dateTimeProvider = dateTimeProvider ?? throw new ArgumentNullException(nameof(dateTimeProvider));
             _applicationLifetime = applicationLifetime ?? throw new ArgumentNullException(nameof(applicationLifetime));
             _settings = options?.Value ?? throw new ArgumentNullException(nameof(options));
         }
@@ -159,10 +146,7 @@ namespace CMSAgent.Update
                 var previousState = _stateManager.CurrentState;
                 _stateManager.SetState(AgentState.UPDATING);
 
-                // Thông báo trạng thái cập nhật
-                await NotifyUpdateStatus("downloading", $"Đang tải xuống phiên bản {updateInfo.version}");
-
-                string tempDirectory = Path.Combine(Path.GetTempPath(), $"cmsagent_update_{_dateTimeProvider.UtcNow.Ticks}");
+                string tempDirectory = Path.Combine(Path.GetTempPath(), $"cmsagent_update_{DateTime.UtcNow.Ticks}");
                 string downloadPath = string.Empty;
 
                 try
@@ -192,12 +176,10 @@ namespace CMSAgent.Update
 
                     // Kiểm tra checksum
                     _logger.LogInformation("Kiểm tra tính toàn vẹn của gói cập nhật");
-                    await NotifyUpdateStatus("verifying", "Đang kiểm tra tính toàn vẹn của gói cập nhật");
 
                     if (!await VerifyChecksumAsync(downloadPath, updateInfo.checksum_sha256))
                     {
                         _logger.LogError("Kiểm tra tính toàn vẹn thất bại: Checksum không khớp");
-                        await NotifyUpdateStatus("failed", "Kiểm tra tính toàn vẹn thất bại");
                         return;
                     }
 
@@ -207,19 +189,16 @@ namespace CMSAgent.Update
                     // Lưu thông tin cập nhật vào registry hoặc file cấu hình
                     // để CMSUpdater có thể sử dụng sau khi agent được khởi động lại
                     _logger.LogInformation("Đang chuẩn bị CMSUpdater");
-                    await NotifyUpdateStatus("preparing", "Đang chuẩn bị cài đặt bản cập nhật");
                     
                     // Tạo thông tin cài đặt cho CMSUpdater
                     if (!PrepareCMSUpdater(downloadPath, installDirectory, updateInfo.version))
                     {
                         _logger.LogError("Không thể chuẩn bị CMSUpdater");
-                        await NotifyUpdateStatus("failed", "Không thể chuẩn bị cài đặt");
                         return;
                     }
 
                     // Thông báo chuẩn bị khởi động lại
                     _logger.LogWarning("Agent sẽ dừng và khởi chạy CMSUpdater để hoàn tất quá trình cập nhật");
-                    await NotifyUpdateStatus("restarting", "Đang chuẩn bị khởi động lại để cài đặt bản cập nhật");
 
                     // Khởi chạy CMSUpdater và thoát agent
                     if (await StartCMSUpdaterAsync())
@@ -231,7 +210,6 @@ namespace CMSAgent.Update
                     else
                     {
                         _logger.LogError("Không thể khởi chạy CMSUpdater");
-                        await NotifyUpdateStatus("failed", "Không thể khởi chạy quá trình cập nhật");
                         
                         // Khôi phục trạng thái trước đó
                         _stateManager.SetState(previousState);
@@ -240,7 +218,6 @@ namespace CMSAgent.Update
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Lỗi trong quá trình cập nhật");
-                    await NotifyUpdateStatus("failed", $"Lỗi cập nhật: {ex.Message}");
                     
                     // Khôi phục trạng thái trước đó
                     _stateManager.SetState(previousState);
@@ -329,7 +306,7 @@ namespace CMSAgent.Update
   ""install_directory"": ""{installDirectory.Replace("\\", "\\\\")}"",
   ""new_version"": ""{newVersion}"",
   ""backup_directory"": ""{Path.Combine(Path.GetTempPath(), "CMSAgent_backup").Replace("\\", "\\\\")}"",
-  ""timestamp"": ""{_dateTimeProvider.UtcNow:yyyy-MM-ddTHH:mm:ss.fffZ}""
+  ""timestamp"": ""{DateTime.UtcNow:yyyy-MM-ddTHH:mm:ss.fffZ}""
 }}";
 
                 // Lưu file cấu hình
@@ -391,41 +368,6 @@ namespace CMSAgent.Update
             {
                 _logger.LogError(ex, "Lỗi khi khởi chạy CMSUpdater");
                 return false;
-            }
-        }
-
-        /// <summary>
-        /// Gửi thông báo trạng thái cập nhật.
-        /// </summary>
-        /// <param name="status">Trạng thái cập nhật.</param>
-        /// <param name="message">Thông điệp kèm theo.</param>
-        /// <returns>Task đại diện cho việc gửi thông báo.</returns>
-        private async Task NotifyUpdateStatus(string status, string message)
-        {
-            try
-            {
-                var statusPayload = new UpdateStatusPayload
-                {
-                    status = status,
-                    message = message,
-                    timestamp = _dateTimeProvider.UtcNow
-                };
-
-                // Gửi thông báo qua WebSocket nếu đang kết nối
-                if (_webSocketConnector.IsConnected)
-                {
-                    await _webSocketConnector.SendUpdateStatusAsync(statusPayload);
-                }
-                else
-                {
-                    // Không có kết nối, lưu vào hàng đợi offline
-                    _logger.LogInformation("WebSocket không kết nối, lưu thông báo cập nhật vào hàng đợi offline");
-                    await _offlineQueueManager.EnqueueUpdateStatusAsync(statusPayload);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Lỗi khi gửi thông báo trạng thái cập nhật: {Status}", status);
             }
         }
     }

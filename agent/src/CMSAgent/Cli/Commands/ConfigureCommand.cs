@@ -21,8 +21,7 @@ namespace CMSAgent.Cli.Commands
         private readonly ILogger<ConfigureCommand> _logger;
         private readonly IConfigLoader _configLoader;
         private readonly IHttpClientWrapper _httpClient;
-        private readonly ITokenProtector _tokenProtector;
-        private readonly IDateTimeProvider _dateTimeProvider;
+        private readonly TokenProtector _tokenProtector;
 
         /// <summary>
         /// Khởi tạo một instance mới của ConfigureCommand.
@@ -31,19 +30,16 @@ namespace CMSAgent.Cli.Commands
         /// <param name="configLoader">ConfigLoader để tải và lưu cấu hình.</param>
         /// <param name="httpClient">HttpClient để giao tiếp với server.</param>
         /// <param name="tokenProtector">TokenProtector để mã hóa token.</param>
-        /// <param name="dateTimeProvider">DateTimeProvider để lấy thời gian hiện tại.</param>
         public ConfigureCommand(
             ILogger<ConfigureCommand> logger,
             IConfigLoader configLoader,
             IHttpClientWrapper httpClient,
-            ITokenProtector tokenProtector,
-            IDateTimeProvider dateTimeProvider)
+            TokenProtector tokenProtector)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _configLoader = configLoader ?? throw new ArgumentNullException(nameof(configLoader));
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             _tokenProtector = tokenProtector ?? throw new ArgumentNullException(nameof(tokenProtector));
-            _dateTimeProvider = dateTimeProvider ?? throw new ArgumentNullException(nameof(dateTimeProvider));
         }
 
         /// <summary>
@@ -295,16 +291,9 @@ namespace CMSAgent.Cli.Commands
         /// <returns>Agent ID duy nhất.</returns>
         private string GenerateAgentId()
         {
-            // Lấy hostname
             string hostName = Environment.MachineName;
-            
-            // Lấy địa chỉ MAC
             string macAddress = GetMacAddress();
-            
-            // Tạo timestamp
-            string timestamp = _dateTimeProvider.UtcNow.ToString("yyyyMMddHHmmss");
-            
-            // Kết hợp thành Agent ID
+            string timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
             return $"AGENT-{hostName}-{macAddress}-{timestamp}";
         }
 
