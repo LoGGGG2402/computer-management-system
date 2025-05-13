@@ -1,6 +1,5 @@
 # Tài liệu Toàn Diện: Hoạt động, Giao tiếp và Cấu hình CMSAgent
 
-**Phiên bản Tài liệu:** 7.4
 **Ngày cập nhật:** 13 tháng 5 năm 2025
 
 ## I. Tổng Quan về Agent
@@ -77,9 +76,9 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
 5. **Thu Thập và Xác Thực Cấu Hình Runtime (qua `CMSAgent.exe configure`):**
     - **Kích Hoạt:** Trình cài đặt thực thi: `"<Đường_dẫn_cài_đặt>\\CMSAgent.exe" configure`.
     - **Tương tác CLI:** `CMSAgent.exe configure` mở console để thu thập thông tin vị trí và thực hiện xác thực ban đầu với server.
-    - **Tạo/Kiểm Tra `device_id`:** Lưu `device_id` duy nhất vào `runtime_config/runtime_config.json`.
+    - **Tạo/Kiểm Tra `agentId`:** Lưu `agentId` duy nhất vào `runtime_config/runtime_config.json`.
     - **Nhập Thông Tin Vị Trí và Xác Thực Server:** Yêu cầu `roomName`, `posX`, `posY`. Gửi yêu cầu định danh đến server. Xử lý phản hồi (lỗi vị trí, yêu cầu MFA, thành công).
-    - **Xử lý hủy cấu hình:** Nếu người dùng hủy (Ctrl+C), thoát mà không lưu thay đổi (trừ `device_id`).
+    - **Xử lý hủy cấu hình:** Nếu người dùng hủy (Ctrl+C), thoát mà không lưu thay đổi (trừ `agentId`).
 6. **Lưu Trữ Cấu Hình Runtime và Token:**
     - Sau khi xác thực thành công, lưu `room_config` và `agent_token` (đã mã hóa) vào `runtime_config/runtime_config.json`.
 7. **Đăng Ký và Khởi Động Windows Service (Bởi Trình Cài Đặt):**
@@ -104,18 +103,18 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
 9. **Xác Thực và Kết Nối Ban Đầu với Server:**
     - Agent chuyển sang trạng thái `AUTHENTICATING`. Ghi log trạng thái.
     - **Kết Nối WebSocket (Socket.IO):**
-        - Agent sử dụng `agent_id` (là `device_id`) và `agent_token` để thiết lập kết nối WebSocket đến server.
+        - Agent sử dụng `agentId` (là `agentId`) và `agent_token` để thiết lập kết nối WebSocket đến server.
         - **Trong quá trình handshake của WebSocket, Agent BẮT BUỘC gửi header `x-client-type: agent`.**
-        - **Agent NÊN gửi các header sau trong quá trình handshake:**
+        - **Agent BẮT BUỘC gửi các header sau trong quá trình handshake:**
             - `Authorization: Bearer <agent_token>`
-            - `agent-id: <device_id>` (Hoặc `X-Agent-Id` tùy theo quy ước cuối cùng, server hiện tại kiểm tra `agent-id`).
+            - `X-Agent-Id: <agentId>` 
         - Server middleware sẽ tự động cố gắng trích xuất `authToken` và `agentId` từ các header này và lưu vào `socket.data`.
         - Logic xác thực đầy đủ phía server (trong `setupAgentHandlers`) sẽ sử dụng thông tin trong `socket.data` (nếu có từ header) hoặc có thể chờ sự kiện `agent:authenticate` nếu thông tin từ header không đủ hoặc không được gửi.
         - **Xác thực qua Sự kiện (Dự phòng):** Nếu agent không gửi các header xác thực, hoặc nếu logic phía server (trong `setupAgentHandlers`) xác định thông tin từ header không hợp lệ/đủ, server có thể chờ agent gửi sự kiện `agent:authenticate` với payload `{ agentId, token }`.
         - Lắng nghe sự kiện `agent:ws_auth_success` từ server. Khi nhận được, chuyển sang trạng thái `CONNECTED`. Ghi log trạng thái.
         - Nếu nhận `agent:ws_auth_failed` (ví dụ, token hết hạn/không hợp lệ):
             - Ghi log lỗi.
-            - Thử thực hiện lại quy trình POST `/api/agent/identify` (sử dụng `device_id` và `room_config` đã lưu, không `forceRenewToken`).
+            - Thử thực hiện lại quy trình POST `/api/agent/identify` (sử dụng `agentId` và `room_config` đã lưu, không `forceRenewToken`).
             - Nếu `identify` thành công và nhận được token mới, cập nhật token cục bộ (mã hóa và lưu vào `runtime_config.json`), quay lại bước kết nối WebSocket (bao gồm gửi các header cần thiết).
             - Nếu `identify` yêu cầu MFA, agent trong ngữ cảnh service không thể xử lý, sẽ ghi log lỗi và chuyển sang trạng thái `DISCONNECTED`, thử lại sau một khoảng thời gian.
             - Nếu `identify` thất bại vì lý do khác, ghi log lỗi, chuyển sang trạng thái `DISCONNECTED`, thử lại sau.
@@ -178,7 +177,7 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
 
 - **URL Cơ Sở API:** Được định nghĩa trong `appsettings.json` (ví dụ: section `CMSAgentSettings:ServerUrl`), ví dụ: `https://your-server.com:3000/api/agent/`.
 - **Headers Chung (Cho các yêu cầu cần xác thực):**
-    - `X-Agent-Id`: `<device_id>` (Giá trị `device_id` của agent)
+    - `X-Agent-Id`: `<agentId>` (Giá trị `agentId` của agent)
     - `Authorization`: `Bearer <agent_token>` (Token nhận được sau khi xác thực)
     - `Content-Type`: `application/json` (Đối với các request có body là JSON)
 
@@ -189,7 +188,7 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     {
-        "unique_agent_id": "AGENT-HOSTNAME-MACADDRESS",
+        "agentId": "AGENT-HOSTNAME-MACADDRESS",
         "positionInfo": {
             "roomName": "Phòng Lab A",
             "posX": 10,
@@ -200,7 +199,7 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     
-    - `unique_agent_id` (String, Bắt buộc): Device ID duy nhất của agent.
+    - `agentId` (String, Bắt buộc): Device ID duy nhất của agent.
     - `positionInfo` (Object, Bắt buộc):
         - `roomName` (String, Bắt buộc): Tên phòng.
         - `posX` (Number, Bắt buộc): Tọa độ X.
@@ -246,7 +245,7 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     
-- **Response Payload (JSON) - Lỗi khác (ví dụ: `unique_agent_id` trống - HTTP 400):**
+- **Response Payload (JSON) - Lỗi khác (ví dụ: `agentId` trống - HTTP 400):**
     
     ```
     {
@@ -264,7 +263,7 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     {
-        "unique_agent_id": "AGENT-HOSTNAME-MACADDRESS",
+        "agentId": "AGENT-HOSTNAME-MACADDRESS",
         "mfaCode": "123456"
     }
     
@@ -531,18 +530,16 @@ File `appsettings.json` là file cấu hình chính. *Lưu ý: Từ phiên bản
 
 ```
 {
-  "device_id": "AGENT-XYZ123-DEVICEID",
+  "agentId": "AGENT-XYZ123-DEVICEID",
   "room_config": {
     "roomName": "Phòng Họp A",
-    "posX": "10",
-    "posY": "15"
+    "posX": 10,
+    "posY": 15
   },
   "agent_token_encrypted": "BASE64_ENCRYPTED_TOKEN_STRING"
 }
 
 ```
-
-- *Lưu ý:* `posX` và `posY` trong `runtime_config.json` được lưu dưới dạng chuỗi. Agent C# cần chuyển đổi sang kiểu Number khi gửi request POST `/identify`.
 
 **3. Đường Dẫn Lưu Trữ**
 
@@ -651,7 +648,7 @@ File `appsettings.json` là file cấu hình chính. *Lưu ý: Từ phiên bản
 Cấu hình Serilog chi tiết (bao gồm `MinimumLevel`, `Override`, `WriteTo`, `Enrich`) được đặt trong section `"Serilog"` của `appsettings.json` (xem mục VII.1).
 
 **3. Nội Dung Log Mẫu và Cách Đọc**
-Mỗi dòng log nên bao gồm: Timestamp, Level, SourceContext (Namespace của lớp ghi log), Message, và Exception (nếu có).
+Mỗi dòng log bắt buộc bao gồm: Timestamp, Level, SourceContext (Namespace của lớp ghi log), Message, và Exception (nếu có).
 Ví dụ:
 
 ```
@@ -700,7 +697,7 @@ Agent service sẽ ghi các sự kiện quan trọng (khởi động thành côn
 - **200 OK:** Yêu cầu thành công. Tiếp tục xử lý response.
 - **204 No Content:** Yêu cầu thành công, không có nội dung trả về. Agent coi là thành công.
 - **400 Bad Request:** Yêu cầu không hợp lệ từ phía agent (thiếu trường, sai định dạng). Agent xử lý: Ghi log chi tiết request và response. Không nên thử lại yêu cầu y hệt. Thông báo cho người dùng (nếu trong quá trình configure) hoặc báo lỗi lên server (nếu trong quá trình hoạt động).
-- **401 Unauthorized:** Lỗi xác thực (token không hợp lệ/hết hạn). Agent xử lý: Nếu đang configure và lỗi MFA: Cho người dùng nhập lại. Nếu đang hoạt động: Ghi log. Agent nên thử làm mới token bằng cách gọi lại POST `/identify` (không `forceRenewToken`). Nếu vẫn thất bại, ngắt kết nối WebSocket, và thử lại toàn bộ quá trình kết nối/xác thực sau một khoảng thời gian tăng dần (exponential backoff).
+- **401 Unauthorized:** Lỗi xác thực (token không hợp lệ/hết hạn). Agent xử lý: Nếu đang configure và lỗi MFA: Cho người dùng nhập lại. Nếu đang hoạt động: Ghi log. Agent thử làm mới token bằng cách gọi lại POST `/identify` (không `forceRenewToken`). Nếu vẫn thất bại, ngắt kết nối WebSocket, và thử lại toàn bộ quá trình kết nối/xác thực sau một khoảng thời gian tăng dần (exponential backoff).
 - **403 Forbidden:** Đã xác thực nhưng không có quyền. Ghi log, báo lỗi lên server.
 - **404 Not Found:** Endpoint không tồn tại hoặc tài nguyên không tìm thấy (ví dụ: tải file cập nhật không có). Ghi log.
 - **409 Conflict:** Xung đột tài nguyên (ví dụ: cố gắng đăng ký vị trí đã có người dùng). Agent xử lý (trong `configure`): Thông báo cho người dùng chọn vị trí khác.
@@ -784,134 +781,3 @@ Agent service sẽ ghi các sự kiện quan trọng (khởi động thành côn
     - 15: Lỗi tham số dòng lệnh.
     - 16: Lỗi: Timeout chờ agent cũ dừng.
     - 99: Lỗi chung không xác định của Updater.
-
-## XII. Phụ Lục: Cấu Trúc Thư Mục Dự Án
-
-```
-CMSAgentSolution/
-├── src/                      # Thư mục chứa mã nguồn chính
-│   ├── CMSAgent/             # Dự án chính của Agent (Windows Service & CLI)
-│   │   ├── Core/             # Logic cốt lõi, quản lý trạng thái, vòng đời service
-│   │   │   ├── AgentService.cs        # Logic chính của Windows Service (OnStart, OnStop)
-│   │   │   ├── StateManager.cs        # Quản lý các trạng thái (INITIALIZING, CONNECTED,...)
-│   │   │   ├── SingletonMutex.cs      # Xử lý đảm bảo chỉ một instance
-│   │   │   └── WorkerServiceBase.cs   # Lớp cơ sở cho background tasks
-│   │   ├── Communication/    # Module giao tiếp mạng
-│   │   │   ├── HttpClientWrapper.cs   # Wrapper cho HTTP requests (API calls)
-│   │   │   ├── WebSocketConnector.cs  # Quản lý kết nối và sự kiện Socket.IO
-│   │   │   └── ServerApiEndpoints.cs  # Định nghĩa các endpoint và payload API
-│   │   ├── Configuration/    # Xử lý tải và binding cấu hình từ appsettings.json
-│   │   │   ├── ConfigLoader.cs        # Tải runtime_config.json, binding appsettings.json sections
-│   │   │   └── Models/                # Các lớp Options để binding cấu hình từ appsettings.json
-│   │   │       ├── CmsAgentSettingsOptions.cs // Lớp này binding với section "CMSAgentSettings" trong appsettings.json, chứa các cấu hình hoạt động của agent.
-│   │   │       └── RuntimeConfig.cs         // Đại diện cho runtime_config.json
-│   │   ├── Commands/         # Logic thực thi lệnh từ server
-│   │   │   ├── CommandExecutor.cs     # Quản lý hàng đợi và worker thực thi lệnh
-│   │   │   ├── CommandHandlerFactory.cs # Tạo handler phù hợp với commandType
-│   │   │   ├── Handlers/              # Các handler cụ thể cho từng commandType
-│   │   │   │   ├── ConsoleCommandHandler.cs
-│   │   │   │   └── SystemActionCommandHandler.cs
-│   │   │   └── Models/                # Các lớp đại diện command payload, result
-│   │   │       ├── CommandRequest.cs  # Dữ liệu lệnh nhận từ server
-│   │   │       └── CommandResponse.cs # Dữ liệu kết quả gửi về server
-│   │   ├── Monitoring/       # Module giám sát tài nguyên hệ thống
-│   │   │   ├── SystemMonitor.cs       # Thu thập CPU, RAM, Disk (WMI, PerfCounters)
-│   │   │   └── HardwareInfoCollector.cs # Thu thập thông tin phần cứng ban đầu
-│   │   ├── Update/           # Logic tự động cập nhật
-│   │   │   ├── UpdateHandler.cs       # Kiểm tra, tải, xác minh, khởi chạy updater
-│   │   │   └── Models/                # Lớp đại diện thông tin phiên bản mới
-│   │   │       └── UpdateInfo.cs
-│   │   ├── Logging/          # Thiết lập và các tiện ích logging (Serilog đã cấu hình qua appsettings.json)
-│   │   │   └── LoggingSetup.cs        # Có thể chứa các helper liên quan đến logging
-│   │   ├── Security/         # Các chức năng liên quan đến bảo mật
-│   │   │   └── TokenProtector.cs      # Mã hóa/giải mã token (DPAPI)
-│   │   ├── Cli/              # Xử lý các lệnh Command Line Interface
-│   │   │   ├── CliHandler.cs          # Sử dụng System.CommandLine để định nghĩa và xử lý lệnh
-│   │   │   └── Commands/              # Các lớp định nghĩa lệnh CLI cụ thể
-│   │   │       ├── ConfigureCommand.cs
-│   │   │       ├── StartCommand.cs
-│   │   │       ├── StopCommand.cs
-│   │   │       ├── UninstallCommand.cs
-│   │   │       └── DebugCommand.cs
-│   │   ├── Persistence/      # Logic lưu trữ/đọc dữ liệu offline
-│   │   │   └── OfflineQueueManager.cs
-│   │   ├── Program.cs        # Điểm vào ứng dụng, cấu hình HostBuilder cho Service/CLI, tải appsettings.json
-│   │   └── appsettings.json  # File cấu hình chính duy nhất cho ứng dụng và agent
-│   │
-│   ├── CMSUpdater/           # Dự án riêng cho tiến trình Updater (Console App)
-│   │   ├── UpdaterLogic.cs   # Logic chính: dừng agent cũ, sao lưu, copy mới, khởi động lại
-│   │   ├── RollbackManager.cs # Xử lý rollback
-│   │   └── Program.cs        # Điểm vào, xử lý tham số dòng lệnh
-│   │
-│   ├── CMSAgent.Common/      # Thư viện dùng chung (DTOs, Constants, Interfaces, Enums)
-│   │   ├── DTOs/             # Data Transfer Objects cho API, WebSocket events
-│   │   │   ├── IdentifyRequest.cs
-│   │   │   ├── VerifyMfaRequest.cs
-│   │   │   ├── HardwareInfo.cs
-│   │   │   ├── CommandPayload.cs    # Dữ liệu lệnh nhận từ WS
-│   │   │   ├── CommandResultPayload.cs # Dữ liệu kết quả gửi qua WS
-│   │   │   ├── StatusUpdatePayload.cs
-│   │   │   ├── ErrorReportPayload.cs
-│   │   │   └── UpdateCheckResponse.cs
-│   │   ├── Enums/            # Các enum dùng chung
-│   │   │   ├── AgentState.cs
-│   │   │   ├── CommandType.cs
-│   │   │   ├── ErrorType.cs
-│   │   │   └── UpdateStatus.cs
-│   │   ├── Constants/        # Các hằng số dùng chung
-│   │   │   ├── ApiRoutes.cs
-│   │   │   ├── WebSocketEvents.cs
-│   │   │   └── MutexNames.cs
-│   │   └── Interfaces/       # Các interface dùng chung (DI)
-│   │       ├── IConfigLoader.cs // Có thể thay đổi vai trò hoặc loại bỏ nếu IConfiguration được dùng trực tiếp
-│   │       ├── ITokenProtector.cs
-│   │       ├── ISystemMonitor.cs
-│   │       ├── ICommandExecutor.cs
-│   │       └── IUpdateHandler.cs
-│   │
-│   └── Setup/                # Thư mục chứa script tạo bộ cài đặt (Inno Setup)
-│       └── SetupScript.iss   # File script Inno Setup
-│
-├── tests/                    # Thư mục chứa các dự án test
-│   ├── CMSAgent.UnitTests/   # Unit test cho các module của CMSAgent
-│   └── CMSUpdater.UnitTests/ # Unit test cho CMSUpdater
-│   └── CMSAgent.IntegrationTests/ # Integration test
-│
-├── docs/                     # Thư mục chứa tài liệu dự án
-│   └── CMSAgent_Comprehensive_Doc_v7.4.md # Tài liệu này
-│   └── Architecture.md       # Tài liệu kiến trúc
-│   └── Flowcharts/           # Thư mục chứa sơ đồ luồng
-│
-├── scripts/                  # Các script hỗ trợ (build, deploy,...)
-│   └── build.ps1             # Ví dụ script build bằng PowerShell
-│   └── set_permissions.ps1   # Script thiết lập quyền thư mục ProgramData
-│
-├── .gitignore                # Cấu hình bỏ qua các file/thư mục không cần thiết cho Git
-├── CMSAgent.sln              # File Solution của Visual Studio
-└── README.md                 # File giới thiệu tổng quan về dự án
-
-```
-
-**Giải thích các thành phần chính:**
-
-- **`src/CMSAgent`**: Dự án chính, chứa logic của Windows Service và xử lý các lệnh CLI.
-- **`src/CMSUpdater`**: Một dự án Console App riêng biệt cho việc cập nhật.
-- **`src/CMSAgent.Common`**: Thư viện dùng chung cho DTOs, Enums, Constants, Interfaces.
-- **`src/Setup`**: Thư mục chứa script Inno Setup (`.iss`) để tạo bộ cài đặt.
-- **`tests/`**: Chứa các dự án unit test và integration test.
-- **`docs/`**: Nơi lưu trữ tài liệu.
-- **`scripts/`**: Các script tự động hóa.
-
-## XIII. Phụ Lục: Sơ Đồ Luồng (Đề xuất)
-
-Để tăng tính trực quan và dễ hiểu, đề xuất bổ sung các sơ đồ luồng (flowchart) chi tiết cho các quy trình chính sau:
-
-- Luồng Cài đặt và Cấu hình Ban Đầu (Phần III)
-- Luồng Hoạt động Thường xuyên (Phần IV, bao gồm xử lý kết nối/mất kết nối)
-- Luồng Xử lý Lệnh từ Server (Phần IV.10)
-- Luồng Cập nhật Agent (Phần V, bao gồm các bước của Updater và Rollback)
-- Luồng Xác thực WebSocket và Làm mới Token (Phần IV.9, VIII.6)
-
-*(Các sơ đồ này nên được tạo dưới dạng hình ảnh hoặc sử dụng công cụ vẽ sơ đồ và đính kèm vào tài liệu.)*
-
-Tài liệu này nhằm mục đích cung cấp một hướng dẫn toàn diện cho việc phát triển CMSAgent phiên bản .NET, đảm bảo tính nhất quán với các chức năng hiện có và tạo điều kiện cho việc bảo trì và mở rộng trong tương lai.

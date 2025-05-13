@@ -1,6 +1,5 @@
 # CMSAgent - Agent Quản lý Máy tính Khách
 
-**Phiên bản Tài liệu:** 7.4 (Tương ứng với phiên bản README này)
 **Ngày cập nhật:** 12 tháng 5 năm 2025
 
 ## Giới thiệu
@@ -50,7 +49,7 @@ Dự án này bao gồm mã nguồn cho CMSAgent, tiến trình cập nhật CMS
 (Tham khảo Phần XII trong "Tài liệu Toàn Diện CMSAgent v7.4" để biết chi tiết cấu trúc thư mục dự án.)
 
 ```
-CMSAgentSolution/
+agent/
 ├── src/
 │   ├── CMSAgent/           # Dự án chính (Windows Service & CLI)
 │   ├── CMSUpdater/         # Dự án cho tiến trình Updater
