@@ -18,7 +18,7 @@ namespace CMSAgent.Common.Interfaces
         /// <param name="token">Token xác thực (có thể null).</param>
         /// <param name="queryParams">Các tham số query string (tùy chọn).</param>
         /// <returns>Response được deserialize từ JSON sang kiểu TResponse.</returns>
-        Task<TResponse> GetAsync<TResponse>(string endpoint, string agentId, string token, Dictionary<string, string> queryParams = null);
+        Task<TResponse> GetAsync<TResponse>(string endpoint, string agentId, string? token, Dictionary<string, string>? queryParams = null);
 
         /// <summary>
         /// Thực hiện HTTP POST request.
@@ -28,7 +28,7 @@ namespace CMSAgent.Common.Interfaces
         /// <param name="agentId">ID của agent.</param>
         /// <param name="token">Token xác thực (có thể null).</param>
         /// <returns>Task đại diện cho request.</returns>
-        Task PostAsync(string endpoint, object data, string agentId, string token);
+        Task PostAsync(string endpoint, object data, string agentId, string? token);
 
         /// <summary>
         /// Thực hiện HTTP POST request và nhận response.
@@ -40,7 +40,7 @@ namespace CMSAgent.Common.Interfaces
         /// <param name="agentId">ID của agent.</param>
         /// <param name="token">Token xác thực (có thể null).</param>
         /// <returns>Response được deserialize từ JSON sang kiểu TResponse.</returns>
-        Task<TResponse> PostAsync<TRequest, TResponse>(string endpoint, TRequest data, string agentId, string token);
+        Task<TResponse> PostAsync<TRequest, TResponse>(string endpoint, TRequest data, string agentId, string? token);
 
         /// <summary>
         /// Tải xuống file từ server.
@@ -49,6 +49,6 @@ namespace CMSAgent.Common.Interfaces
         /// <param name="agentId">ID của agent.</param>
         /// <param name="token">Token xác thực (có thể null).</param>
         /// <returns>Stream chứa dữ liệu file được tải xuống.</returns>
-        Task<Stream> DownloadFileAsync(string endpoint, string agentId, string token);
+        Task<Stream> DownloadFileAsync(string endpoint, string agentId, string? token);
     }
 }

@@ -41,9 +41,10 @@ namespace CMSAgent
                 
                 // Xử lý các lệnh CLI
                 var cliHandler = host.Services.GetRequiredService<CliHandler>();
-                if (await cliHandler.HandleCommandLineArgumentsAsync(args))
+                int cliResult = await cliHandler.HandleAsync(args);
+                if (cliHandler.IsCliCommandExecuted)
                 {
-                    return 0; // Lệnh CLI đã được xử lý
+                    return cliResult; // Lệnh CLI đã được xử lý
                 }
 
                 // Nếu không có lệnh CLI, chạy dịch vụ
@@ -212,7 +213,7 @@ namespace CMSAgent
 
             // Thay thế bằng
             services.AddSingleton<TokenProtector>();
-            services.AddSingleton<CommandHandler>();
+            services.AddSingleton<CommandHandlerFactory>();
         }
     }
 

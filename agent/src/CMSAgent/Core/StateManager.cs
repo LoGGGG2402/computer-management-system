@@ -16,7 +16,7 @@ namespace CMSAgent.Core
         /// <summary>
         /// Sự kiện được kích hoạt khi trạng thái agent thay đổi.
         /// </summary>
-        public event Action<AgentState, AgentState> StateChanged;
+        public event Action<AgentState, AgentState> StateChanged = delegate { };
 
         /// <summary>
         /// Lấy trạng thái hiện tại của agent.

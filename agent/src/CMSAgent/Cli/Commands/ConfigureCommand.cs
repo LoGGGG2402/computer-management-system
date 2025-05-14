@@ -1,6 +1,5 @@
 using System;
 using System.CommandLine;
-using System.CommandLine.IO;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -9,7 +8,10 @@ using CMSAgent.Common.Constants;
 using CMSAgent.Common.DTOs;
 using CMSAgent.Common.Enums;
 using CMSAgent.Common.Interfaces;
+using CMSAgent.Common.Models;
+using CMSAgent.Security;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace CMSAgent.Cli.Commands
 {
@@ -45,81 +47,76 @@ namespace CMSAgent.Cli.Commands
         /// <summary>
         /// Thực thi lệnh configure.
         /// </summary>
-        /// <param name="console">Console để tương tác với người dùng.</param>
         /// <param name="cancellationToken">Token để hủy thao tác.</param>
         /// <returns>Mã lỗi của lệnh.</returns>
-        public async Task<int> ExecuteAsync(IConsole console, CancellationToken cancellationToken)
+        public async Task<int> ExecuteAsync(CancellationToken cancellationToken)
         {
-            console.Out.WriteLine("\n==== CMSAgent - Cấu hình Ban Đầu ====\n");
-            console.Out.WriteLine("Lệnh này sẽ thiết lập cấu hình cơ bản cho agent, bao gồm thông tin phòng và vị trí.");
-            console.Out.WriteLine("Bạn có thể hủy quá trình bất kỳ lúc nào bằng cách nhấn Ctrl+C.");
-            console.Out.WriteLine();
+            Console.WriteLine("\n==== CMSAgent - Cấu hình Ban Đầu ====\n");
+            Console.WriteLine("Lệnh này sẽ thiết lập cấu hình cơ bản cho agent, bao gồm thông tin phòng và vị trí.");
+            Console.WriteLine("Bạn có thể hủy quá trình bất kỳ lúc nào bằng cách nhấn Ctrl+C.");
+            Console.WriteLine();
 
             try
             {
                 // Tải cấu hình runtime hiện tại (nếu có)
                 var runtimeConfig = await _configLoader.LoadRuntimeConfigAsync();
                 
-                // Nếu chưa có cấu hình, tạo mới với agentId
+                // Tạo cấu hình mới nếu chưa có
                 if (runtimeConfig == null)
                 {
-                    runtimeConfig = new Common.Models.RuntimeConfig
+                    // Nếu chưa có cấu hình, tạo mới với agentId
+                    runtimeConfig = new RuntimeConfig
                     {
-                        agentId = GenerateAgentId(),
-                        room_config = new Common.Models.RoomConfig()
+                        AgentId = GenerateAgentId(),
+                        RoomConfig = new Common.Models.RoomConfig
+                        {
+                            RoomName = "Default" // Sẽ được cập nhật sau
+                        },
+                        AgentTokenEncrypted = "" // Sẽ được cập nhật sau khi nhận token từ server
                     };
+                    await _configLoader.SaveRuntimeConfigAsync(runtimeConfig);
                 }
 
-                console.Out.WriteLine($"Agent ID: {runtimeConfig.agentId}");
-                console.Out.WriteLine();
+                Console.WriteLine($"Agent ID: {runtimeConfig.AgentId}");
+                Console.WriteLine();
 
-                // Lấy thông tin vị trí
-                var roomName = PromptForInput(console, 
-                    "Nhập tên phòng:", 
-                    runtimeConfig.room_config?.roomName);
+                // Nhập tên phòng
+                string roomName = PromptForInput(
+                    "Nhập tên phòng (ví dụ: P101, P102): ",
+                    runtimeConfig.RoomConfig?.RoomName);
 
-                if (cancellationToken.IsCancellationRequested)
+                if (string.IsNullOrWhiteSpace(roomName))
                 {
-                    console.Out.WriteLine("\nQuá trình cấu hình đã bị hủy bởi người dùng.");
-                    return CliExitCodes.UserCancelled;
+                    Console.Error.WriteLine("Tên phòng không được để trống.");
+                    return (int)CliExitCodes.InvalidInput;
                 }
 
-                if (!TryParseInt(console, "Nhập tọa độ X:", out int posX, 
-                    runtimeConfig.room_config?.posX.ToString()))
+                // Nhập tọa độ X
+                if (!TryParseInt("Nhập tọa độ X trong phòng (số nguyên): ", out int posX, runtimeConfig.RoomConfig?.PosX.ToString()))
                 {
-                    return CliExitCodes.InvalidArguments;
+                    Console.Error.WriteLine("Tọa độ X phải là số nguyên.");
+                    return (int)CliExitCodes.InvalidInput;
                 }
 
-                if (cancellationToken.IsCancellationRequested)
+                // Nhập tọa độ Y
+                if (!TryParseInt("Nhập tọa độ Y trong phòng (số nguyên): ", out int posY, runtimeConfig.RoomConfig?.PosY.ToString()))
                 {
-                    console.Out.WriteLine("\nQuá trình cấu hình đã bị hủy bởi người dùng.");
-                    return CliExitCodes.UserCancelled;
+                    Console.Error.WriteLine("Tọa độ Y phải là số nguyên.");
+                    return (int)CliExitCodes.InvalidInput;
                 }
 
-                if (!TryParseInt(console, "Nhập tọa độ Y:", out int posY, 
-                    runtimeConfig.room_config?.posY.ToString()))
+                // Cập nhật cấu hình phòng
+                runtimeConfig.RoomConfig = new Common.Models.RoomConfig
                 {
-                    return CliExitCodes.InvalidArguments;
-                }
-
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    console.Out.WriteLine("\nQuá trình cấu hình đã bị hủy bởi người dùng.");
-                    return CliExitCodes.UserCancelled;
-                }
-
-                // Cập nhật thông tin vị trí
-                runtimeConfig.room_config = new Common.Models.RoomConfig
-                {
-                    roomName = roomName,
-                    posX = posX,
-                    posY = posY
+                    RoomName = roomName,
+                    PosX = posX,
+                    PosY = posY
                 };
 
                 // Tạo yêu cầu đăng ký
                 var identifyRequest = new AgentIdentifyRequest
                 {
-                    agentId = runtimeConfig.agentId,
+                    agentId = runtimeConfig.AgentId,
                     positionInfo = new PositionInfo
                     {
                         roomName = roomName,
@@ -129,15 +126,15 @@ namespace CMSAgent.Cli.Commands
                     forceRenewToken = true
                 };
 
-                console.Out.WriteLine("\nĐang gửi thông tin đến server...");
+                Console.WriteLine("\nĐang gửi thông tin đến server...");
 
                 try
                 {
                     // Gửi yêu cầu đăng ký đến server
-                    var response = await _httpClient.PostAsync<AgentIdentifyRequest, AgentIdentifyResponse>(
+                    var response = await _httpClient.PostAsync<AgentIdentifyRequest, AgentIdentifyResponse?>(
                         ApiRoutes.Identify, 
                         identifyRequest,
-                        null,  // agentId không cần cho API identify
+                        string.Empty,  // agentId không cần cho API identify
                         null   // token chưa có ở bước này
                     );
 
@@ -149,88 +146,87 @@ namespace CMSAgent.Cli.Commands
                             if (!string.IsNullOrEmpty(response.agentToken))
                             {
                                 // Mã hóa và lưu token
-                                runtimeConfig.agent_token_encrypted = _tokenProtector.EncryptToken(response.agentToken);
-                                console.Out.WriteLine("\nXác thực thành công!");
+                                runtimeConfig.AgentTokenEncrypted = _tokenProtector.EncryptToken(response.agentToken);
+                                Console.WriteLine("\nXác thực thành công!");
                             }
                             else
                             {
                                 // Token hiện tại vẫn hợp lệ
-                                console.Out.WriteLine("\nAgent đã được đăng ký trước đó.");
+                                Console.WriteLine("\nAgent đã được đăng ký trước đó.");
                             }
                         }
                         else if (response.status == "mfa_required")
                         {
-                            console.Out.WriteLine("\nYêu cầu xác thực hai yếu tố (MFA).");
+                            Console.WriteLine("\nYêu cầu xác thực hai yếu tố (MFA).");
                             
                             // Xử lý MFA
-                            var mfaResult = await HandleMfaVerificationAsync(console, runtimeConfig.agentId, cancellationToken);
+                            var mfaResult = await HandleMfaVerificationAsync(runtimeConfig.AgentId, cancellationToken);
                             if (!mfaResult)
                             {
-                                return CliExitCodes.ServerConnectionFailed;
+                                return (int)CliExitCodes.ServerConnectionFailed;
                             }
                         }
                         else if (response.status == "position_error")
                         {
-                            console.Error.WriteLine($"\nLỗi: {response.message}");
-                            console.Out.WriteLine("Vui lòng chạy lại lệnh configure và chọn vị trí khác.");
-                            return CliExitCodes.ServerConnectionFailed;
+                            Console.Error.WriteLine($"\nLỗi: {response.message}");
+                            Console.WriteLine("Vui lòng chạy lại lệnh configure và chọn vị trí khác.");
+                            return (int)CliExitCodes.ServerConnectionFailed;
                         }
                         else
                         {
                             // Lỗi khác
-                            console.Error.WriteLine($"\nLỗi từ server: {response.message}");
-                            return CliExitCodes.ServerConnectionFailed;
+                            Console.Error.WriteLine($"\nLỗi từ server: {response.message}");
+                            return (int)CliExitCodes.ServerConnectionFailed;
                         }
                     }
                     else
                     {
-                        console.Error.WriteLine("\nKhông nhận được phản hồi từ server.");
-                        return CliExitCodes.ServerConnectionFailed;
+                        Console.Error.WriteLine("\nKhông nhận được phản hồi từ server.");
+                        return (int)CliExitCodes.ServerConnectionFailed;
                     }
                 }
                 catch (Exception ex)
                 {
-                    console.Error.WriteLine($"\nLỗi khi gửi thông tin đến server: {ex.Message}");
-                    return CliExitCodes.ServerConnectionFailed;
+                    Console.Error.WriteLine($"\nLỗi khi gửi thông tin đến server: {ex.Message}");
+                    return (int)CliExitCodes.ServerConnectionFailed;
                 }
 
                 // Lưu cấu hình
                 try
                 {
                     await _configLoader.SaveRuntimeConfigAsync(runtimeConfig);
-                    console.Out.WriteLine("\nĐã lưu cấu hình thành công.");
-                    console.Out.WriteLine("\nAgent đã sẵn sàng hoạt động. Bạn có thể khởi động service bằng lệnh: CMSAgent.exe start");
-                    return CliExitCodes.Success;
+                    Console.WriteLine("\nĐã lưu cấu hình thành công.");
+                    Console.WriteLine("\nAgent đã sẵn sàng hoạt động. Bạn có thể khởi động service bằng lệnh: CMSAgent.exe start");
+                    return (int)CliExitCodes.Success;
                 }
                 catch (Exception ex)
                 {
-                    console.Error.WriteLine($"\nLỗi khi lưu cấu hình: {ex.Message}");
-                    return CliExitCodes.ConfigSaveFailed;
+                    Console.Error.WriteLine($"\nLỗi khi lưu cấu hình: {ex.Message}");
+                    return (int)CliExitCodes.ConfigSaveFailed;
                 }
             }
             catch (OperationCanceledException)
             {
-                console.Out.WriteLine("\nQuá trình cấu hình đã bị hủy bởi người dùng.");
-                return CliExitCodes.UserCancelled;
+                Console.WriteLine("\nQuá trình cấu hình đã bị hủy bởi người dùng.");
+                return (int)CliExitCodes.UserCancelled;
             }
             catch (Exception ex)
             {
-                console.Error.WriteLine($"\nLỗi không xác định: {ex.Message}");
-                return CliExitCodes.GeneralError;
+                Console.Error.WriteLine($"\nLỗi không xác định: {ex.Message}");
+                return (int)CliExitCodes.GeneralError;
             }
         }
 
         /// <summary>
         /// Xử lý xác thực MFA.
         /// </summary>
-        /// <param name="console">Console để tương tác với người dùng.</param>
         /// <param name="agentId">ID của agent.</param>
         /// <param name="cancellationToken">Token để hủy thao tác.</param>
         /// <returns>True nếu xác thực thành công, ngược lại là False.</returns>
-        private async Task<bool> HandleMfaVerificationAsync(IConsole console, string agentId, CancellationToken cancellationToken)
+        private async Task<bool> HandleMfaVerificationAsync(string agentId, CancellationToken cancellationToken)
         {
             // Nhắc người dùng nhập mã MFA
-            var mfaCode = PromptForInput(console, "Nhập mã xác thực (MFA):");
+            var mfaCode = PromptForInput("Nhập mã xác thực (MFA):");
 
             if (cancellationToken.IsCancellationRequested)
             {
@@ -239,7 +235,7 @@ namespace CMSAgent.Cli.Commands
 
             if (string.IsNullOrWhiteSpace(mfaCode))
             {
-                console.Error.WriteLine("Mã xác thực không hợp lệ.");
+                Console.Error.WriteLine("Mã xác thực không hợp lệ.");
                 return false;
             }
 
@@ -252,34 +248,31 @@ namespace CMSAgent.Cli.Commands
                     mfaCode = mfaCode
                 };
 
-                var response = await _httpClient.PostAsync<VerifyMfaRequest, VerifyMfaResponse>(
+                var response = await _httpClient.PostAsync<VerifyMfaRequest, VerifyMfaResponse?>(
                     ApiRoutes.VerifyMfa,
                     mfaRequest,
-                    null,
-                    null
+                    agentId,
+                    string.Empty // Không có token ở bước này, sử dụng chuỗi rỗng thay vì null
                 );
 
                 if (response != null && response.status == "success" && !string.IsNullOrEmpty(response.agentToken))
                 {
                     // Mã hóa và lưu token
                     var runtimeConfig = await _configLoader.LoadRuntimeConfigAsync();
-                    if (runtimeConfig != null)
-                    {
-                        runtimeConfig.agent_token_encrypted = _tokenProtector.EncryptToken(response.agentToken);
-                        await _configLoader.SaveRuntimeConfigAsync(runtimeConfig);
-                        console.Out.WriteLine("Xác thực MFA thành công!");
-                        return true;
-                    }
+                    runtimeConfig.AgentTokenEncrypted = _tokenProtector.EncryptToken(response.agentToken);
+                    await _configLoader.SaveRuntimeConfigAsync(runtimeConfig);
+                    Console.WriteLine("Xác thực MFA thành công!");
+                    return true;
                 }
                 else
                 {
                     var errorMessage = response?.message ?? "Không nhận được phản hồi hợp lệ từ server.";
-                    console.Error.WriteLine($"Xác thực MFA thất bại: {errorMessage}");
+                    Console.Error.WriteLine($"Xác thực MFA thất bại: {errorMessage}");
                 }
             }
             catch (Exception ex)
             {
-                console.Error.WriteLine($"Lỗi khi xác thực MFA: {ex.Message}");
+                Console.Error.WriteLine($"Lỗi khi xác thực MFA: {ex.Message}");
             }
 
             return false;
@@ -331,24 +324,23 @@ namespace CMSAgent.Cli.Commands
         }
 
         /// <summary>
-        /// Hiển thị prompt và lấy input từ người dùng.
+        /// Nhắc người dùng nhập thông tin.
         /// </summary>
-        /// <param name="console">Console để tương tác với người dùng.</param>
-        /// <param name="promptMessage">Thông điệp hiển thị.</param>
-        /// <param name="defaultValue">Giá trị mặc định.</param>
-        /// <returns>Input của người dùng.</returns>
-        private string PromptForInput(IConsole console, string promptMessage, string defaultValue = null)
+        /// <param name="promptMessage">Thông báo nhắc nhở.</param>
+        /// <param name="defaultValue">Giá trị mặc định (có thể null).</param>
+        /// <returns>Chuỗi người dùng nhập.</returns>
+        private string PromptForInput(string promptMessage, string? defaultValue = null)
         {
             if (!string.IsNullOrEmpty(defaultValue))
             {
-                console.Out.Write($"{promptMessage} [{defaultValue}]: ");
+                Console.Write($"{promptMessage} [{defaultValue}]: ");
             }
             else
             {
-                console.Out.Write($"{promptMessage} ");
+                Console.Write($"{promptMessage} ");
             }
 
-            string input = console.In.ReadLine()?.Trim();
+            string input = Console.ReadLine()?.Trim();
 
             if (string.IsNullOrEmpty(input) && !string.IsNullOrEmpty(defaultValue))
             {
@@ -361,21 +353,20 @@ namespace CMSAgent.Cli.Commands
         /// <summary>
         /// Hiển thị prompt và lấy input số nguyên từ người dùng.
         /// </summary>
-        /// <param name="console">Console để tương tác với người dùng.</param>
         /// <param name="promptMessage">Thông điệp hiển thị.</param>
         /// <param name="value">Giá trị số nguyên đầu ra.</param>
         /// <param name="defaultValue">Giá trị mặc định.</param>
         /// <returns>True nếu parse thành công, ngược lại là False.</returns>
-        private bool TryParseInt(IConsole console, string promptMessage, out int value, string defaultValue = null)
+        private bool TryParseInt(string promptMessage, out int value, string? defaultValue = null)
         {
-            string input = PromptForInput(console, promptMessage, defaultValue);
+            string input = PromptForInput(promptMessage, defaultValue);
             
             if (int.TryParse(input, out value))
             {
                 return true;
             }
             
-            console.Error.WriteLine("Giá trị không hợp lệ. Vui lòng nhập số nguyên.");
+            Console.Error.WriteLine("Giá trị không hợp lệ. Vui lòng nhập số nguyên.");
             value = 0;
             return false;
         }

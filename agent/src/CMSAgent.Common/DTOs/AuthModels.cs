@@ -11,13 +11,13 @@ namespace CMSAgent.Common.DTOs
         /// ID của agent cần xác thực.
         /// </summary>
         [Required]
-        public string agentId { get; set; }
+        public required string agentId { get; set; }
 
         /// <summary>
         /// Mã MFA do người dùng cung cấp.
         /// </summary>
         [Required]
-        public string mfaCode { get; set; }
+        public required string mfaCode { get; set; }
     }
 
     /// <summary>
@@ -28,22 +28,22 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// Trạng thái của yêu cầu: "success" hoặc "error".
         /// </summary>
-        public string status { get; set; }
+        public required string status { get; set; } = string.Empty;
 
         /// <summary>
         /// ID của agent (chỉ được trả về khi thành công).
         /// </summary>
-        public string agentId { get; set; }
+        public required string agentId { get; set; } = string.Empty;
 
         /// <summary>
         /// Token xác thực (chỉ được trả về khi thành công).
         /// </summary>
-        public string agentToken { get; set; }
+        public required string agentToken { get; set; } = string.Empty;
 
         /// <summary>
         /// Thông báo lỗi hoặc thông tin bổ sung.
         /// </summary>
-        public string message { get; set; }
+        public required string message { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -55,13 +55,13 @@ namespace CMSAgent.Common.DTOs
         /// Device ID duy nhất của agent.
         /// </summary>
         [Required]
-        public string agentId { get; set; }
+        public required string agentId { get; set; }
 
         /// <summary>
         /// Thông tin vị trí của agent.
         /// </summary>
         [Required]
-        public PositionInfo positionInfo { get; set; }
+        public required PositionInfo positionInfo { get; set; }
 
         /// <summary>
         /// Nếu true, yêu cầu server cấp token mới ngay cả khi agent đã có token hợp lệ.
@@ -77,21 +77,21 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// Trạng thái của yêu cầu: "success", "mfa_required", "position_error", "error".
         /// </summary>
-        public string status { get; set; }
+        public required string status { get; set; } = string.Empty;
 
         /// <summary>
         /// ID của agent (chỉ được trả về khi thành công).
         /// </summary>
-        public string agentId { get; set; }
+        public required string agentId { get; set; } = string.Empty;
 
         /// <summary>
         /// Token xác thực (chỉ được trả về khi thành công và token được làm mới).
         /// </summary>
-        public string agentToken { get; set; }
+        public required string agentToken { get; set; } = string.Empty;
 
         /// <summary>
         /// Thông báo lỗi hoặc thông tin bổ sung.
         /// </summary>
-        public string message { get; set; }
+        public required string message { get; set; } = string.Empty;
     }
 } 

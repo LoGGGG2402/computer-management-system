@@ -67,7 +67,7 @@ namespace CMSAgent.Communication
         /// <param name="token">Token xác thực (có thể null).</param>
         /// <param name="queryParams">Các tham số query string (tùy chọn).</param>
         /// <returns>Response được deserialize từ JSON sang kiểu TResponse.</returns>
-        public async Task<TResponse> GetAsync<TResponse>(string endpoint, string agentId, string token, Dictionary<string, string> queryParams = null)
+        public async Task<TResponse> GetAsync<TResponse>(string endpoint, string agentId, string? token, Dictionary<string, string>? queryParams = null)
         {
             var requestUri = BuildRequestUri(endpoint, queryParams);
             
@@ -87,7 +87,7 @@ namespace CMSAgent.Communication
         /// <param name="agentId">ID của agent.</param>
         /// <param name="token">Token xác thực (có thể null).</param>
         /// <returns>Task đại diện cho request.</returns>
-        public async Task PostAsync(string endpoint, object data, string agentId, string token)
+        public async Task PostAsync(string endpoint, object data, string agentId, string? token)
         {
             using (var request = new HttpRequestMessage(HttpMethod.Post, endpoint))
             {
@@ -113,7 +113,7 @@ namespace CMSAgent.Communication
         /// <param name="agentId">ID của agent.</param>
         /// <param name="token">Token xác thực (có thể null).</param>
         /// <returns>Response được deserialize từ JSON sang kiểu TResponse.</returns>
-        public async Task<TResponse> PostAsync<TRequest, TResponse>(string endpoint, TRequest data, string agentId, string token)
+        public async Task<TResponse> PostAsync<TRequest, TResponse>(string endpoint, TRequest data, string agentId, string? token)
         {
             using (var request = new HttpRequestMessage(HttpMethod.Post, endpoint))
             {
@@ -136,7 +136,45 @@ namespace CMSAgent.Communication
         /// <param name="agentId">ID của agent.</param>
         /// <param name="token">Token xác thực (có thể null).</param>
         /// <returns>Stream chứa dữ liệu file được tải xuống.</returns>
-        public async Task<Stream> DownloadFileAsync(string endpoint, string agentId, string token)
+        public async Task<Stream> DownloadFileAsync(string endpoint, string agentId, string? token)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+            AddHeaders(request, agentId, token);
+            
+            try
+            {
+                return await _retryPolicy.ExecuteAsync(async () =>
+                {
+                    var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+                    
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var errorContent = await response.Content.ReadAsStringAsync();
+                        _logger.LogError("Lỗi HTTP {StatusCode} khi tải file: {ErrorContent}", 
+                            response.StatusCode, errorContent);
+                        
+                        throw new HttpRequestException($"Lỗi HTTP {response.StatusCode} khi tải file");
+                    }
+                    
+                    return await response.Content.ReadAsStreamAsync();
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi tải file từ {Endpoint}", endpoint);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Tải xuống file từ server và lưu vào stream đích.
+        /// </summary>
+        /// <param name="endpoint">Endpoint API cần gọi.</param>
+        /// <param name="destinationStream">Stream đích để lưu file.</param>
+        /// <param name="agentId">ID của agent.</param>
+        /// <param name="token">Token xác thực (có thể null).</param>
+        /// <returns>Task đại diện cho quá trình tải xuống.</returns>
+        public async Task DownloadFileAsync(string endpoint, Stream destinationStream, string agentId, string? token)
         {
             using (var request = new HttpRequestMessage(HttpMethod.Get, endpoint))
             {
@@ -144,7 +182,7 @@ namespace CMSAgent.Communication
                 
                 try
                 {
-                    return await _retryPolicy.ExecuteAsync(async () =>
+                    await _retryPolicy.ExecuteAsync(async () =>
                     {
                         var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
                         
@@ -157,12 +195,8 @@ namespace CMSAgent.Communication
                             throw new HttpRequestException($"Lỗi HTTP {response.StatusCode} khi tải file");
                         }
                         
-                        // Tạo một MemoryStream để lưu dữ liệu file
-                        var memoryStream = new MemoryStream();
-                        await (await response.Content.ReadAsStreamAsync()).CopyToAsync(memoryStream);
-                        memoryStream.Position = 0;
-                        
-                        return memoryStream;
+                        await (await response.Content.ReadAsStreamAsync()).CopyToAsync(destinationStream);
+                        return true;
                     });
                 }
                 catch (Exception ex)
@@ -176,7 +210,7 @@ namespace CMSAgent.Communication
         /// <summary>
         /// Tạo URI với các tham số query string.
         /// </summary>
-        private string BuildRequestUri(string endpoint, Dictionary<string, string> queryParams)
+        private string BuildRequestUri(string endpoint, Dictionary<string, string>? queryParams)
         {
             if (queryParams == null || queryParams.Count == 0)
             {
@@ -207,16 +241,16 @@ namespace CMSAgent.Communication
         /// <summary>
         /// Thêm các header cần thiết vào request.
         /// </summary>
-        private void AddHeaders(HttpRequestMessage request, string agentId, string token)
+        private void AddHeaders(HttpRequestMessage request, string agentId, string? token)
         {
             // Thêm header Agent-ID
             if (!string.IsNullOrEmpty(agentId))
             {
-                request.Headers.Add(HttpHeaders.AgentIdHeader, agentId);
+                request.Headers.Add(CMSAgent.Common.Constants.HttpHeaders.AgentIdHeader, agentId);
             }
             
             // Thêm header Client-Type
-            request.Headers.Add(HttpHeaders.ClientTypeHeader, HttpHeaders.ClientTypeValue);
+            request.Headers.Add(CMSAgent.Common.Constants.HttpHeaders.ClientTypeHeader, CMSAgent.Common.Constants.HttpHeaders.ClientTypeValue);
             
             // Thêm header Authorization nếu có token
             if (!string.IsNullOrEmpty(token))
@@ -252,7 +286,7 @@ namespace CMSAgent.Communication
                     
                     if (string.IsNullOrEmpty(content))
                     {
-                        return default;
+                        return typeof(T) == typeof(string) ? (T)(object)string.Empty : default;
                     }
                     
                     try
@@ -260,7 +294,7 @@ namespace CMSAgent.Communication
                         return JsonSerializer.Deserialize<T>(content, new JsonSerializerOptions
                         {
                             PropertyNameCaseInsensitive = true
-                        });
+                        }) ?? default;
                     }
                     catch (JsonException ex)
                     {

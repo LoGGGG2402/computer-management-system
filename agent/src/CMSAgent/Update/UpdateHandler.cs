@@ -8,7 +8,9 @@ using System.Threading.Tasks;
 using CMSAgent.Common.Constants;
 using CMSAgent.Common.DTOs;
 using CMSAgent.Common.Enums;
+using CMSAgent.Common.Interfaces;
 using CMSAgent.Common.Models;
+using CMSAgent.Core;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -23,7 +25,7 @@ namespace CMSAgent.Update
         private readonly ILogger<UpdateHandler> _logger;
         private readonly IHttpClientWrapper _httpClient;
         private readonly IConfigLoader _configLoader;
-        private readonly IStateManager _stateManager;
+        private readonly StateManager _stateManager;
         private readonly IHostApplicationLifetime _applicationLifetime;
         private readonly AgentSpecificSettingsOptions _settings;
 
@@ -43,7 +45,7 @@ namespace CMSAgent.Update
             ILogger<UpdateHandler> logger,
             IHttpClientWrapper httpClient,
             IConfigLoader configLoader,
-            IStateManager stateManager,
+            StateManager stateManager,
             IHostApplicationLifetime applicationLifetime,
             IOptions<AgentSpecificSettingsOptions> options)
         {
@@ -164,14 +166,15 @@ namespace CMSAgent.Update
                     string agentId = _configLoader.GetAgentId();
                     string encryptedToken = _configLoader.GetEncryptedAgentToken();
 
-                    using (var fileStream = new FileStream(downloadPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                    using (var fileStream = File.Create(downloadPath))
                     {
                         // Tải file cập nhật
-                        await _httpClient.DownloadFileAsync(
+                        var downloadStream = await _httpClient.DownloadFileAsync(
                             updateInfo.download_url,
-                            fileStream,
                             agentId,
                             encryptedToken);
+                            
+                        await downloadStream.CopyToAsync(fileStream);
                     }
 
                     // Kiểm tra checksum
@@ -298,7 +301,7 @@ namespace CMSAgent.Update
                 }
 
                 // Tạo file cấu hình cho CMSUpdater
-                string updaterConfigPath = Path.Combine(Path.GetDirectoryName(updaterExePath), "update_config.json");
+                string updaterConfigPath = Path.Combine(Path.GetDirectoryName(updaterExePath) ?? string.Empty, "update_config.json");
                 
                 // Tạo nội dung cấu hình
                 string configContent = $@"{{

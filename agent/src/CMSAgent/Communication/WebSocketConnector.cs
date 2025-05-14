@@ -9,6 +9,11 @@ using CMSAgent.Common.DTOs;
 using CMSAgent.Common.Enums;
 using CMSAgent.Common.Interfaces;
 using CMSAgent.Common.Models;
+using CMSAgent.Configuration;
+using CMSAgent.Security;
+using CMSAgent.Core;
+using CMSAgent.Update;
+using CMSAgent.Commands;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SocketIOClient;
@@ -29,22 +34,22 @@ namespace CMSAgent.Communication
         private readonly HttpClientWrapper _httpClient;
         private readonly WebSocketSettingsOptions _settings;
         
-        private SocketIOClient.SocketIO _socket;
+        private SocketIOClient.SocketIO? _socket;
         private SemaphoreSlim _connectionLock = new SemaphoreSlim(1, 1);
         private int _reconnectAttempts = 0;
-        private Timer _reconnectTimer;
+        private Timer? _reconnectTimer;
         private bool _isReconnecting = false;
         private bool _disposed = false;
 
         /// <summary>
         /// Sự kiện khi nhận được thông điệp từ WebSocket.
         /// </summary>
-        public event EventHandler<string> MessageReceived;
+        public event EventHandler<string> MessageReceived = delegate { };
 
         /// <summary>
         /// Sự kiện khi kết nối WebSocket bị ngắt.
         /// </summary>
-        public event EventHandler ConnectionClosed;
+        public event EventHandler ConnectionClosed = delegate { };
 
         /// <summary>
         /// Kiểm tra xem WebSocket có đang kết nối không.
@@ -128,7 +133,7 @@ namespace CMSAgent.Communication
                 // Kết nối
                 await _socket.ConnectAsync();
                 
-                if (!_socket.Connected)
+                if (!(_socket?.Connected ?? false))
                 {
                     _logger.LogError("Không thể kết nối WebSocket tới {ServerUrl}", serverUrl);
                     return false;
@@ -253,16 +258,16 @@ namespace CMSAgent.Communication
         }
 
         /// <summary>
-        /// Gửi kết quả thực thi lệnh lên server.
+        /// Gửi kết quả lệnh đến server.
         /// </summary>
-        /// <param name="payload">Dữ liệu kết quả lệnh.</param>
-        /// <returns>Task đại diện cho việc gửi dữ liệu.</returns>
-        private async Task SendCommandResultAsync(CommandResultPayload payload)
+        /// <param name="payload">Payload chứa kết quả lệnh.</param>
+        /// <returns>Task với kết quả gửi: true nếu thành công, false nếu thất bại.</returns>
+        public async Task<bool> SendCommandResultAsync(CommandResultPayload payload)
         {
             if (!IsConnected)
             {
                 _logger.LogWarning("Không thể gửi kết quả lệnh: WebSocket không được kết nối");
-                return;
+                return false;
             }
 
             try
@@ -270,10 +275,12 @@ namespace CMSAgent.Communication
                 await _socket.EmitAsync(WebSocketEvents.AgentCommandResult, payload);
                 _logger.LogDebug("Đã gửi kết quả lệnh {CommandId}, trạng thái: {Success}",
                     payload.commandId, payload.success ? "Thành công" : "Thất bại");
+                return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi khi gửi kết quả lệnh {CommandId}", payload.commandId);
+                return false;
             }
         }
 
@@ -326,9 +333,10 @@ namespace CMSAgent.Communication
                 string reason = "Không rõ nguyên nhân";
                 try
                 {
-                    if (response.GetValue().Length > 0)
+                    var responseValues = response.GetValue<object[]>();
+                    if (responseValues != null && responseValues.Length > 0)
                     {
-                        reason = response.GetValue<string>();
+                        reason = response.GetValue<string>(0) ?? reason;
                     }
                 }
                 catch { }
@@ -346,6 +354,12 @@ namespace CMSAgent.Communication
                 try
                 {
                     var command = response.GetValue<CommandPayload>();
+                    if (command == null)
+                    {
+                        _logger.LogError("Nhận được lệnh null từ server");
+                        return;
+                    }
+
                     _logger.LogInformation("Nhận được lệnh {CommandType} từ server: {CommandId}", command.commandType, command.commandId);
 
                     MessageReceived?.Invoke(this, $"Nhận được lệnh {command.commandType} từ server: {command.commandId}");
@@ -364,7 +378,10 @@ namespace CMSAgent.Communication
                             type = command.commandType,
                             result = new CommandResultData
                             {
-                                errorMessage = "Không thể xử lý lệnh: Hàng đợi đã đầy"
+                                stdout = string.Empty,
+                                stderr = string.Empty,
+                                errorMessage = "Không thể xử lý lệnh: Hàng đợi đã đầy",
+                                errorCode = string.Empty
                             }
                         };
                         
@@ -383,9 +400,9 @@ namespace CMSAgent.Communication
                 try
                 {
                     var updateInfo = response.GetValue<UpdateCheckResponse>();
-                    _logger.LogInformation("Phát hiện phiên bản agent mới: {NewVersion}", updateInfo.new_version);
+                    _logger.LogInformation("Phát hiện phiên bản agent mới: {NewVersion}", updateInfo.version);
                     
-                    MessageReceived?.Invoke(this, $"Phát hiện phiên bản agent mới: {updateInfo.new_version}");
+                    MessageReceived?.Invoke(this, $"Phát hiện phiên bản agent mới: {updateInfo.version}");
                     
                     // Gửi đến UpdateHandler để xử lý
                     await _updateHandler.ProcessUpdateAsync(updateInfo);
@@ -436,7 +453,7 @@ namespace CMSAgent.Communication
         /// <summary>
         /// Callback khi timer kết nối lại kích hoạt.
         /// </summary>
-        private async void ReconnectTimerCallback(object state)
+        private async void ReconnectTimerCallback(object? state)
         {
             try
             {
@@ -464,13 +481,13 @@ namespace CMSAgent.Communication
                 }
 
                 string token;
-                try
+                try 
                 {
                     token = _tokenProtector.DecryptToken(encryptedToken);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Không thể giải mã token xác thực");
+                    _logger.LogError(ex, "Không thể xử lý hàng đợi offline: không thể giải mã token");
                     StartReconnectTimer();
                     return;
                 }

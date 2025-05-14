@@ -16,9 +16,9 @@ namespace CMSAgent.Configuration
     {
         private readonly ILogger<ConfigLoader> _logger;
         private readonly IOptionsMonitor<CmsAgentSettingsOptions> _settingsMonitor;
-        private RuntimeConfig _runtimeConfigCache;
+        private RuntimeConfig? _runtimeConfigCache = null;
         private readonly string _runtimeConfigPath;
-        private readonly string _installPath;
+        private readonly string _installPath = string.Empty;
         private readonly string _dataPath;
         private readonly string _runtimeConfigFileName = "runtime_config.json";
 
@@ -42,7 +42,7 @@ namespace CMSAgent.Configuration
             _logger = logger;
             _settingsMonitor = settingsMonitor;
             
-            _installPath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            _installPath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? string.Empty;
             _dataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), Settings.AppName ?? "CMSAgent");
             _runtimeConfigPath = Path.Combine(_dataPath, "runtime_config", _runtimeConfigFileName);
         }
@@ -51,7 +51,7 @@ namespace CMSAgent.Configuration
         /// Tải cấu hình runtime từ file
         /// </summary>
         /// <param name="forceReload">Có bắt buộc tải lại từ đĩa kể cả đã có trong bộ nhớ cache</param>
-        /// <returns>Đối tượng RuntimeConfig hoặc null nếu không tìm thấy/lỗi</returns>
+        /// <returns>Đối tượng RuntimeConfig hoặc cấu hình mặc định nếu không tìm thấy/lỗi</returns>
         public async Task<RuntimeConfig> LoadRuntimeConfigAsync(bool forceReload = false)
         {
             if (_runtimeConfigCache != null && !forceReload)
@@ -62,18 +62,46 @@ namespace CMSAgent.Configuration
                 if (!File.Exists(_runtimeConfigPath))
                 {
                     _logger.LogWarning("Không tìm thấy file cấu hình runtime tại {Path}", _runtimeConfigPath);
-                    return null;
+                    return CreateDefaultRuntimeConfig();
                 }
 
                 var json = await File.ReadAllTextAsync(_runtimeConfigPath);
                 _runtimeConfigCache = JsonSerializer.Deserialize<RuntimeConfig>(json);
+                
+                if (_runtimeConfigCache == null)
+                {
+                    _logger.LogError("Không thể deserialize cấu hình runtime, tạo cấu hình mặc định");
+                    return CreateDefaultRuntimeConfig();
+                }
+
                 return _runtimeConfigCache;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Không thể tải cấu hình runtime từ {Path}", _runtimeConfigPath);
-                return null;
+                return CreateDefaultRuntimeConfig();
             }
+        }
+
+        /// <summary>
+        /// Tạo cấu hình runtime mặc định
+        /// </summary>
+        private RuntimeConfig CreateDefaultRuntimeConfig()
+        {
+            var config = new RuntimeConfig
+            {
+                AgentId = "UNCONFIGURED-" + Guid.NewGuid().ToString("N").Substring(0, 8),
+                RoomConfig = new RoomConfig
+                {
+                    RoomName = "Default",
+                    PosX = 0,
+                    PosY = 0
+                },
+                AgentTokenEncrypted = string.Empty
+            };
+            
+            _runtimeConfigCache = config;
+            return config;
         }
 
         /// <summary>
@@ -84,11 +112,15 @@ namespace CMSAgent.Configuration
         {
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(_runtimeConfigPath));
-                var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
-                await File.WriteAllTextAsync(_runtimeConfigPath, json);
-                _runtimeConfigCache = config;
-                _logger.LogInformation("Đã lưu cấu hình runtime vào {Path}", _runtimeConfigPath);
+                var directoryPath = Path.GetDirectoryName(_runtimeConfigPath);
+                if (directoryPath != null)
+                {
+                    Directory.CreateDirectory(directoryPath);
+                    var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+                    await File.WriteAllTextAsync(_runtimeConfigPath, json);
+                    _runtimeConfigCache = config;
+                    _logger.LogInformation("Đã lưu cấu hình runtime vào {Path}", _runtimeConfigPath);
+                }
             }
             catch (Exception ex)
             {
@@ -99,14 +131,14 @@ namespace CMSAgent.Configuration
         /// <summary>
         /// Lấy ID agent từ cấu hình runtime
         /// </summary>
-        /// <returns>AgentId hoặc null nếu chưa được đặt</returns>
-        public string GetAgentId() => _runtimeConfigCache?.AgentId;
+        /// <returns>AgentId hoặc chuỗi rỗng nếu chưa được đặt</returns>
+        public string GetAgentId() => _runtimeConfigCache?.AgentId ?? string.Empty;
 
         /// <summary>
         /// Lấy token đã mã hóa của agent từ cấu hình runtime
         /// </summary>
-        /// <returns>Token đã mã hóa hoặc null nếu chưa được đặt</returns>
-        public string GetEncryptedAgentToken() => _runtimeConfigCache?.AgentTokenEncrypted;
+        /// <returns>Token đã mã hóa hoặc chuỗi rỗng nếu chưa được đặt</returns>
+        public string GetEncryptedAgentToken() => _runtimeConfigCache?.AgentTokenEncrypted ?? string.Empty;
 
         /// <summary>
         /// Lấy đường dẫn cài đặt của agent
@@ -119,5 +151,11 @@ namespace CMSAgent.Configuration
         /// </summary>
         /// <returns>Đường dẫn thư mục dữ liệu</returns>
         public string GetDataPath() => _dataPath;
+
+        /// <summary>
+        /// Lấy phiên bản hiện tại của agent.
+        /// </summary>
+        /// <returns>Phiên bản agent.</returns>
+        public string GetAgentVersion() => Settings.Version;
     }
 }

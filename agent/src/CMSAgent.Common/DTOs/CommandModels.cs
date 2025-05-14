@@ -11,12 +11,12 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// ID duy nhất của lệnh.
         /// </summary>
-        public string commandId { get; set; }
+        public required string commandId { get; set; }
 
         /// <summary>
         /// Nội dung lệnh cần thực thi.
         /// </summary>
-        public string command { get; set; }
+        public required string command { get; set; }
 
         /// <summary>
         /// Loại lệnh (console, system_action, get_logs).
@@ -26,7 +26,7 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// Các tham số bổ sung cho lệnh (tùy chọn).
         /// </summary>
-        public Dictionary<string, object> parameters { get; set; }
+        public required Dictionary<string, object> parameters { get; set; } = new();
     }
 
     /// <summary>
@@ -37,7 +37,7 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// ID của lệnh đã thực thi.
         /// </summary>
-        public string commandId { get; set; }
+        public required string commandId { get; set; }
 
         /// <summary>
         /// Trạng thái thực thi lệnh: true nếu thành công, false nếu thất bại.
@@ -52,7 +52,13 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// Dữ liệu kết quả thực thi.
         /// </summary>
-        public CommandResultData result { get; set; }
+        public required CommandResultData result { get; set; } = new()
+        {
+            stdout = string.Empty,
+            stderr = string.Empty,
+            errorMessage = string.Empty,
+            errorCode = string.Empty
+        };
     }
 
     /// <summary>
@@ -63,12 +69,12 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// Đầu ra tiêu chuẩn của lệnh.
         /// </summary>
-        public string stdout { get; set; }
+        public required string stdout { get; set; } = string.Empty;
 
         /// <summary>
         /// Đầu ra lỗi tiêu chuẩn của lệnh.
         /// </summary>
-        public string stderr { get; set; }
+        public required string stderr { get; set; } = string.Empty;
 
         /// <summary>
         /// Mã thoát của lệnh (nếu có).
@@ -78,11 +84,11 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// Thông báo lỗi (nếu có).
         /// </summary>
-        public string errorMessage { get; set; }
+        public required string errorMessage { get; set; } = string.Empty;
 
         /// <summary>
         /// Mã lỗi (nếu có).
         /// </summary>
-        public string errorCode { get; set; }
+        public required string errorCode { get; set; } = string.Empty;
     }
 } 

@@ -1,12 +1,15 @@
 using Microsoft.Extensions.Logging;
+using System.Runtime.Versioning;
+
 namespace CMSUpdater.Services;
 
 /// <summary>
 /// Lớp quản lý quá trình rollback khi cập nhật thất bại
 /// </summary>
+[SupportedOSPlatform("windows")]
 public class RollbackManager
 {
-    private readonly ILogger<RollbackManager> _logger;
+    private readonly ILogger _logger;
     private readonly int _agentProcessIdToWait;
     private readonly string _newAgentPath;
     private readonly string _currentAgentInstallDir;
@@ -27,7 +30,7 @@ public class RollbackManager
     /// <param name="currentAgentVersion">Phiên bản agent hiện tại</param>
     /// <param name="serviceHelper">Helper để tương tác với Windows Service</param>
     public RollbackManager(
-        ILogger<RollbackManager> logger, 
+        ILogger logger, 
         int agentProcessIdToWait, 
         string newAgentPath, 
         string currentAgentInstallDir, 
@@ -145,6 +148,9 @@ public class RollbackManager
             }
             
             _logger.LogInformation("Rollback hoàn tất thành công.");
+            
+            // Thêm một công việc bất đồng bộ thực sự
+            await Task.Delay(1); // Sử dụng await để tránh cảnh báo CS1998
         }
         catch (Exception ex)
         {

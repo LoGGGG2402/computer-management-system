@@ -63,7 +63,13 @@ namespace CMSAgent.Commands.Handlers
                 commandId = command.commandId,
                 type = command.commandType,
                 success = false,
-                result = new CommandResultData()
+                result = new CommandResultData
+                {
+                    stdout = string.Empty,
+                    stderr = string.Empty,
+                    errorMessage = string.Empty,
+                    errorCode = string.Empty
+                }
             };
 
             try
@@ -246,17 +252,22 @@ namespace CMSAgent.Commands.Handlers
             try
             {
                 var directory = new DirectoryInfo(logDirectory);
-                var files = directory.GetFiles("*.log", SearchOption.TopDirectoryOnly)
+                var filteredFiles = directory.GetFiles("*.log", SearchOption.TopDirectoryOnly)
                     .Where(f => f.LastWriteTimeUtc >= cutoffDate)
                     .OrderByDescending(f => f.LastWriteTimeUtc);
                 
-                // Nếu không bao gồm tất cả file, chỉ lấy những file gần đây nhất (tối đa 10 file)
+                // Sau đó nếu không bao gồm tất cả file, chỉ lấy những file gần đây nhất (tối đa 10 file)
+                IEnumerable<FileInfo> filesToInclude;
                 if (!includeAllLogFiles)
                 {
-                    files = files.Take(10);
+                    filesToInclude = filteredFiles.Take(10);
+                }
+                else
+                {
+                    filesToInclude = filteredFiles;
                 }
                 
-                logFiles.AddRange(files.Select(f => f.FullName));
+                logFiles.AddRange(filesToInclude.Select(f => f.FullName));
             }
             catch (Exception ex)
             {
@@ -298,7 +309,11 @@ namespace CMSAgent.Commands.Handlers
                 using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 {
                     fileBytes = new byte[fileStream.Length];
+#if NET7_0_OR_GREATER
+                    await fileStream.ReadExactlyAsync(fileBytes, cancellationToken);
+#else
                     await fileStream.ReadAsync(fileBytes, 0, fileBytes.Length, cancellationToken);
+#endif
                 }
                 
                 string base64Content = Convert.ToBase64String(fileBytes);

@@ -70,7 +70,7 @@ agent/
 ## Yêu Cầu Hệ Thống và Phần Mềm Phụ Thuộc
 
 - **Hệ điều hành hỗ trợ:** Windows 10 (1903+), Windows 11, Windows Server 2016/2019/2022 (chỉ 64-bit).
-- **.NET Runtime:** Phiên bản .NET mà agent được biên dịch (ví dụ: .NET 6.0 LTS hoặc .NET 8.0 LTS).
+- **.NET Runtime:** Phiên bản .NET mà agent được biên dịch (ví dụ: .NET 9.0 LTS).
 - **Thư viện bên ngoài:** Xem chi tiết phiên bản trong Phần II của "Tài liệu Toàn Diện CMSAgent v7.4".
 
 ## Cài đặt và Cấu hình

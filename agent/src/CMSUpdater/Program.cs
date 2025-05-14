@@ -6,10 +6,12 @@ using CMSAgent.Common.Enums;
 using CMSUpdater.Helpers;
 using CMSUpdater.Services;
 using CMSUpdater.Core;
+using System.Runtime.Versioning;
 
 /// <summary>
 /// Lớp Program chính của CMSUpdater
 /// </summary>
+[SupportedOSPlatform("windows")]
 public class Program
 {
     /// <summary>
@@ -20,7 +22,7 @@ public class Program
     /// <summary>
     /// Cấu hình ứng dụng
     /// </summary>
-    private static IConfiguration _configuration;
+    private static IConfiguration _configuration = null!;
     
     /// <summary>
     /// Điểm vào chính của ứng dụng
@@ -75,11 +77,7 @@ public class Program
                 newAgentPath, 
                 currentAgentInstallDir, 
                 updaterLogDir, 
-                currentAgentVersion,
-                retryAttempts,
-                retryDelayMs,
-                processTimeoutSec,
-                filesToExclude);
+                currentAgentVersion);
             
             return await updaterLogic.ExecuteUpdateAsync();
         }

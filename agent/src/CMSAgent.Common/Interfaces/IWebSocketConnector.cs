@@ -50,6 +50,6 @@ namespace CMSAgent.Common.Interfaces
         /// </summary>
         /// <param name="payload">Dữ liệu kết quả thực thi lệnh.</param>
         /// <returns>Task đại diện cho việc gửi dữ liệu.</returns>
-        Task SendCommandResultAsync(CommandResultPayload payload);
+        Task<bool> SendCommandResultAsync(CommandResultPayload payload);
     }
 }

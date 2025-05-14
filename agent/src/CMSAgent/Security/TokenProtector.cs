@@ -1,56 +1,88 @@
 using System;
 using System.Security.Cryptography;
-using Microsoft.AspNetCore.DataProtection;
+using System.Text;
+using Microsoft.Extensions.Logging;
+using System.Runtime.Versioning;
 
 namespace CMSAgent.Security
 {
     /// <summary>
-    /// Class để mã hóa và giải mã token xác thực của agent.
+    /// Lớp bảo vệ token bằng cách mã hóa và giải mã.
     /// </summary>
+    [SupportedOSPlatform("windows")]
     public class TokenProtector
     {
-        private readonly IDataProtector _protector;
+        private readonly ILogger<TokenProtector> _logger;
+        private readonly byte[] _entropy;
 
-        public TokenProtector(IDataProtectionProvider provider)
+        /// <summary>
+        /// Khởi tạo một instance mới của TokenProtector.
+        /// </summary>
+        /// <param name="logger">Logger để ghi nhật ký.</param>
+        public TokenProtector(ILogger<TokenProtector> logger)
         {
-            _protector = provider.CreateProtector("CMSAgent.TokenProtection");
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            
+            // Sử dụng entropy cố định để đảm bảo có thể giải mã token sau khi khởi động lại
+            // Trong môi trường thực tế, nên lưu entropy vào một nơi an toàn
+            _entropy = Encoding.UTF8.GetBytes("CMSAgent_Entropy_Key_2023");
         }
 
         /// <summary>
-        /// Mã hóa token plaintext bằng DPAPI.
+        /// Mã hóa token.
         /// </summary>
-        /// <param name="plainToken">Token gốc dạng plaintext.</param>
-        /// <returns>Chuỗi token đã mã hóa ở dạng Base64.</returns>
-        /// <exception cref="System.Security.Cryptography.CryptographicException">Ném ra khi gặp lỗi mã hóa.</exception>
-        public string EncryptToken(string plainToken)
+        /// <param name="token">Token cần mã hóa.</param>
+        /// <returns>Token đã được mã hóa dưới dạng chuỗi Base64.</returns>
+        public string EncryptToken(string token)
         {
-            if (string.IsNullOrEmpty(plainToken))
-                throw new ArgumentNullException(nameof(plainToken));
-
-            var protectedBytes = _protector.Protect(System.Text.Encoding.UTF8.GetBytes(plainToken));
-            return Convert.ToBase64String(protectedBytes);
-        }
-
-        /// <summary>
-        /// Giải mã token đã mã hóa bằng DPAPI.
-        /// </summary>
-        /// <param name="encryptedTokenBase64">Token đã mã hóa ở dạng Base64.</param>
-        /// <returns>Token gốc dạng plaintext.</returns>
-        /// <exception cref="System.Security.Cryptography.CryptographicException">Ném ra khi gặp lỗi giải mã.</exception>
-        public string DecryptToken(string encryptedTokenBase64)
-        {
-            if (string.IsNullOrEmpty(encryptedTokenBase64))
-                throw new ArgumentNullException(nameof(encryptedTokenBase64));
+            if (string.IsNullOrEmpty(token))
+            {
+                throw new ArgumentException("Token không được để trống", nameof(token));
+            }
 
             try
             {
-                var encryptedBytes = Convert.FromBase64String(encryptedTokenBase64);
-                var decryptedBytes = _protector.Unprotect(encryptedBytes);
-                return System.Text.Encoding.UTF8.GetString(decryptedBytes);
+                byte[] tokenBytes = Encoding.UTF8.GetBytes(token);
+                byte[] encryptedBytes = ProtectedData.Protect(
+                    tokenBytes,
+                    _entropy,
+                    DataProtectionScope.LocalMachine);
+                
+                return Convert.ToBase64String(encryptedBytes);
             }
-            catch (FormatException)
+            catch (Exception ex)
             {
-                throw new CryptographicException("Invalid Base64 string");
+                _logger.LogError(ex, "Lỗi khi mã hóa token");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Giải mã token.
+        /// </summary>
+        /// <param name="encryptedToken">Token đã mã hóa dưới dạng chuỗi Base64.</param>
+        /// <returns>Token gốc.</returns>
+        public string DecryptToken(string encryptedToken)
+        {
+            if (string.IsNullOrEmpty(encryptedToken))
+            {
+                throw new ArgumentException("Token đã mã hóa không được để trống", nameof(encryptedToken));
+            }
+
+            try
+            {
+                byte[] encryptedBytes = Convert.FromBase64String(encryptedToken);
+                byte[] decryptedBytes = ProtectedData.Unprotect(
+                    encryptedBytes,
+                    _entropy,
+                    DataProtectionScope.LocalMachine);
+                
+                return Encoding.UTF8.GetString(decryptedBytes);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi giải mã token");
+                throw;
             }
         }
     }

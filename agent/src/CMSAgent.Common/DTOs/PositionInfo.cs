@@ -11,7 +11,7 @@ namespace CMSAgent.Common.DTOs
         /// Tên phòng (vị trí) của agent.
         /// </summary>
         [Required]
-        public string roomName { get; set; }
+        public required string roomName { get; set; }
 
         /// <summary>
         /// Tọa độ X của agent trong phòng.

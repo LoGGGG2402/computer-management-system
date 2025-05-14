@@ -1,12 +1,14 @@
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.ServiceProcess;
+using System.Runtime.Versioning;
 
 namespace CMSUpdater.Services;
 
 /// <summary>
 /// Lớp tiện ích tương tác với Windows Service Control Manager (SCM) cho Updater
 /// </summary>
+[SupportedOSPlatform("windows")]
 public class ServiceHelper
 {
     private readonly ILogger _logger;
@@ -25,6 +27,7 @@ public class ServiceHelper
     /// </summary>
     /// <param name="serviceName">Tên service</param>
     /// <exception cref="InvalidOperationException">Thrown khi không thể khởi động service</exception>
+    [SupportedOSPlatform("windows")]
     public void StartAgentService(string serviceName)
     {
         try
@@ -69,6 +72,7 @@ public class ServiceHelper
     /// </summary>
     /// <param name="serviceName">Tên service</param>
     /// <exception cref="InvalidOperationException">Thrown khi không thể dừng service</exception>
+    [SupportedOSPlatform("windows")]
     public void StopAgentService(string serviceName)
     {
         try
@@ -113,6 +117,7 @@ public class ServiceHelper
     /// </summary>
     /// <param name="serviceName">Tên service</param>
     /// <returns>true nếu service đang chạy; ngược lại là false</returns>
+    [SupportedOSPlatform("windows")]
     public bool IsAgentServiceRunning(string serviceName)
     {
         try
@@ -141,6 +146,7 @@ public class ServiceHelper
     /// </summary>
     /// <param name="processId">ID của process cần kiểm tra</param>
     /// <returns>true nếu process còn tồn tại; ngược lại là false</returns>
+    [SupportedOSPlatform("windows")]
     public bool IsProcessRunning(int processId)
     {
         try

@@ -1,6 +1,6 @@
 using System;
-using System.CommandLine.IO;
 using System.IO;
+using System.ServiceProcess;
 using System.Threading.Tasks;
 using CMSAgent.Common.Enums;
 using CMSAgent.Common.Interfaces;
@@ -38,77 +38,75 @@ namespace CMSAgent.Cli.Commands
             _serviceUtils = serviceUtils ?? throw new ArgumentNullException(nameof(serviceUtils));
             _configLoader = configLoader ?? throw new ArgumentNullException(nameof(configLoader));
             _serviceName = options?.Value?.AppName + "Service" ?? "CMSAgentService";
-            _dataDirectory = _configLoader.GetDataDirectory();
+            _dataDirectory = _configLoader.GetDataPath();
         }
 
         /// <summary>
         /// Thực thi lệnh uninstall.
         /// </summary>
-        /// <param name="console">Console để tương tác với người dùng.</param>
         /// <param name="removeData">Cờ xác định có xóa dữ liệu hay không.</param>
         /// <returns>Mã lỗi của lệnh.</returns>
-        public async Task<int> ExecuteAsync(IConsole console, bool removeData)
+        public async Task<int> ExecuteAsync(bool removeData)
         {
-            console.Out.WriteLine($"Đang gỡ bỏ service {_serviceName}...");
+            Console.WriteLine($"Đang gỡ bỏ service {_serviceName}...");
 
             try
             {
                 // Kiểm tra tồn tại service
                 if (!_serviceUtils.IsServiceInstalled(_serviceName))
                 {
-                    console.Out.WriteLine($"Service {_serviceName} không tồn tại hoặc đã được gỡ bỏ trước đó.");
+                    Console.WriteLine($"Service {_serviceName} không tồn tại hoặc đã được gỡ bỏ trước đó.");
                     
                     // Xóa dữ liệu nếu yêu cầu
                     if (removeData)
                     {
-                        await RemoveDataDirectoriesAsync(console);
+                        await RemoveDataDirectoriesAsync();
                     }
                     
-                    return CliExitCodes.Success;
+                    return (int)CliExitCodes.Success;
                 }
 
                 // Gỡ bỏ service
                 _serviceUtils.UninstallService(_serviceName);
                 
-                console.Out.WriteLine($"Service {_serviceName} đã được gỡ bỏ thành công.");
+                Console.WriteLine($"Service {_serviceName} đã được gỡ bỏ thành công.");
 
                 // Xóa dữ liệu nếu yêu cầu
                 if (removeData)
                 {
-                    await RemoveDataDirectoriesAsync(console);
+                    await RemoveDataDirectoriesAsync();
                 }
                 
-                return CliExitCodes.Success;
+                return (int)CliExitCodes.Success;
             }
             catch (UnauthorizedAccessException)
             {
-                console.Error.WriteLine("Lỗi: Cần quyền Administrator để gỡ bỏ service. Vui lòng chạy lại lệnh với quyền Administrator.");
-                return CliExitCodes.MissingPermissions;
+                Console.Error.WriteLine("Lỗi: Cần quyền Administrator để gỡ bỏ service. Vui lòng chạy lại lệnh với quyền Administrator.");
+                return (int)CliExitCodes.MissingPermissions;
             }
             catch (Exception ex)
             {
-                console.Error.WriteLine($"Lỗi khi gỡ bỏ service: {ex.Message}");
+                Console.Error.WriteLine($"Lỗi khi gỡ bỏ service: {ex.Message}");
                 _logger.LogError(ex, "Lỗi khi gỡ bỏ service {ServiceName}", _serviceName);
-                return CliExitCodes.ServiceOperationFailed;
+                return (int)CliExitCodes.ServiceOperationFailed;
             }
         }
 
         /// <summary>
         /// Xóa các thư mục dữ liệu của agent.
         /// </summary>
-        /// <param name="console">Console để tương tác với người dùng.</param>
         /// <returns>Task đại diện cho tác vụ xóa dữ liệu.</returns>
-        private async Task RemoveDataDirectoriesAsync(IConsole console)
+        private async Task RemoveDataDirectoriesAsync()
         {
             try
             {
                 if (string.IsNullOrEmpty(_dataDirectory) || !Directory.Exists(_dataDirectory))
                 {
-                    console.Out.WriteLine("Không tìm thấy thư mục dữ liệu của agent.");
+                    Console.WriteLine("Không tìm thấy thư mục dữ liệu của agent.");
                     return;
                 }
 
-                console.Out.WriteLine($"Đang xóa dữ liệu agent từ: {_dataDirectory}");
+                Console.WriteLine($"Đang xóa dữ liệu agent từ: {_dataDirectory}");
                 
                 // Xóa các file cấu hình
                 string configFile = Path.Combine(_dataDirectory, "runtime_config.json");
@@ -135,20 +133,23 @@ namespace CMSAgent.Cli.Commands
                 try
                 {
                     Directory.Delete(_dataDirectory, true);
-                    console.Out.WriteLine("Đã xóa toàn bộ dữ liệu của agent.");
+                    Console.WriteLine("Đã xóa toàn bộ dữ liệu của agent.");
                 }
                 catch (IOException)
                 {
-                    console.Out.WriteLine("Đã xóa một phần dữ liệu của agent. Một số file hoặc thư mục có thể đang được sử dụng.");
+                    Console.WriteLine("Đã xóa một phần dữ liệu của agent. Một số file hoặc thư mục có thể đang được sử dụng.");
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    console.Out.WriteLine("Đã xóa một phần dữ liệu của agent. Không đủ quyền để xóa một số file hoặc thư mục.");
+                    Console.WriteLine("Đã xóa một phần dữ liệu của agent. Không đủ quyền để xóa một số file hoặc thư mục.");
                 }
+                
+                // Thêm một await để loại bỏ cảnh báo
+                await Task.CompletedTask;
             }
             catch (Exception ex)
             {
-                console.Error.WriteLine($"Lỗi khi xóa dữ liệu: {ex.Message}");
+                Console.Error.WriteLine($"Lỗi khi xóa dữ liệu: {ex.Message}");
                 _logger.LogError(ex, "Lỗi khi xóa dữ liệu agent tại {DataDirectory}", _dataDirectory);
             }
         }

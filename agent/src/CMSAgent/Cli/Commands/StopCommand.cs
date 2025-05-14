@@ -1,5 +1,5 @@
 using System;
-using System.CommandLine.IO;
+using System.ServiceProcess;
 using System.Threading.Tasks;
 using CMSAgent.Common.Enums;
 using CMSAgent.Common.Models;
@@ -36,47 +36,50 @@ namespace CMSAgent.Cli.Commands
         /// <summary>
         /// Thực thi lệnh stop.
         /// </summary>
-        /// <param name="console">Console để tương tác với người dùng.</param>
         /// <returns>Mã lỗi của lệnh.</returns>
-        public async Task<int> ExecuteAsync(IConsole console)
+        public async Task<int> ExecuteAsync()
         {
-            console.Out.WriteLine($"Đang dừng service {_serviceName}...");
+            Console.WriteLine($"Đang dừng dịch vụ {_serviceName}...");
 
             try
             {
-                // Kiểm tra tồn tại service
+                // Kiểm tra nếu service đã được cài đặt
                 if (!_serviceUtils.IsServiceInstalled(_serviceName))
                 {
-                    console.Error.WriteLine($"Lỗi: Service {_serviceName} chưa được cài đặt.");
-                    return CliExitCodes.ServiceNotInstalled;
+                    Console.WriteLine($"Dịch vụ {_serviceName} chưa được cài đặt.");
+                    return (int)CliExitCodes.ServiceNotInstalled;
                 }
 
-                // Lấy trạng thái hiện tại
-                var status = _serviceUtils.GetServiceStatus(_serviceName);
-                
-                if (status != System.ServiceProcess.ServiceControllerStatus.Running &&
-                    status != System.ServiceProcess.ServiceControllerStatus.StartPending)
+                // Kiểm tra nếu service đang chạy
+                if (!_serviceUtils.IsServiceRunning(_serviceName))
                 {
-                    console.Out.WriteLine($"Service {_serviceName} không đang chạy.");
-                    return CliExitCodes.Success;
+                    Console.WriteLine($"Dịch vụ {_serviceName} đã dừng rồi.");
+                    return (int)CliExitCodes.Success;
                 }
 
                 // Dừng service
-                _serviceUtils.StopService(_serviceName);
-                
-                console.Out.WriteLine($"Service {_serviceName} đã được dừng thành công.");
-                return CliExitCodes.Success;
+                bool stopSuccess = await _serviceUtils.StopServiceAsync(_serviceName);
+                if (stopSuccess)
+                {
+                    Console.WriteLine($"Dịch vụ {_serviceName} đã dừng thành công.");
+                    return (int)CliExitCodes.Success;
+                }
+                else
+                {
+                    Console.Error.WriteLine($"Không thể dừng dịch vụ {_serviceName}.");
+                    return (int)CliExitCodes.ServiceOperationFailed;
+                }
             }
             catch (UnauthorizedAccessException)
             {
-                console.Error.WriteLine("Lỗi: Cần quyền Administrator để dừng service. Vui lòng chạy lại lệnh với quyền Administrator.");
-                return CliExitCodes.MissingPermissions;
+                Console.Error.WriteLine("Lỗi: Cần quyền Administrator để dừng dịch vụ. Vui lòng chạy lại lệnh với quyền Administrator.");
+                return (int)CliExitCodes.MissingPermissions;
             }
             catch (Exception ex)
             {
-                console.Error.WriteLine($"Lỗi khi dừng service: {ex.Message}");
-                _logger.LogError(ex, "Lỗi khi dừng service {ServiceName}", _serviceName);
-                return CliExitCodes.ServiceOperationFailed;
+                Console.Error.WriteLine($"Lỗi khi dừng dịch vụ: {ex.Message}");
+                _logger.LogError(ex, "Lỗi khi dừng dịch vụ {ServiceName}", _serviceName);
+                return (int)CliExitCodes.GeneralError;
             }
         }
     }

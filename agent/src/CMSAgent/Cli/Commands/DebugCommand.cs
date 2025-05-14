@@ -1,5 +1,4 @@
 using System;
-using System.CommandLine.IO;
 using Microsoft.Extensions.Logging;
 
 namespace CMSAgent.Cli.Commands
@@ -23,18 +22,17 @@ namespace CMSAgent.Cli.Commands
         /// <summary>
         /// Thực thi lệnh debug.
         /// </summary>
-        /// <param name="console">Console để tương tác với người dùng.</param>
         /// <returns>Mã lỗi của lệnh.</returns>
-        public int Execute(IConsole console)
+        public int Execute()
         {
             try
             {
                 // In thông tin về chế độ debug
-                console.Out.WriteLine("--------------------------------");
-                console.Out.WriteLine("| CMSAgent đang chạy ở chế độ DEBUG |");
-                console.Out.WriteLine("--------------------------------");
-                console.Out.WriteLine("Nhấn CTRL+C để dừng.");
-                console.Out.WriteLine();
+                Console.WriteLine("--------------------------------");
+                Console.WriteLine("| CMSAgent đang chạy ở chế độ DEBUG |");
+                Console.WriteLine("--------------------------------");
+                Console.WriteLine("Nhấn CTRL+C để dừng.");
+                Console.WriteLine();
 
                 // Ghi log
                 _logger.LogInformation("CMSAgent đã khởi động ở chế độ debug");
@@ -45,7 +43,7 @@ namespace CMSAgent.Cli.Commands
             }
             catch (Exception ex)
             {
-                console.Error.WriteLine($"Lỗi trong chế độ debug: {ex.Message}");
+                Console.Error.WriteLine($"Lỗi trong chế độ debug: {ex.Message}");
                 _logger.LogError(ex, "Lỗi khi khởi chạy chế độ debug");
                 return -1;
             }

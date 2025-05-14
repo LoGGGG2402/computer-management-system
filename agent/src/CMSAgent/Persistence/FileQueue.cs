@@ -85,7 +85,7 @@ namespace CMSAgent.Persistence
         /// Thử lấy và xóa item cũ nhất từ hàng đợi.
         /// </summary>
         /// <returns>Item được lấy ra, hoặc null nếu hàng đợi trống.</returns>
-        public async Task<QueuedItem<T>> TryDequeueAsync()
+        public async Task<QueuedItem<T>?> TryDequeueAsync()
         {
             var oldestFile = GetQueueFiles().OrderBy(f => f.CreationTimeUtc).FirstOrDefault();
             if (oldestFile == null)

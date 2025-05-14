@@ -19,13 +19,13 @@ namespace CMSAgent.Common.Models
         /// </summary>
         [Required]
         [Url]
-        public string ServerUrl { get; set; }
+        public required string ServerUrl { get; set; }
 
         /// <summary>
         /// Phiên bản của agent
         /// </summary>
         [Required]
-        public string Version { get; set; }
+        public required string Version { get; set; }
 
         /// <summary>
         /// Cấu hình riêng của agent
@@ -96,7 +96,11 @@ namespace CMSAgent.Common.Models
         /// <summary>
         /// Cấu hình cho hàng đợi offline
         /// </summary>
-        public OfflineQueueSettingsOptions OfflineQueue { get; set; } = new();
+        public OfflineQueueSettingsOptions OfflineQueue { get; set; } = new()
+        {
+            BasePath = string.Empty,
+            QueueDirectory = string.Empty
+        };
     }
 
     /// <summary>

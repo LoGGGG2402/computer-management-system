@@ -12,12 +12,12 @@ namespace CMSAgent.Common.Models
         /// <summary>
         /// Định danh duy nhất của item trong queue.
         /// </summary>
-        public string ItemId { get; set; }
+        public required string ItemId { get; set; }
 
         /// <summary>
         /// Dữ liệu thực tế cần lưu trữ.
         /// </summary>
-        public T Data { get; set; }
+        public required T Data { get; set; }
 
         /// <summary>
         /// Thời điểm item được thêm vào queue (UTC).
@@ -68,6 +68,17 @@ namespace CMSAgent.Common.Models
         /// <summary>
         /// Đường dẫn cơ sở cho hàng đợi offline (null = sử dụng đường dẫn mặc định)
         /// </summary>
-        public string BasePath { get; set; }
+        public required string BasePath { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// Thư mục lưu trữ hàng đợi
+        /// </summary>
+        public required string QueueDirectory { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// Số lượng tối đa các mục trong hàng đợi
+        /// </summary>
+        [Range(10, 10000)]
+        public int MaxCount { get; set; } = 1000;
     }
 } 

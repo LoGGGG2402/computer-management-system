@@ -17,12 +17,12 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// Thông điệp lỗi.
         /// </summary>
-        public string error_message { get; set; }
+        public required string error_message { get; set; } = string.Empty;
 
         /// <summary>
         /// Chi tiết lỗi (có thể là string hoặc object phức tạp).
         /// </summary>
-        public object error_details { get; set; }
+        public required object error_details { get; set; } = new();
 
         /// <summary>
         /// Thời điểm xảy ra lỗi.
@@ -38,17 +38,17 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// Thông tin hệ điều hành.
         /// </summary>
-        public string os_info { get; set; }
+        public required string os_info { get; set; } = string.Empty;
 
         /// <summary>
         /// Thông tin CPU.
         /// </summary>
-        public string cpu_info { get; set; }
+        public required string cpu_info { get; set; } = string.Empty;
 
         /// <summary>
         /// Thông tin GPU.
         /// </summary>
-        public string gpu_info { get; set; }
+        public required string gpu_info { get; set; } = string.Empty;
 
         /// <summary>
         /// Tổng RAM (bytes).
@@ -70,11 +70,11 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// Tên file log được tải lên.
         /// </summary>
-        public string log_filename { get; set; }
+        public required string log_filename { get; set; } = string.Empty;
 
         /// <summary>
         /// Nội dung file log được mã hóa base64.
         /// </summary>
-        public string log_content_base64 { get; set; }
+        public required string log_content_base64 { get; set; } = string.Empty;
     }
 } 

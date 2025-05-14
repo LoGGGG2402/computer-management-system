@@ -51,6 +51,11 @@ namespace CMSAgent.Common.Enums
         InvalidArguments = 8,
 
         /// <summary>
+        /// Đầu vào không hợp lệ.
+        /// </summary>
+        InvalidInput = 9,
+
+        /// <summary>
         /// Mã cơ sở cho lỗi của CMSUpdater.
         /// Các mã lỗi của updater sẽ được cộng thêm vào giá trị này.
         /// </summary>

@@ -69,7 +69,13 @@ namespace CMSAgent.Commands.Handlers
                 commandId = command.commandId,
                 type = command.commandType,
                 success = false,
-                result = new CommandResultData()
+                result = new CommandResultData
+                {
+                    stdout = string.Empty,
+                    stderr = string.Empty,
+                    errorMessage = string.Empty,
+                    errorCode = string.Empty
+                }
             };
 
             try

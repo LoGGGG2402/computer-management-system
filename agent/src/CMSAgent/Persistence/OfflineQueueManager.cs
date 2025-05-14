@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using CMSAgent.Common.DTOs;
 using CMSAgent.Common.Interfaces;
 using CMSAgent.Common.Models;
-using CMSAgent.Persistence.Models;
 using CMSAgent.Security;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -25,7 +24,7 @@ namespace CMSAgent.Persistence
         private readonly FileQueue<CommandResultPayload> _commandResultQueue;
         private readonly FileQueue<ErrorReportPayload> _errorReportQueue;
         private readonly string _basePath;
-        private readonly FileQueue _fileQueue;
+        private readonly FileQueue<object> _fileQueue;
 
         /// <summary>
         /// Khởi tạo một instance mới của OfflineQueueManager.
@@ -68,7 +67,7 @@ namespace CMSAgent.Persistence
                 queueSettings.Value.MaxAgeHours);
 
             var settings = queueSettings.Value;
-            _fileQueue = new FileQueue(
+            _fileQueue = new FileQueue<object>(
                 settings.QueueDirectory,
                 logger,
                 settings.MaxCount,
@@ -118,7 +117,7 @@ namespace CMSAgent.Persistence
         public async Task ProcessQueuesAsync(CancellationToken cancellationToken)
         {
             var runtimeConfig = await _configLoader.LoadRuntimeConfigAsync();
-            if (runtimeConfig == null || string.IsNullOrEmpty(runtimeConfig.agent_token_encrypted))
+            if (runtimeConfig == null || string.IsNullOrEmpty(runtimeConfig.AgentTokenEncrypted))
             {
                 _logger.LogWarning("Không thể xử lý hàng đợi offline: runtime config hoặc token không tồn tại");
                 return;
@@ -127,7 +126,7 @@ namespace CMSAgent.Persistence
             string decryptedToken;
             try 
             {
-                decryptedToken = _tokenProtector.DecryptToken(runtimeConfig.agent_token_encrypted);
+                decryptedToken = _tokenProtector.DecryptToken(runtimeConfig.AgentTokenEncrypted);
             }
             catch (Exception ex)
             {
@@ -135,7 +134,7 @@ namespace CMSAgent.Persistence
                 return;
             }
 
-            var agentId = runtimeConfig.agentId;
+            var agentId = runtimeConfig.AgentId ?? string.Empty;
             
             await ProcessSpecificQueueAsync(
                 _commandResultQueue,
@@ -144,7 +143,10 @@ namespace CMSAgent.Persistence
             
             await ProcessSpecificQueueAsync(
                 _errorReportQueue,
-                async (item) => await TrySendErrorReportViaHttpAsync(item.Data, agentId, decryptedToken),
+                async (item) => {
+                    await TrySendErrorReportViaHttpAsync(item.Data, agentId, decryptedToken);
+                    return true;
+                },
                 cancellationToken);
         }
 

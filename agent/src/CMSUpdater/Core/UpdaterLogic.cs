@@ -1,15 +1,18 @@
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using CMSUpdater.Services;
+using CMSAgent.Common.Enums;
+using System.Runtime.Versioning;
 
 namespace CMSUpdater.Core;
 
 /// <summary>
 /// Lớp chịu trách nhiệm thực hiện logic cập nhật agent
 /// </summary>
+[SupportedOSPlatform("windows")]
 public class UpdaterLogic
 {
-    private readonly ILogger<UpdaterLogic> _logger;
+    private readonly ILogger _logger;
     private readonly RollbackManager _rollbackManager;
     private readonly ServiceHelper _serviceHelper;
     private readonly int _agentProcessIdToWait;
@@ -36,7 +39,7 @@ public class UpdaterLogic
     /// <param name="updaterLogDir">Nơi ghi file log của updater</param>
     /// <param name="currentAgentVersion">Phiên bản agent hiện tại</param>
     public UpdaterLogic(
-        ILogger<UpdaterLogic> logger,
+        ILogger logger,
         RollbackManager rollbackManager,
         ServiceHelper serviceHelper,
         int agentProcessIdToWait,

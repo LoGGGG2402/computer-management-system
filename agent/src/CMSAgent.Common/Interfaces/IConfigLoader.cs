@@ -55,5 +55,11 @@ namespace CMSAgent.Common.Interfaces
         /// </summary>
         /// <returns>Đường dẫn thư mục dữ liệu.</returns>
         string GetDataPath();
+
+        /// <summary>
+        /// Lấy phiên bản hiện tại của agent.
+        /// </summary>
+        /// <returns>Phiên bản agent.</returns>
+        string GetAgentVersion();
     }
 }

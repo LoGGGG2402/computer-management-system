@@ -11,9 +11,19 @@ namespace CMSAgent.Common.Enums
         INITIALIZING,
 
         /// <summary>
+        /// Đang thiết lập kết nối đến server.
+        /// </summary>
+        CONNECTING,
+
+        /// <summary>
         /// Đang trong quá trình kết nối và xác thực WebSocket với server.
         /// </summary>
         AUTHENTICATING,
+
+        /// <summary>
+        /// Xác thực với server thất bại.
+        /// </summary>
+        AUTHENTICATION_FAILED,
 
         /// <summary>
         /// Đã kết nối và xác thực thành công với server, hoạt động bình thường.
@@ -26,6 +36,16 @@ namespace CMSAgent.Common.Enums
         DISCONNECTED,
 
         /// <summary>
+        /// Đang trong quá trình kết nối lại với server sau khi bị mất kết nối.
+        /// </summary>
+        RECONNECTING,
+
+        /// <summary>
+        /// Đang trong trạng thái ngoại tuyến, không kết nối với server.
+        /// </summary>
+        OFFLINE,
+
+        /// <summary>
         /// Đang trong quá trình tải xuống và chuẩn bị cho việc cập nhật phiên bản mới.
         /// </summary>
         UPDATING,
@@ -36,8 +56,18 @@ namespace CMSAgent.Common.Enums
         ERROR,
 
         /// <summary>
+        /// Lỗi cấu hình không hợp lệ.
+        /// </summary>
+        CONFIGURATION_ERROR,
+        
+        /// <summary>
         /// Đang trong quá trình dừng hoạt động một cách an toàn (ví dụ: khi SCM yêu cầu).
         /// </summary>
-        STOPPING
+        STOPPING,
+
+        /// <summary>
+        /// Đang trong quá trình tắt hoàn toàn dịch vụ.
+        /// </summary>
+        SHUTTING_DOWN
     }
 }

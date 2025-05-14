@@ -8,7 +8,7 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// Trạng thái của yêu cầu: "success".
         /// </summary>
-        public string status { get; set; }
+        public required string status { get; set; } = string.Empty;
 
         /// <summary>
         /// Có phiên bản mới hay không.
@@ -18,21 +18,21 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// Phiên bản mới (nếu có).
         /// </summary>
-        public string version { get; set; }
+        public required string version { get; set; } = string.Empty;
 
         /// <summary>
         /// URL để tải gói cập nhật.
         /// </summary>
-        public string download_url { get; set; }
+        public required string download_url { get; set; } = string.Empty;
 
         /// <summary>
         /// Checksum SHA256 của gói cập nhật.
         /// </summary>
-        public string checksum_sha256 { get; set; }
+        public required string checksum_sha256 { get; set; } = string.Empty;
 
         /// <summary>
         /// Ghi chú về phiên bản mới.
         /// </summary>
-        public string notes { get; set; }
+        public required string notes { get; set; } = string.Empty;
     }
 }

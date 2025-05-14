@@ -12,19 +12,19 @@ namespace CMSAgent.Common.Models
         /// Định danh duy nhất của agent.
         /// </summary>
         [JsonPropertyName("agentId")]
-        public string AgentId { get; set; }
+        public required string AgentId { get; set; }
 
         /// <summary>
         /// Cấu hình vị trí của agent trong phòng.
         /// </summary>
         [JsonPropertyName("room_config")]
-        public RoomConfig RoomConfig { get; set; }
+        public required RoomConfig RoomConfig { get; set; }
 
         /// <summary>
         /// Token đã được mã hóa bằng DPAPI để xác thực với server.
         /// </summary>
         [JsonPropertyName("agent_token_encrypted")]
-        public string AgentTokenEncrypted { get; set; }
+        public required string AgentTokenEncrypted { get; set; }
     }
 
     /// <summary>
@@ -36,7 +36,7 @@ namespace CMSAgent.Common.Models
         /// Tên phòng mà agent được đặt trong đó.
         /// </summary>
         [JsonPropertyName("roomName")]
-        public string RoomName { get; set; }
+        public required string RoomName { get; set; }
 
         /// <summary>
         /// Tọa độ X trong bản đồ phòng.

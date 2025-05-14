@@ -4,6 +4,14 @@ using System.Threading.Tasks;
 using CMSAgent.Common.Enums;
 using CMSAgent.Common.Interfaces;
 using CMSAgent.Common.Models;
+using CMSAgent.Configuration;
+using CMSAgent.Communication;
+using CMSAgent.Monitoring;
+using CMSAgent.Commands;
+using CMSAgent.Update;
+using CMSAgent.Persistence;
+using CMSAgent.Security;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -29,14 +37,14 @@ namespace CMSAgent.Core
         private readonly IServiceProvider _serviceProvider;
         private readonly IHostApplicationLifetime _applicationLifetime;
 
-        private Timer _statusReportTimer;
-        private Timer _updateCheckTimer;
-        private Timer _tokenRefreshTimer;
+        private Timer? _statusReportTimer;
+        private Timer? _updateCheckTimer;
+        private Timer? _tokenRefreshTimer;
         private DateTime _lastConnectionAttempt;
         private int _connectionRetryCount = 0;
-        private CancellationTokenSource _linkedTokenSource;
-        private Task _commandProcessingTask;
-        private Task _offlineQueueProcessingTask;
+        private CancellationTokenSource? _linkedTokenSource;
+        private Task? _commandProcessingTask;
+        private Task? _offlineQueueProcessingTask;
         private bool _initialized = false;
 
         /// <summary>
@@ -113,7 +121,7 @@ namespace CMSAgent.Core
 
             // Tải cấu hình runtime
             var config = await _configLoader.LoadRuntimeConfigAsync();
-            if (config == null || string.IsNullOrEmpty(config.agentId) || string.IsNullOrEmpty(config.agent_token_encrypted))
+            if (config == null || string.IsNullOrEmpty(config.AgentId) || string.IsNullOrEmpty(config.AgentTokenEncrypted))
             {
                 _logger.LogError("Không tìm thấy cấu hình hợp lệ. Vui lòng chạy lệnh configure trước.");
                 _stateManager.SetState(AgentState.CONFIGURATION_ERROR);
@@ -288,7 +296,7 @@ namespace CMSAgent.Core
 
                 // Tải cấu hình runtime
                 var config = await _configLoader.LoadRuntimeConfigAsync();
-                if (config == null || string.IsNullOrEmpty(config.agent_token_encrypted))
+                if (config == null || string.IsNullOrEmpty(config.AgentTokenEncrypted))
                 {
                     _logger.LogError("Không tìm thấy token agent trong cấu hình runtime.");
                     _stateManager.SetState(AgentState.CONFIGURATION_ERROR);
@@ -299,7 +307,7 @@ namespace CMSAgent.Core
                 string agentToken;
                 try
                 {
-                    agentToken = _tokenProtector.DecryptToken(config.agent_token_encrypted);
+                    agentToken = _tokenProtector.DecryptToken(config.AgentTokenEncrypted);
                 }
                 catch (Exception ex)
                 {
@@ -440,6 +448,7 @@ namespace CMSAgent.Core
                 _logger.LogInformation("Đang làm mới token agent...");
                 
                 // TODO: Triển khai logic làm mới token khi API được cung cấp
+                await Task.Delay(1);
                 
                 _logger.LogInformation("Đã làm mới token agent thành công.");
             }
@@ -460,37 +469,20 @@ namespace CMSAgent.Core
         }
 
         /// <summary>
-        /// Xử lý khi kết nối WebSocket bị đóng.
+        /// Xử lý sự kiện khi kết nối WebSocket bị ngắt.
         /// </summary>
-        /// <param name="sender">Đối tượng phát ra sự kiện.</param>
-        /// <param name="e">Tham số sự kiện.</param>
-        private void OnConnectionClosed(object sender, EventArgs e)
+        private void OnConnectionClosed(object? sender, EventArgs e)
         {
-            _logger.LogWarning("Kết nối WebSocket đã bị đóng, sẽ thử kết nối lại...");
-
-            if (_stateManager.CurrentState != AgentState.SHUTTING_DOWN)
-            {
-                _stateManager.SetState(AgentState.RECONNECTING);
-            }
+            _logger.LogInformation("Xử lý sự kiện ngắt kết nối WebSocket");
+            _stateManager.SetState(AgentState.DISCONNECTED);
         }
 
         /// <summary>
-        /// Xử lý khi nhận được thông điệp từ server.
+        /// Xử lý sự kiện khi nhận được thông điệp mới từ WebSocket.
         /// </summary>
-        /// <param name="sender">Đối tượng phát ra sự kiện.</param>
-        /// <param name="messageJson">Nội dung thông điệp dạng JSON.</param>
-        private void OnMessageReceived(object sender, string messageJson)
+        private void OnMessageReceived(object? sender, string messageJson)
         {
-            try
-            {
-                _logger.LogTrace("Nhận được thông điệp từ server: {Message}", messageJson);
-                
-                // TODO: Xử lý thông điệp từ server (sẽ được triển khai sau khi xác định cấu trúc thông điệp)
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Lỗi khi xử lý thông điệp từ server.");
-            }
+            _logger.LogDebug("Nhận được thông điệp từ WebSocket: {Message}", messageJson);
         }
 
         /// <summary>

@@ -1,5 +1,5 @@
 using System;
-using System.CommandLine.IO;
+using System.ServiceProcess;
 using System.Threading.Tasks;
 using CMSAgent.Common.Enums;
 using CMSAgent.Common.Models;
@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 namespace CMSAgent.Cli.Commands
 {
     /// <summary>
-    /// Lớp xử lý lệnh start để khởi động CMSAgent service.
+    /// Lớp xử lý lệnh start để khởi động CMSAgent Windows service.
     /// </summary>
     public class StartCommand
     {
@@ -36,46 +36,50 @@ namespace CMSAgent.Cli.Commands
         /// <summary>
         /// Thực thi lệnh start.
         /// </summary>
-        /// <param name="console">Console để tương tác với người dùng.</param>
         /// <returns>Mã lỗi của lệnh.</returns>
-        public async Task<int> ExecuteAsync(IConsole console)
+        public async Task<int> ExecuteAsync()
         {
-            console.Out.WriteLine($"Đang khởi động service {_serviceName}...");
+            Console.WriteLine($"Đang khởi động dịch vụ {_serviceName}...");
 
             try
             {
-                // Kiểm tra tồn tại service
+                // Kiểm tra nếu service đã được cài đặt
                 if (!_serviceUtils.IsServiceInstalled(_serviceName))
                 {
-                    console.Error.WriteLine($"Lỗi: Service {_serviceName} chưa được cài đặt.");
-                    return CliExitCodes.ServiceNotInstalled;
+                    Console.WriteLine($"Dịch vụ {_serviceName} chưa được cài đặt.");
+                    return (int)CliExitCodes.ServiceNotInstalled;
                 }
 
-                // Lấy trạng thái hiện tại
-                var status = _serviceUtils.GetServiceStatus(_serviceName);
-                
-                if (status == System.ServiceProcess.ServiceControllerStatus.Running)
+                // Kiểm tra nếu service đang chạy
+                if (_serviceUtils.IsServiceRunning(_serviceName))
                 {
-                    console.Out.WriteLine($"Service {_serviceName} đã đang chạy.");
-                    return CliExitCodes.Success;
+                    Console.WriteLine($"Dịch vụ {_serviceName} đã đang chạy.");
+                    return (int)CliExitCodes.Success;
                 }
 
                 // Khởi động service
-                _serviceUtils.StartService(_serviceName);
-                
-                console.Out.WriteLine($"Service {_serviceName} đã được khởi động thành công.");
-                return CliExitCodes.Success;
+                bool startSuccess = await _serviceUtils.StartServiceAsync(_serviceName);
+                if (startSuccess)
+                {
+                    Console.WriteLine($"Dịch vụ {_serviceName} đã khởi động thành công.");
+                    return (int)CliExitCodes.Success;
+                }
+                else
+                {
+                    Console.Error.WriteLine($"Không thể khởi động dịch vụ {_serviceName}.");
+                    return (int)CliExitCodes.ServiceOperationFailed;
+                }
             }
             catch (UnauthorizedAccessException)
             {
-                console.Error.WriteLine("Lỗi: Cần quyền Administrator để khởi động service. Vui lòng chạy lại lệnh với quyền Administrator.");
-                return CliExitCodes.MissingPermissions;
+                Console.Error.WriteLine("Lỗi: Cần quyền Administrator để khởi động dịch vụ. Vui lòng chạy lại lệnh với quyền Administrator.");
+                return (int)CliExitCodes.MissingPermissions;
             }
             catch (Exception ex)
             {
-                console.Error.WriteLine($"Lỗi khi khởi động service: {ex.Message}");
-                _logger.LogError(ex, "Lỗi khi khởi động service {ServiceName}", _serviceName);
-                return CliExitCodes.ServiceOperationFailed;
+                Console.Error.WriteLine($"Lỗi khi khởi động dịch vụ: {ex.Message}");
+                _logger.LogError(ex, "Lỗi khi khởi động dịch vụ {ServiceName}", _serviceName);
+                return (int)CliExitCodes.GeneralError;
             }
         }
     }

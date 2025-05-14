@@ -68,7 +68,7 @@ namespace CMSAgent.Cli
             {
                 IsCliCommandExecuted = true;
                 var cmd = _serviceProvider.GetRequiredService<ConfigureCommand>();
-                context.ExitCode = await cmd.ExecuteAsync(context.Console, context.GetCancellationToken());
+                context.ExitCode = await cmd.ExecuteAsync(context.GetCancellationToken());
             });
             _rootCommand.AddCommand(configureCmd);
 
@@ -78,7 +78,7 @@ namespace CMSAgent.Cli
             {
                 IsCliCommandExecuted = true;
                 var cmd = _serviceProvider.GetRequiredService<StartCommand>();
-                context.ExitCode = await cmd.ExecuteAsync(context.Console);
+                context.ExitCode = await cmd.ExecuteAsync();
             });
             _rootCommand.AddCommand(startCmd);
 
@@ -88,7 +88,7 @@ namespace CMSAgent.Cli
             {
                 IsCliCommandExecuted = true;
                 var cmd = _serviceProvider.GetRequiredService<StopCommand>();
-                context.ExitCode = await cmd.ExecuteAsync(context.Console);
+                context.ExitCode = await cmd.ExecuteAsync();
             });
             _rootCommand.AddCommand(stopCmd);
 
@@ -99,11 +99,11 @@ namespace CMSAgent.Cli
                 description: "Xóa toàn bộ dữ liệu của agent từ ProgramData"
             );
             uninstallCmd.AddOption(removeDataOption);
-            uninstallCmd.SetHandler(async (bool removeData, InvocationContext context) => 
+            uninstallCmd.SetHandler(async (bool removeData) => 
             {
                 IsCliCommandExecuted = true;
                 var cmd = _serviceProvider.GetRequiredService<UninstallCommand>();
-                context.ExitCode = await cmd.ExecuteAsync(context.Console, removeData);
+                Environment.ExitCode = await cmd.ExecuteAsync(removeData);
             }, removeDataOption);
             _rootCommand.AddCommand(uninstallCmd);
 
@@ -114,7 +114,7 @@ namespace CMSAgent.Cli
                 // Lưu ý: IsCliCommandExecuted KHÔNG được set true cho lệnh debug
                 // Vì lệnh debug sẽ tiếp tục thực thi như bình thường thay vì thoát
                 var cmd = _serviceProvider.GetRequiredService<DebugCommand>();
-                context.ExitCode = cmd.Execute(context.Console);
+                context.ExitCode = cmd.Execute();
             });
             _rootCommand.AddCommand(debugCmd);
         }

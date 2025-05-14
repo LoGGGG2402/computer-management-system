@@ -86,7 +86,7 @@ namespace CMSAgent.Cli.Commands
         /// Gỡ bỏ service.
         /// </summary>
         /// <param name="serviceName">Tên của service cần gỡ bỏ.</param>
-        public void UninstallService(string serviceName)
+        public async void UninstallService(string serviceName)
         {
             if (!IsAdministrator())
             {
@@ -102,7 +102,7 @@ namespace CMSAgent.Cli.Commands
             // Dừng service trước khi gỡ bỏ
             try
             {
-                StopService(serviceName);
+                await StopServiceAsync(serviceName);
             }
             catch (Exception ex)
             {
@@ -119,10 +119,35 @@ namespace CMSAgent.Cli.Commands
         }
 
         /// <summary>
-        /// Khởi động service.
+        /// Kiểm tra xem service có đang chạy hay không.
+        /// </summary>
+        /// <param name="serviceName">Tên của service cần kiểm tra.</param>
+        /// <returns>True nếu service đang chạy, ngược lại là False.</returns>
+        public bool IsServiceRunning(string serviceName)
+        {
+            if (!IsServiceInstalled(serviceName))
+            {
+                return false;
+            }
+
+            try
+            {
+                using var serviceController = new ServiceController(serviceName);
+                return serviceController.Status == ServiceControllerStatus.Running;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi kiểm tra trạng thái của service {ServiceName}", serviceName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Khởi động service bất đồng bộ.
         /// </summary>
         /// <param name="serviceName">Tên của service cần khởi động.</param>
-        public void StartService(string serviceName)
+        /// <returns>Task tượng trưng cho hoạt động bất đồng bộ, trả về True nếu thành công.</returns>
+        public async Task<bool> StartServiceAsync(string serviceName)
         {
             if (!IsAdministrator())
             {
@@ -139,7 +164,7 @@ namespace CMSAgent.Cli.Commands
             if (serviceController.Status == ServiceControllerStatus.Running)
             {
                 _logger.LogInformation("Service {ServiceName} đã đang chạy", serviceName);
-                return;
+                return true;
             }
 
             _logger.LogInformation("Đang khởi động service {ServiceName}...", serviceName);
@@ -147,21 +172,52 @@ namespace CMSAgent.Cli.Commands
             try
             {
                 serviceController.Start();
-                serviceController.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(30));
-                _logger.LogInformation("Đã khởi động service {ServiceName} thành công", serviceName);
+                
+                // Chờ service đạt trạng thái Running (tối đa 30 giây)
+                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30));
+                var statusTask = Task.Run(() => {
+                    try
+                    {
+                        serviceController.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(30));
+                        return true;
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                });
+                
+                if (await Task.WhenAny(statusTask, timeoutTask) == timeoutTask)
+                {
+                    _logger.LogWarning("Quá thời gian chờ khởi động service {ServiceName}", serviceName);
+                    return false;
+                }
+                
+                bool result = await statusTask;
+                if (result)
+                {
+                    _logger.LogInformation("Đã khởi động service {ServiceName} thành công", serviceName);
+                }
+                else
+                {
+                    _logger.LogWarning("Không thể khởi động service {ServiceName}", serviceName);
+                }
+                
+                return result;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Không thể khởi động service {ServiceName}", serviceName);
-                throw;
+                return false;
             }
         }
 
         /// <summary>
-        /// Dừng service.
+        /// Dừng service bất đồng bộ.
         /// </summary>
         /// <param name="serviceName">Tên của service cần dừng.</param>
-        public void StopService(string serviceName)
+        /// <returns>Task tượng trưng cho hoạt động bất đồng bộ, trả về True nếu thành công.</returns>
+        public async Task<bool> StopServiceAsync(string serviceName)
         {
             if (!IsAdministrator())
             {
@@ -178,7 +234,7 @@ namespace CMSAgent.Cli.Commands
             if (serviceController.Status != ServiceControllerStatus.Running)
             {
                 _logger.LogInformation("Service {ServiceName} không đang chạy", serviceName);
-                return;
+                return true;
             }
 
             _logger.LogInformation("Đang dừng service {ServiceName}...", serviceName);
@@ -186,13 +242,43 @@ namespace CMSAgent.Cli.Commands
             try
             {
                 serviceController.Stop();
-                serviceController.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(30));
-                _logger.LogInformation("Đã dừng service {ServiceName} thành công", serviceName);
+                
+                // Chờ service đạt trạng thái Stopped (tối đa 30 giây)
+                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30));
+                var statusTask = Task.Run(() => {
+                    try
+                    {
+                        serviceController.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(30));
+                        return true;
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                });
+                
+                if (await Task.WhenAny(statusTask, timeoutTask) == timeoutTask)
+                {
+                    _logger.LogWarning("Quá thời gian chờ dừng service {ServiceName}", serviceName);
+                    return false;
+                }
+                
+                bool result = await statusTask;
+                if (result)
+                {
+                    _logger.LogInformation("Đã dừng service {ServiceName} thành công", serviceName);
+                }
+                else
+                {
+                    _logger.LogWarning("Không thể dừng service {ServiceName}", serviceName);
+                }
+                
+                return result;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Không thể dừng service {ServiceName}", serviceName);
-                throw;
+                return false;
             }
         }
 
