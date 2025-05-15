@@ -4,9 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CMSAgent.Common.DTOs;
 using CMSAgent.Common.Interfaces;
-using CMSAgent.Common.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace CMSAgent.Commands.Handlers
 {

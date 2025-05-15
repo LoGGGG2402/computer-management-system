@@ -1,12 +1,11 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using System.IO.Compression;
-using System.Text.Json;
+using System.Linq;
 using CMSAgent.Common.Constants;
 using CMSAgent.Common.DTOs;
 using CMSAgent.Common.Enums;
@@ -17,6 +16,7 @@ using CMSAgent.Core;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Text;
 
 namespace CMSAgent.Update
 {
@@ -62,7 +62,6 @@ namespace CMSAgent.Update
 
             try
             {
-                string currentVersion = _configLoader.GetAgentVersion();
                 string agentId = _configLoader.GetAgentId();
                 string encryptedToken = _configLoader.GetEncryptedAgentToken();
 
@@ -72,8 +71,7 @@ namespace CMSAgent.Update
                     return;
                 }
 
-                _logger.LogInformation("Checking for updates from current version {CurrentVersion} (manual: {ManualCheck})",
-                    currentVersion, manualCheck);
+                _logger.LogInformation("Checking for updates (manual: {ManualCheck})", manualCheck);
 
                 var response = await _httpClient.GetAsync<UpdateCheckResponse>(
                     ApiRoutes.CheckUpdate,
@@ -91,6 +89,7 @@ namespace CMSAgent.Update
                     }
                     else
                     {
+                        string currentVersion = _configLoader.GetAgentVersion();
                         _logger.LogInformation("No new version available (current version: {CurrentVersion})", currentVersion);
                     }
                 }
@@ -114,6 +113,39 @@ namespace CMSAgent.Update
         public async Task ProcessUpdateAsync(UpdateCheckResponse updateInfo)
         {
             ArgumentNullException.ThrowIfNull(updateInfo);
+
+            // Kiểm tra phiên bản hiện tại của agent
+            string currentVersion = _configLoader.GetAgentVersion();
+            _logger.LogInformation("Processing update from current version {CurrentVersion} to new version {NewVersion}", 
+                currentVersion, updateInfo.version);
+
+            // Kiểm tra xem phiên bản mới có trong danh sách bị ignore hay không
+            if (await VersionIgnoreManager.IsVersionIgnoredAsync(updateInfo.version))
+            {
+                _logger.LogWarning("Bỏ qua cập nhật: Phiên bản {Version} nằm trong danh sách phiên bản bị ignore",
+                    updateInfo.version);
+                return;
+            }
+
+            // So sánh phiên bản - dừng cập nhật nếu phiên bản mới không lớn hơn phiên bản hiện tại
+            if (!IsNewVersionGreater(updateInfo.version, currentVersion))
+            {
+                _logger.LogWarning("Update aborted: New version {NewVersion} is not greater than current version {CurrentVersion}",
+                    updateInfo.version, currentVersion);
+                return;
+            }
+
+            // Validate that necessary information is available
+            if (string.IsNullOrEmpty(updateInfo.version) || 
+                string.IsNullOrEmpty(updateInfo.download_url) || 
+                string.IsNullOrEmpty(updateInfo.checksum_sha256))
+            {
+                _logger.LogError("Received incomplete update information: Version={Version}, HasDownloadUrl={HasUrl}, HasChecksum={HasChecksum}",
+                    updateInfo.version,
+                    !string.IsNullOrEmpty(updateInfo.download_url),
+                    !string.IsNullOrEmpty(updateInfo.checksum_sha256));
+                return;
+            }
 
             // Use semaphore to ensure only one update process is running at a time
             await _updateLock.WaitAsync();
@@ -166,6 +198,9 @@ namespace CMSAgent.Update
                         {
                             _logger.LogError(ex, "Unable to download update package");
                             ErrorLogs.LogException(ErrorType.UPDATE_DOWNLOAD_FAILED, ex, _logger);
+                            
+                            // Thêm phiên bản vào danh sách ignore khi tải cập nhật thất bại
+                            await VersionIgnoreManager.AddVersionToIgnoreListAsync(updateInfo.version, "Error downloading update package");
                             throw;
                         }
                     }
@@ -180,8 +215,11 @@ namespace CMSAgent.Update
                             "Integrity check failed: Checksum does not match", 
                             new { ExpectedChecksum = updateInfo.checksum_sha256, FilePath = downloadPath }, 
                             _logger);
-                        return;
-                    }
+                            
+                            // Thêm phiên bản vào danh sách ignore khi kiểm tra checksum thất bại
+                            await VersionIgnoreManager.AddVersionToIgnoreListAsync(updateInfo.version, "Checksum verification failed");
+                            return;
+                        }
                     
                     _logger.LogInformation("Preparing to launch CMSUpdater");
 
@@ -199,7 +237,7 @@ namespace CMSAgent.Update
 
                         // Launch CMSUpdater and exit agent
                         // Pass downloadPath (path to zip file) and extractedUpdateDir (path to extracted directory)
-                        if (await StartCMSUpdaterAsync(downloadPath, extractedUpdateDir)) // MODIFIED: Added extractedUpdateDir
+                        if (await StartCMSUpdaterAsync(downloadPath, extractedUpdateDir, updateInfo)) // MODIFIED: Added updateInfo
                         {
                             // Stop host so the service restarts after the update
                             _logger.LogInformation("Stopping agent to complete the update process");
@@ -210,6 +248,9 @@ namespace CMSAgent.Update
                             _logger.LogError("Unable to launch CMSUpdater");
                             ErrorLogs.LogError(ErrorType.UpdateFailure, "Unable to launch CMSUpdater", new { }, _logger);
                             
+                            // Thêm phiên bản vào danh sách ignore khi không thể khởi chạy CMSUpdater
+                            await VersionIgnoreManager.AddVersionToIgnoreListAsync(updateInfo.version, "Unable to launch CMSUpdater");
+                            
                             // Restore previous state
                             _stateManager.SetState(previousState);
                         }
@@ -218,6 +259,10 @@ namespace CMSAgent.Update
                     {
                         _logger.LogError(ex, "Error during update process when extracting or launching updater");
                         ErrorLogs.LogException(ErrorType.UpdateFailure, ex, _logger);
+                        
+                        // Thêm phiên bản vào danh sách ignore khi cập nhật thất bại
+                        await VersionIgnoreManager.AddVersionToIgnoreListAsync(updateInfo.version, "Error during extraction or launching updater");
+                        
                         _stateManager.SetState(previousState);
                     }
                     finally
@@ -242,6 +287,9 @@ namespace CMSAgent.Update
                 {
                     _logger.LogError(ex, "Error during update process");
                     ErrorLogs.LogException(ErrorType.UpdateFailure, ex, _logger);
+                    
+                    // Thêm phiên bản vào danh sách ignore khi cập nhật thất bại
+                    await VersionIgnoreManager.AddVersionToIgnoreListAsync(updateInfo.version, "Error during update process");
                     
                     // Restore previous state
                     _stateManager.SetState(previousState);
@@ -284,7 +332,13 @@ namespace CMSAgent.Update
                 using var sha256 = SHA256.Create();
                 using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
                 byte[] hash = await sha256.ComputeHashAsync(stream);
-                string actualChecksum = Convert.ToHexStringLower(hash);
+                
+                var hashStringBuilder = new StringBuilder();
+                foreach (byte b in hash)
+                {
+                    hashStringBuilder.Append(b.ToString("x2"));
+                }
+                string actualChecksum = hashStringBuilder.ToString();
 
                 bool isValid = string.Equals(actualChecksum, expectedChecksum, StringComparison.OrdinalIgnoreCase);
 
@@ -306,8 +360,9 @@ namespace CMSAgent.Update
         /// </summary>
         /// <param name="downloadedPackagePath">Path to the downloaded update package (zip file).</param>
         /// <param name="extractedUpdateDir">Path to the directory where the update package has been extracted.</param>
+        /// <param name="updateInfo">Information about the new version.</param>
         /// <returns>True if launch is successful, otherwise False.</returns>
-        private async Task<bool> StartCMSUpdaterAsync(string downloadedPackagePath, string extractedUpdateDir)
+        private async Task<bool> StartCMSUpdaterAsync(string downloadedPackagePath, string extractedUpdateDir, UpdateCheckResponse updateInfo)
         {
             try
             {
@@ -343,11 +398,13 @@ namespace CMSAgent.Update
                 // --new-agent-path: path to the extracted directory (containing the new agent and new updater)
                 // --current-agent-install-dir: current agent installation directory
                 // --current-agent-version: current agent version
+                // --new-agent-version: new agent version
                 string arguments = $"--pid {currentProcessId} " +
                                   $"--downloaded-package-path \"{downloadedPackagePath}\" " +
                                   $"--new-agent-path \"{extractedUpdateDir}\" " +
                                   $"--current-agent-install-dir \"{installDirectory}\" " +
-                                  $"--current-agent-version \"{currentVersion}\"";
+                                  $"--current-agent-version \"{currentVersion}\" " +
+                                  $"--new-agent-version \"{updateInfo.version}\"";
 
                 // Launch CMSUpdater with full parameters
                 var processStartInfo = new ProcessStartInfo
@@ -425,6 +482,49 @@ namespace CMSAgent.Update
                     // Call recursively to copy subdirectory
                     DirectoryCopy(subDir.FullName, newDestDirName, copySubDirs);
                 }
+            }
+        }
+
+        /// <summary>
+        /// So sánh hai phiên bản theo định dạng semantic versioning (X.Y.Z)
+        /// </summary>
+        /// <param name="newVersion">Phiên bản mới</param>
+        /// <param name="currentVersion">Phiên bản hiện tại</param>
+        /// <returns>True nếu phiên bản mới lớn hơn phiên bản hiện tại, ngược lại False</returns>
+        private bool IsNewVersionGreater(string newVersion, string currentVersion)
+        {
+            if (string.IsNullOrEmpty(newVersion) || string.IsNullOrEmpty(currentVersion))
+            {
+                return false;
+            }
+
+            try
+            {
+                // Phân tích phiên bản thành các phần chính, bỏ qua các thông tin sau dấu - hoặc +
+                string newVerClean = newVersion.Split('-', '+')[0];
+                string currentVerClean = currentVersion.Split('-', '+')[0];
+
+                // Phân tách thành các phần major.minor.patch
+                int[] newVerParts = newVerClean.Split('.').Select(int.Parse).ToArray();
+                int[] currentVerParts = currentVerClean.Split('.').Select(int.Parse).ToArray();
+
+                // So sánh từng phần: major, sau đó minor, sau đó patch
+                for (int i = 0; i < Math.Min(newVerParts.Length, currentVerParts.Length); i++)
+                {
+                    if (newVerParts[i] > currentVerParts[i])
+                        return true;
+                    if (newVerParts[i] < currentVerParts[i])
+                        return false;
+                }
+
+                // Nếu tất cả các phần đã so sánh bằng nhau, kiểm tra xem phiên bản nào dài hơn
+                return newVerParts.Length > currentVerParts.Length;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error comparing versions: {NewVersion} vs {CurrentVersion}", 
+                    newVersion, currentVersion);
+                return false;
             }
         }
     }

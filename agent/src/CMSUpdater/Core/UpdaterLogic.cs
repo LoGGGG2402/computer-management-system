@@ -5,9 +5,7 @@ using CMSAgent.Common.Enums;
 using System.Runtime.Versioning;
 using CMSAgent.Common.Logging;
 using Microsoft.Extensions.Configuration;
-using System.IO;
-using System.Linq;
-using System.Text.RegularExpressions;
+using CMSAgent.Common.Models;
 
 namespace CMSUpdater.Core;
 
@@ -25,6 +23,7 @@ public class UpdaterLogic
     private readonly string _currentAgentInstallDir;
     private readonly string _currentAgentVersion;
     private readonly string _agentServiceName = "CMSAgentService";
+    private readonly string _newAgentVersion;
     
     // Timeout and wait durations
     private readonly TimeSpan _processExitTimeout = TimeSpan.FromMinutes(2);
@@ -45,6 +44,7 @@ public class UpdaterLogic
     /// <param name="updaterLogDir">Updater log directory</param>
     /// <param name="currentAgentVersion">Current agent version</param>
     /// <param name="configuration">Configuration to read settings</param>
+    /// <param name="newAgentVersion">New agent version being installed</param>
     public UpdaterLogic(
         ILogger logger,
         RollbackManager rollbackManager,
@@ -52,9 +52,9 @@ public class UpdaterLogic
         int agentProcessIdToWait,
         string newAgentPath,
         string currentAgentInstallDir,
-        string updaterLogDir,
         string currentAgentVersion,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        string newAgentVersion)
     {
         _logger = logger;
         _rollbackManager = rollbackManager;
@@ -64,6 +64,7 @@ public class UpdaterLogic
         _currentAgentInstallDir = currentAgentInstallDir;
         _currentAgentVersion = currentAgentVersion;
         _configuration = configuration;
+        _newAgentVersion = newAgentVersion ?? throw new ArgumentNullException(nameof(newAgentVersion));
     }
     
     /// <summary>
@@ -72,7 +73,8 @@ public class UpdaterLogic
     /// <returns>Update process status code (exit code)</returns>
     public async Task<int> ExecuteUpdateAsync()
     {
-        _logger.LogInformation("Starting agent update from version {CurrentVersion}", _currentAgentVersion);
+        _logger.LogInformation("Starting agent update from version {CurrentVersion} to {NewVersion}", 
+            _currentAgentVersion, _newAgentVersion);
         
         try
         {
@@ -85,6 +87,10 @@ public class UpdaterLogic
                     $"Timeout while waiting for old agent process (PID: {_agentProcessIdToWait}) to stop", 
                     new { ProcessId = _agentProcessIdToWait, Timeout = _processExitTimeout }, 
                     _logger);
+                    
+                await VersionIgnoreManager.AddVersionToIgnoreListAsync(_newAgentVersion, 
+                    $"Timeout while waiting for old process (PID: {_agentProcessIdToWait}) to stop");
+                    
                 return (int)UpdaterExitCodes.AgentStopTimeout;
             }
             
@@ -100,6 +106,10 @@ public class UpdaterLogic
                 {
                     _logger.LogError(ex, "Unable to stop service {ServiceName}", _agentServiceName);
                     ErrorLogs.LogException(ErrorType.ServiceOperationFailure, ex, _logger);
+                    
+                    await VersionIgnoreManager.AddVersionToIgnoreListAsync(_newAgentVersion, 
+                        $"Unable to stop service {_agentServiceName}");
+                        
                     return (int)UpdaterExitCodes.StopAgentFailed;
                 }
             }
@@ -114,6 +124,10 @@ public class UpdaterLogic
             {
                 _logger.LogError(ex, "Unable to backup old agent");
                 ErrorLogs.LogException(ErrorType.BackupFailure, ex, _logger);
+                
+                await VersionIgnoreManager.AddVersionToIgnoreListAsync(_newAgentVersion, 
+                    "Unable to backup old agent version");
+                    
                 return (int)UpdaterExitCodes.BackupFailed;
             }
             
@@ -127,6 +141,9 @@ public class UpdaterLogic
             {
                 _logger.LogError(ex, "Unable to deploy new agent");
                 ErrorLogs.LogException(ErrorType.DeploymentFailure, ex, _logger);
+                
+                await VersionIgnoreManager.AddVersionToIgnoreListAsync(_newAgentVersion, 
+                    "Unable to deploy new agent version");
                 
                 try
                 {
@@ -152,6 +169,9 @@ public class UpdaterLogic
                 _logger.LogError(ex, "Unable to start new agent service");
                 ErrorLogs.LogException(ErrorType.ServiceOperationFailure, ex, _logger);
                 
+                await VersionIgnoreManager.AddVersionToIgnoreListAsync(_newAgentVersion, 
+                    "Unable to start new agent service");
+                
                 try
                 {
                     await _rollbackManager.RollbackAsync("NewServiceStartFailed");
@@ -174,6 +194,9 @@ public class UpdaterLogic
                     "New agent service is unstable after update", 
                     new { ServiceName = _agentServiceName, WatchdogTime = _serviceWatchdogTime }, 
                     _logger);
+                
+                await VersionIgnoreManager.AddVersionToIgnoreListAsync(_newAgentVersion, 
+                    "New agent service is unstable after update");
                 
                 try
                 {
@@ -199,6 +222,9 @@ public class UpdaterLogic
         {
             _logger.LogError(ex, "Unhandled error during update process");
             ErrorLogs.LogException(ErrorType.UpdateFailure, ex, _logger);
+            
+            await VersionIgnoreManager.AddVersionToIgnoreListAsync(_newAgentVersion, 
+                "Unknown error during update process");
             
             try
             {

@@ -9,6 +9,7 @@ using System.Reflection;
 using Serilog;
 using CMSAgent.Common.Logging;
 using System.Text.Json;
+using CMSAgent.Common.Models;
 
 /// <summary>
 /// Main Program class for CMSUpdater
@@ -68,7 +69,7 @@ public class Program
             _logger = LoggingSetup.CreateLogger(_configuration);
             
             // Parse command line arguments
-            var (isValid, agentProcessIdToWait, newAgentPath, currentAgentInstallDir, updaterLogDir, currentAgentVersion) = ParseArguments(args);
+            var (isValid, agentProcessIdToWait, newAgentPath, currentAgentInstallDir, updaterLogDir, currentAgentVersion, newAgentVersion) = ParseArguments(args);
             
             // If command line arguments are insufficient, try reading from update_info.json
             if (!isValid && File.Exists(UpdateInfoPath))
@@ -144,9 +145,9 @@ public class Program
                 agentProcessIdToWait, 
                 newAgentPath, 
                 currentAgentInstallDir, 
-                updaterLogDir, 
                 currentAgentVersion,
-                _configuration);
+                _configuration,
+                newAgentVersion);
             
             return await updaterLogic.ExecuteUpdateAsync();
         }
@@ -166,11 +167,11 @@ public class Program
     /// </summary>
     /// <param name="args">Command line arguments array</param>
     /// <returns>Tuple containing validity and argument values</returns>
-    private static (bool isValid, int agentProcessIdToWait, string newAgentPath, string currentAgentInstallDir, string updaterLogDir, string currentAgentVersion) ParseArguments(string[] args)
+    private static (bool isValid, int agentProcessIdToWait, string newAgentPath, string currentAgentInstallDir, string updaterLogDir, string currentAgentVersion, string newAgentVersion) ParseArguments(string[] args)
     {
-        if (args.Length < 5)
+        if (args.Length < 6)
         {
-            return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty);
+            return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
         }
         
         int agentProcessIdToWait = 0;
@@ -178,12 +179,14 @@ public class Program
         string currentAgentInstallDir = string.Empty;
         string updaterLogDir = string.Empty;
         string currentAgentVersion = string.Empty;
+        string newAgentVersion = string.Empty;
         
         bool hasPid = false;
         bool hasNewAgentPath = false;
         bool hasCurrentInstallDir = false;
         bool hasUpdaterLogDir = false;
         bool hasCurrentVersion = false;
+        bool hasNewVersion = false;
         
         for (int i = 0; i < args.Length - 1; i++)
         {
@@ -221,29 +224,35 @@ public class Program
                     currentAgentVersion = args[i + 1].Trim('"');
                     hasCurrentVersion = true;
                     break;
+
+                case "new-agent-version":
+                case "--new-agent-version":
+                    newAgentVersion = args[i + 1].Trim('"');
+                    hasNewVersion = true;
+                    break;
             }
         }
         
         // Check if all required arguments are present
-        if (!hasPid || !hasNewAgentPath || !hasCurrentInstallDir || !hasUpdaterLogDir || !hasCurrentVersion)
+        if (!hasPid || !hasNewAgentPath || !hasCurrentInstallDir || !hasUpdaterLogDir || !hasCurrentVersion || !hasNewVersion)
         {
-            return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty);
+            return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
         }
         
         // Validate paths
         if (!Directory.Exists(newAgentPath))
         {
             _logger.LogError($"Error: New agent directory does not exist: {newAgentPath}");
-            return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty);
+            return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
         }
         
         if (!Directory.Exists(currentAgentInstallDir))
         {
             _logger.LogError($"Error: Current installation directory does not exist: {currentAgentInstallDir}");
-            return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty);
+            return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
         }
         
-        return (true, agentProcessIdToWait, newAgentPath, currentAgentInstallDir, updaterLogDir, currentAgentVersion);
+        return (true, agentProcessIdToWait, newAgentPath, currentAgentInstallDir, updaterLogDir, currentAgentVersion, newAgentVersion);
     }
     
     /// <summary>
@@ -258,9 +267,10 @@ public class Program
         Console.WriteLine("  --current-agent-install-dir \"<path>\" Current installation directory path");
         Console.WriteLine("  --updater-log-dir \"<path>\"           Updater log directory");
         Console.WriteLine("  --current-agent-version \"<version>\"  Current agent version (used for backup name)");
+        Console.WriteLine("  --new-agent-version \"<version>\"      New agent version being installed");
         Console.WriteLine();
         Console.WriteLine("Note: You can use update_info.json in the CMSUpdater directory instead of command line parameters");
         Console.WriteLine("Example:");
-        Console.WriteLine("  CMSUpdater.exe --pid 1234 --new-agent-path \"C:\\ProgramData\\CMSAgent\\updates\\extracted\\v1.1.0\" --current-agent-install-dir \"C:\\Program Files\\CMSAgent\" --updater-log-dir \"C:\\ProgramData\\CMSAgent\\logs\" --current-agent-version \"1.0.2\"");
+        Console.WriteLine("  CMSUpdater.exe --pid 1234 --new-agent-path \"C:\\ProgramData\\CMSAgent\\updates\\extracted\\v1.1.0\" --current-agent-install-dir \"C:\\Program Files\\CMSAgent\" --updater-log-dir \"C:\\ProgramData\\CMSAgent\\logs\" --current-agent-version \"1.0.2\" --new-agent-version \"1.1.0\"");
     }
 }

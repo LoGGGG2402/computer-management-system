@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Table, Button, Form, Input, Upload, Card, Typography, Space, 
-  Tag, Popconfirm, message, Spin, Tooltip 
+  Tag, Popconfirm, message, Tooltip, Switch, Select
 } from 'antd';
 import { 
   UploadOutlined, CheckCircleOutlined, 
@@ -11,6 +11,33 @@ import adminService from '../../services/admin.service';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
+const { Option } = Select;
+
+/**
+ * Calculate SHA-256 checksum of file
+ * @param {File} file - File to calculate checksum
+ * @returns {Promise<string>} - SHA-256 checksum in hex format
+ */
+const calculateSHA256 = async (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    
+    reader.onload = async (e) => {
+      try {
+        const buffer = e.target.result;
+        const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        resolve(hashHex);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    
+    reader.onerror = (error) => reject(error);
+    reader.readAsArrayBuffer(file);
+  });
+};
 
 /**
  * Agent Version Management component
@@ -24,6 +51,7 @@ const AgentVersionManagement = () => {
   const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
+  const [fileChecksum, setFileChecksum] = useState('');
   const [form] = Form.useForm();
 
   // Load agent versions on component mount
@@ -61,6 +89,27 @@ const AgentVersionManagement = () => {
   };
 
   /**
+   * Handle file change to calculate checksum
+   */
+  const handleFileChange = async (info) => {
+    const file = info.file.originFileObj;
+    if (file) {
+      try {
+        const checksum = await calculateSHA256(file);
+        setFileChecksum(checksum);
+        // Show checksum preview
+        message.info(`File checksum calculated: ${checksum.substring(0, 8)}...${checksum.substring(checksum.length - 8)}`);
+      } catch (error) {
+        console.error('Error calculating checksum:', error);
+        message.error('Failed to calculate file checksum');
+        setFileChecksum('');
+      }
+    } else {
+      setFileChecksum('');
+    }
+  };
+
+  /**
    * Handle form submission for uploading a new agent version
    * @param {Object} values - Form values
    */
@@ -70,10 +119,16 @@ const AgentVersionManagement = () => {
       return;
     }
 
+    if (!fileChecksum) {
+      message.error('File checksum is missing');
+      return;
+    }
+
     // Create FormData for file upload
     const formData = new FormData();
     formData.append('package', values.file.fileList[0].originFileObj);
     formData.append('version', values.version);
+    formData.append('checksum', fileChecksum);
     
     if (values.notes) {
       formData.append('notes', values.notes);
@@ -84,6 +139,7 @@ const AgentVersionManagement = () => {
       await adminService.uploadAgentPackage(formData);
       message.success('Agent version uploaded successfully');
       form.resetFields();
+      setFileChecksum('');
       fetchVersions();
     } catch (error) {
       message.error(`Failed to upload agent version: ${error.message}`);
@@ -155,12 +211,6 @@ const AgentVersionManagement = () => {
       render: (notes) => notes || '-'
     },
     {
-      title: 'Created',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      render: (date) => formatDate(date)
-    },
-    {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
@@ -220,12 +270,26 @@ const AgentVersionManagement = () => {
           >
             <Upload
               maxCount={1}
-              beforeUpload={() => false} // Prevent auto-upload
-              accept=".zip,.tar.gz,.pkg"
+              beforeUpload={() => false}
+              accept=".zip"
+              onChange={handleFileChange}
             >
               <Button icon={<UploadOutlined />}>Select Agent Package</Button>
             </Upload>
           </Form.Item>
+          
+          {fileChecksum && (
+            <Form.Item
+              label="File Checksum (SHA-256)"
+            >
+              <Input 
+                value={fileChecksum} 
+                readOnly 
+                className="font-mono text-xs"
+                addonAfter={<CheckCircleOutlined style={{ color: 'green' }} />}
+              />
+            </Form.Item>
+          )}
           
           <Form.Item
             label="Release Notes"
@@ -239,7 +303,7 @@ const AgentVersionManagement = () => {
               type="primary" 
               htmlType="submit" 
               loading={uploadLoading}
-              disabled={uploadLoading}
+              disabled={uploadLoading || !fileChecksum}
             >
               Upload Version
             </Button>

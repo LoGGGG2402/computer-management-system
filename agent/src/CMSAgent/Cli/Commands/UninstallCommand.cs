@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.ServiceProcess;
 using System.Threading.Tasks;
 using CMSAgent.Common.Enums;
 using CMSAgent.Common.Interfaces;

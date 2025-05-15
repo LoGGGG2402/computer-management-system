@@ -66,6 +66,7 @@ class AdminController {
    * @param {Object} req.body - Request body
    * @param {string} req.body.version - Semantic version string (e.g. '1.0.0')
    * @param {string} [req.body.notes] - Release notes describing changes and features
+   * @param {string} [req.body.checksum] - SHA-256 checksum of the file calculated by the client
    * @param {Object} res - Express response object
    * @param {Function} next - Express next middleware function
    * @returns {Object} JSON response with:
@@ -110,9 +111,11 @@ class AdminController {
         });
       }
 
+      // Create versionData from request body
       const versionData = {
         version: req.body.version,
-        notes: req.body.notes || ''
+        notes: req.body.notes || '',
+        client_checksum: req.body.checksum // Pass checksum from client to service
       };
 
       try {
@@ -121,7 +124,7 @@ class AdminController {
         logger.info(`Agent version ${versionData.version} uploaded successfully`, {
           userId: req.user?.id,
           versionId: createdVersion.id,
-          checksum: createdVersion.checksum_sha256.substring(0, 8) + '...'
+          checksum: createdVersion.checksum_sha256.substring(0, 8) + '...',
         });
         
         return res.status(201).json({
@@ -215,9 +218,7 @@ class AdminController {
         };
         
         if (is_stable) {
-          websocketService.notifyAgentsOfNewVersion({
-            version: updatedVersion.version
-          });
+          websocketService.notifyAgentsOfNewVersion(updatedVersion);
           logInfo.agentsNotified = true;
         }
         

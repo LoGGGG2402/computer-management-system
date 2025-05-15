@@ -90,6 +90,7 @@ class AdminService {
    * @param {Object} versionData - Version metadata
    * @param {string} versionData.version - Semantic version string (e.g., '1.0.0')
    * @param {string} [versionData.notes=''] - Release notes describing changes and features
+   * @param {string} [versionData.client_checksum] - SHA-256 checksum calculated by client
    * @returns {Promise<Object>} Created AgentVersion record with the following properties:
    *   - id {string} - Unique UUID identifier for the agent version
    *   - version {string} - Semantic version string (e.g., '1.0.0')
@@ -101,7 +102,7 @@ class AdminService {
    *   - file_size {number} - Size of the agent package file in bytes
    *   - created_at {Date} - Timestamp when this version was created
    *   - updated_at {Date} - Timestamp when this version was last modified
-   * @throws {Error} If file is invalid or version already exists
+   * @throws {Error} If file is invalid or version already exists or integrity check fails
    */
   async processAgentUpload(file, versionData) {
     try {
@@ -117,16 +118,27 @@ class AdminService {
       const fileBuffer = fs.readFileSync(file.path);
       const hashSum = crypto.createHash('sha256');
       hashSum.update(fileBuffer);
-      const checksum = hashSum.digest('hex');
+      const serverChecksum = hashSum.digest('hex');
+
+      // Check file integrity if client sent checksum
+      if (versionData.client_checksum && versionData.client_checksum !== serverChecksum) {
+        // Delete file if checksum doesn't match
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+        throw new Error('File integrity check failed: checksums do not match');
+      }
 
       // Create download URL path (relative to API base)
       const filename = path.basename(file.path);
       const downloadUrl = `/agent-packages/${filename}`;
+      
+      const releaseDate = new Date();
 
       // Create agent version record
       const agentVersion = await AgentVersion.create({
         version: versionData.version,
-        checksum_sha256: checksum,
+        checksum_sha256: serverChecksum,
         download_url: downloadUrl,
         notes: versionData.notes || '',
         is_stable: false, // Default to not stable (must be explicitly set later)

@@ -396,10 +396,30 @@ namespace CMSAgent.Communication
                 try
                 {
                     var updateInfo = response.GetValue<UpdateCheckResponse>();
+                    if (updateInfo == null)
+                    {
+                        _logger.LogError("Received null update information from server");
+                        return;
+                    }
+
+                    // Kiểm tra xem thông tin update có đủ và hợp lệ không
+                    if (string.IsNullOrEmpty(updateInfo.version))
+                    {
+                        _logger.LogError("Received update information without version");
+                        return;
+                    }
+
                     _logger.LogInformation("Detected new agent version: {NewVersion}", updateInfo.version);
                     
                     MessageReceived?.Invoke(this, $"Detected new agent version: {updateInfo.version}");
                     
+                    // Validate response contains necessary fields for update
+                    if (string.IsNullOrEmpty(updateInfo.download_url) || string.IsNullOrEmpty(updateInfo.checksum_sha256))
+                    {
+                        _logger.LogError("Received incomplete update information. Missing download URL or checksum");
+                        return;
+                    }
+
                     // Send to UpdateHandler for processing
                     await _updateHandler.ProcessUpdateAsync(updateInfo);
                 }

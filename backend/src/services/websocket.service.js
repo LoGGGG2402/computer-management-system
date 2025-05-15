@@ -457,6 +457,9 @@ class WebSocketService {
    * Notifies all connected agents about a new version being available
    * @param {Object} [versionInfo] - Information about the new agent version
    * @param {string} [versionInfo.version] - The version string (e.g., "1.2.0")
+   * @param {string} [versionInfo.download_url] - URL to download the update package
+   * @param {string} [versionInfo.checksum_sha256] - SHA-256 checksum of the update package
+   * @param {string} [versionInfo.notes] - Release notes
    * @returns {Promise<number>} Number of connected agents that were notified
    */
   async notifyAgentsOfNewVersion(versionInfo = {}) {
@@ -466,9 +469,14 @@ class WebSocketService {
         return 0;
       }
 
-      // Get version information
+      // Format the event data to match the agent.controller.js response format
       const eventData = {
-        new_stable_version: versionInfo.version || "unknown",
+        status: "success",
+        update_available: true,
+        version: versionInfo.version || "unknown",
+        download_url: versionInfo.download_url || "",
+        checksum_sha256: versionInfo.checksum_sha256 || "",
+        notes: versionInfo.notes || null,
         timestamp: new Date()
       };
 
@@ -487,11 +495,11 @@ class WebSocketService {
           this.io.to(roomName).emit(EVENTS.NEW_VERSION_AVAILABLE, eventData);
           notifiedAgents++;
           
-          logger.debug(`Notified agent for computer ${computerId} about new version ${eventData.new_stable_version}`);
+          logger.debug(`Notified agent for computer ${computerId} about new version ${eventData.version}`);
         }
       }
 
-      logger.info(`Notified ${notifiedAgents} agents about new agent version: ${eventData.new_stable_version}`);
+      logger.info(`Notified ${notifiedAgents} agents about new agent version: ${eventData.version}`);
       return notifiedAgents;
     } catch (error) {
       logger.error('Error notifying agents of new version:', { 
