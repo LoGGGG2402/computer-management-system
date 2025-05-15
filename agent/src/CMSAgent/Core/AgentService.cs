@@ -2,20 +2,21 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using CMSAgent.Common.Enums;
-using CMSAgent.Common.Interfaces;
 using CMSAgent.Common.Models;
+using CMSAgent.Common.DTOs;
 using CMSAgent.Configuration;
 using CMSAgent.Communication;
 using CMSAgent.Monitoring;
 using CMSAgent.Commands;
 using CMSAgent.Update;
-using CMSAgent.Persistence;
 using CMSAgent.Security;
-
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+
+using System.IO;
+using System.Text.Json;
+using System.Net.Http;
 
 namespace CMSAgent.Core
 {
@@ -31,11 +32,11 @@ namespace CMSAgent.Core
         private readonly CommandExecutor _commandExecutor;
         private readonly UpdateHandler _updateHandler;
         private readonly SingletonMutex _singletonMutex;
-        private readonly OfflineQueueManager _offlineQueueManager;
         private readonly TokenProtector _tokenProtector;
         private readonly AgentSpecificSettingsOptions _agentSettings;
-        private readonly IServiceProvider _serviceProvider;
         private readonly IHostApplicationLifetime _applicationLifetime;
+        private readonly HardwareInfoCollector _hardwareInfoCollector;
+        private readonly HttpClientWrapper _httpClient;
 
         private Timer? _statusReportTimer;
         private Timer? _updateCheckTimer;
@@ -44,8 +45,13 @@ namespace CMSAgent.Core
         private int _connectionRetryCount = 0;
         private CancellationTokenSource? _linkedTokenSource;
         private Task? _commandProcessingTask;
-        private Task? _offlineQueueProcessingTask;
         private bool _initialized = false;
+
+        // Thêm một trường static readonly cho JsonSerializerOptions
+        private static readonly JsonSerializerOptions _errorPayloadJsonOptions = new() 
+        { 
+            PropertyNameCaseInsensitive = true 
+        };
 
         /// <summary>
         /// Khởi tạo một instance mới của AgentService.
@@ -58,11 +64,11 @@ namespace CMSAgent.Core
         /// <param name="commandExecutor">Thực thi các lệnh từ server.</param>
         /// <param name="updateHandler">Xử lý cập nhật agent.</param>
         /// <param name="singletonMutex">Đảm bảo chỉ một instance của agent chạy.</param>
-        /// <param name="offlineQueueManager">Quản lý hàng đợi offline.</param>
         /// <param name="tokenProtector">Bảo vệ token agent.</param>
         /// <param name="agentSettings">Cấu hình đặc thù cho agent.</param>
-        /// <param name="serviceProvider">Service provider để resolve các dependency.</param>
         /// <param name="applicationLifetime">Quản lý vòng đời của ứng dụng.</param>
+        /// <param name="hardwareInfoCollector">Thu thập thông tin phần cứng</param>
+        /// <param name="httpClient">Kết nối HTTP</param>
         public AgentService(
             ILogger<AgentService> logger,
             StateManager stateManager,
@@ -72,11 +78,11 @@ namespace CMSAgent.Core
             CommandExecutor commandExecutor,
             UpdateHandler updateHandler,
             SingletonMutex singletonMutex,
-            OfflineQueueManager offlineQueueManager,
             TokenProtector tokenProtector,
             IOptions<AgentSpecificSettingsOptions> agentSettings,
-            IServiceProvider serviceProvider,
-            IHostApplicationLifetime applicationLifetime) 
+            IHostApplicationLifetime applicationLifetime,
+            HardwareInfoCollector hardwareInfoCollector,
+            HttpClientWrapper httpClient) 
             : base(logger)
         {
             _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
@@ -86,11 +92,11 @@ namespace CMSAgent.Core
             _commandExecutor = commandExecutor ?? throw new ArgumentNullException(nameof(commandExecutor));
             _updateHandler = updateHandler ?? throw new ArgumentNullException(nameof(updateHandler));
             _singletonMutex = singletonMutex ?? throw new ArgumentNullException(nameof(singletonMutex));
-            _offlineQueueManager = offlineQueueManager ?? throw new ArgumentNullException(nameof(offlineQueueManager));
             _tokenProtector = tokenProtector ?? throw new ArgumentNullException(nameof(tokenProtector));
             _agentSettings = agentSettings?.Value ?? throw new ArgumentNullException(nameof(agentSettings));
-            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _applicationLifetime = applicationLifetime ?? throw new ArgumentNullException(nameof(applicationLifetime));
+            _hardwareInfoCollector = hardwareInfoCollector ?? throw new ArgumentNullException(nameof(hardwareInfoCollector));
+            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
 
             // Đăng ký các event handler
             _stateManager.StateChanged += OnStateChanged;
@@ -158,7 +164,7 @@ namespace CMSAgent.Core
             _linkedTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
             // Kết nối tới server
-            if (!await ConnectToServerAsync(cancellationToken))
+            if (!await ConnectToServerAsync())
             {
                 _logger.LogWarning("Không thể kết nối tới server, sẽ thử lại sau.");
                 await Task.Delay(GetRetryDelay(), cancellationToken);
@@ -173,8 +179,11 @@ namespace CMSAgent.Core
                 // Bắt đầu xử lý hàng đợi lệnh
                 _commandProcessingTask = _commandExecutor.StartProcessingAsync(_linkedTokenSource.Token);
 
-                // Bắt đầu xử lý hàng đợi offline
-                _offlineQueueProcessingTask = _offlineQueueManager.ProcessQueuesAsync(_linkedTokenSource.Token);
+                // Gửi thông tin phần cứng ban đầu
+                await SendInitialHardwareInformationAsync();
+
+                // Xử lý và gửi các báo cáo lỗi offline đã lưu
+                await ProcessOfflineErrorReportsAsync();
 
                 // Thiết lập các timer
                 SetupTimers();
@@ -256,24 +265,14 @@ namespace CMSAgent.Core
                 catch { }
             }
 
-            if (_offlineQueueProcessingTask != null && !_offlineQueueProcessingTask.IsCompleted)
-            {
-                try
-                {
-                    await Task.WhenAny(_offlineQueueProcessingTask, Task.Delay(5000, cancellationToken));
-                }
-                catch { }
-            }
-
             _logger.LogInformation("Dọn dẹp AgentService hoàn tất.");
         }
 
         /// <summary>
         /// Kết nối tới server thông qua WebSocket.
         /// </summary>
-        /// <param name="cancellationToken">Token để hủy thao tác.</param>
         /// <returns>True nếu kết nối thành công, ngược lại là False.</returns>
-        private async Task<bool> ConnectToServerAsync(CancellationToken cancellationToken)
+        private async Task<bool> ConnectToServerAsync()
         {
             if (_webSocketConnector.IsConnected)
             {
@@ -330,6 +329,17 @@ namespace CMSAgent.Core
                     _logger.LogWarning("Không thể kết nối tới server.");
                     _connectionRetryCount++;
                     
+                    // Nếu là lỗi xác thực, thử làm mới token
+                    if (_stateManager.CurrentState == AgentState.AUTHENTICATION_FAILED)
+                    {
+                        _logger.LogInformation("Xác thực thất bại. Đang thử làm mới token...");
+                        bool tokenRenewed = await AttemptReIdentifyAndConnectAsync(false);
+                        if (tokenRenewed)
+                        {
+                            return true;
+                        }
+                    }
+                    
                     if (_connectionRetryCount > _agentSettings.NetworkRetryMaxAttempts)
                     {
                         _stateManager.SetState(AgentState.OFFLINE);
@@ -357,6 +367,135 @@ namespace CMSAgent.Core
                 }
                 
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Thử định danh lại với server để làm mới token.
+        /// </summary>
+        /// <param name="forceRenewToken">Buộc làm mới token ngay cả khi token còn hợp lệ.</param>
+        /// <returns>True nếu thành công, False nếu thất bại.</returns>
+        private async Task<bool> AttemptReIdentifyAndConnectAsync(bool forceRenewToken = false)
+        {
+            try
+            {
+                _logger.LogInformation("Đang thử định danh lại với server...");
+                
+                // Tải cấu hình runtime
+                var config = await _configLoader.LoadRuntimeConfigAsync();
+                if (config == null || string.IsNullOrEmpty(config.AgentId) || config.RoomConfig == null)
+                {
+                    _logger.LogError("Không thể định danh lại: Thiếu thông tin cấu hình runtime");
+                    return false;
+                }
+                
+                // Chuẩn bị payload cho yêu cầu identify
+                var identifyPayload = new AgentIdentifyRequest
+                {
+                    agentId = config.AgentId,
+                    positionInfo = new PositionInfo
+                    {
+                        roomName = config.RoomConfig.RoomName,
+                        posX = config.RoomConfig.PosX,
+                        posY = config.RoomConfig.PosY
+                    },
+                    forceRenewToken = forceRenewToken
+                };
+                
+                // Gửi yêu cầu identify
+                var response = await _httpClient.PostAsync<AgentIdentifyRequest, AgentIdentifyResponse>(
+                    Common.Constants.ApiRoutes.Identify,
+                    identifyPayload,
+                    config.AgentId,
+                    null);
+                
+                if (response != null && response.status == "success" && !string.IsNullOrEmpty(response.agentToken))
+                {
+                    _logger.LogInformation("Đã nhận được token mới từ server");
+                    
+                    // Mã hóa và lưu token mới
+                    string encryptedToken = _tokenProtector.EncryptToken(response.agentToken);
+                    config.AgentTokenEncrypted = encryptedToken;
+                    await _configLoader.SaveRuntimeConfigAsync(config);
+                    
+                    // Thử kết nối lại với token mới
+                    bool connected = await _webSocketConnector.ConnectAsync(response.agentToken);
+                    
+                    if (connected)
+                    {
+                        _logger.LogInformation("Đã kết nối lại thành công với token mới");
+                        return true;
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Không thể kết nối lại với token mới");
+                        return false;
+                    }
+                }
+                else if (response != null)
+                {
+                    if (response.status == "auth_failure")
+                    {
+                        _logger.LogWarning("Server không chấp nhận yêu cầu định danh: token không hợp lệ hoặc bị thu hồi");
+                        return false;
+                    }
+                    else if (response.status == "mfa_required")
+                    {
+                        _logger.LogWarning("Server yêu cầu MFA. Không thể xử lý tự động trong ngữ cảnh service.");
+                        return false;
+                    }
+                    else if (response.status == "position_error")
+                    {
+                        _logger.LogWarning("Lỗi vị trí: {Message}", response.message);
+                        return false;
+                    }
+                }
+                
+                _logger.LogWarning("Không thể định danh lại với server: Phản hồi không hợp lệ");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi thử định danh lại với server");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Gửi thông tin phần cứng ban đầu lên server.
+        /// </summary>
+        /// <returns>Task đại diện cho tiến trình gửi thông tin.</returns>
+        private async Task SendInitialHardwareInformationAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Đang thu thập thông tin phần cứng để gửi lên server...");
+                
+                // Thu thập thông tin phần cứng
+                var hardwareInfo = await _hardwareInfoCollector.CollectHardwareInfoAsync();
+                
+                // Tải thông tin đăng nhập
+                string agentId = _configLoader.GetAgentId();
+                string encryptedToken = _configLoader.GetEncryptedAgentToken();
+                
+                if (string.IsNullOrEmpty(agentId) || string.IsNullOrEmpty(encryptedToken))
+                {
+                    _logger.LogError("Không thể gửi thông tin phần cứng: Thiếu thông tin xác thực agent");
+                    return;
+                }
+                
+                // Gửi thông tin lên server
+                await _httpClient.PostAsync<CMSAgent.Common.DTOs.HardwareInfoPayload, object>(
+                    Common.Constants.ApiRoutes.HardwareInfo,
+                    hardwareInfo,
+                    agentId,
+                    encryptedToken);
+                
+                _logger.LogInformation("Đã gửi thông tin phần cứng lên server thành công");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi gửi thông tin phần cứng ban đầu");
             }
         }
 
@@ -440,17 +579,10 @@ namespace CMSAgent.Core
         {
             try
             {
-                if (!_webSocketConnector.IsConnected)
-                {
-                    return;
-                }
-
-                _logger.LogInformation("Đang làm mới token agent...");
+                _logger.LogDebug("Đang làm mới token agent...");
                 
-                // TODO: Triển khai logic làm mới token khi API được cung cấp
-                await Task.Delay(1);
-                
-                _logger.LogInformation("Đã làm mới token agent thành công.");
+                // Thực hiện làm mới token (đổi token rồi thử định danh lại)
+                await AttemptReIdentifyAndConnectAsync(true);
             }
             catch (Exception ex)
             {
@@ -465,7 +597,13 @@ namespace CMSAgent.Core
         /// <param name="newState">Trạng thái mới.</param>
         private void OnStateChanged(AgentState oldState, AgentState newState)
         {
-            // Không cần xử lý gì thêm, các thành phần khác có thể đăng ký sự kiện này để phản ứng
+            _logger.LogInformation("Trạng thái agent thay đổi: {OldState} -> {NewState}", oldState, newState);
+            
+            // Xử lý khi trạng thái là AUTHENTICATION_FAILED
+            if (newState == AgentState.AUTHENTICATION_FAILED)
+            {
+                _logger.LogWarning("Phát hiện trạng thái AUTHENTICATION_FAILED, sẽ thử định danh lại với server trong lần kết nối tiếp theo");
+            }
         }
 
         /// <summary>
@@ -512,6 +650,105 @@ namespace CMSAgent.Core
         protected override TimeSpan GetRetryDelay()
         {
             return TimeSpan.FromSeconds(GetExponentialBackoffDelay());
+        }
+
+        /// <summary>
+        /// Xử lý và gửi các báo cáo lỗi đã được lưu trữ offline.
+        /// </summary>
+        private async Task ProcessOfflineErrorReportsAsync()
+        {
+            _logger.LogInformation("Bắt đầu xử lý các báo cáo lỗi offline...");
+            string errorLogDirectory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "CMSAgent",
+                "error_reports");
+
+            if (!Directory.Exists(errorLogDirectory))
+            {
+                _logger.LogDebug("Thư mục báo cáo lỗi offline không tồn tại: {ErrorLogDirectory}", errorLogDirectory);
+                return;
+            }
+
+            var errorFiles = Directory.GetFiles(errorLogDirectory, "*.json");
+            if (errorFiles.Length == 0)
+            {
+                _logger.LogInformation("Không có báo cáo lỗi offline nào cần xử lý.");
+                return;
+            }
+
+            _logger.LogInformation("Tìm thấy {Count} báo cáo lỗi offline.", errorFiles.Length);
+
+            var runtimeConfig = await _configLoader.LoadRuntimeConfigAsync();
+            if (runtimeConfig == null || string.IsNullOrEmpty(runtimeConfig.AgentId) || string.IsNullOrEmpty(runtimeConfig.AgentTokenEncrypted))
+            {
+                _logger.LogError("Không thể tải cấu hình runtime hoặc token để gửi báo cáo lỗi offline. Các báo cáo lỗi sẽ được giữ lại.");
+                return;
+            }
+
+            string? agentToken;
+            try
+            {
+                agentToken = _tokenProtector.DecryptToken(runtimeConfig.AgentTokenEncrypted);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Giải mã agent token thất bại khi xử lý lỗi offline. Các báo cáo lỗi sẽ được giữ lại.");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(agentToken))
+            {
+                 _logger.LogError("Agent token không hợp lệ sau khi giải mã khi xử lý lỗi offline. Các báo cáo lỗi sẽ được giữ lại.");
+                 return;
+            }
+
+            // Sửa cách lấy ServerUrl
+            string serverUrl = _configLoader.Settings?.ServerUrl ?? string.Empty;
+            if (string.IsNullOrEmpty(serverUrl))
+            {
+                _logger.LogError("ServerUrl không được cấu hình trong appsettings.json. Không thể gửi báo cáo lỗi offline.");
+                return;
+            }
+            // Sử dụng hằng số từ ApiRoutes
+            string reportErrorEndpoint = $"{serverUrl.TrimEnd('/')}{Common.Constants.ApiRoutes.ReportError}";
+
+
+            foreach (var errorFile in errorFiles)
+            {
+                try
+                {
+                    string jsonContent = await File.ReadAllTextAsync(errorFile);
+                    var errorPayload = JsonSerializer.Deserialize<ErrorReportPayload>(jsonContent, _errorPayloadJsonOptions);
+
+                    if (errorPayload != null)
+                    {
+                        _logger.LogDebug("Đang gửi báo cáo lỗi từ file: {ErrorFile} đến endpoint {ReportErrorEndpoint}", errorFile, reportErrorEndpoint);
+                        
+                        await _httpClient.PostAsync(reportErrorEndpoint, errorPayload, runtimeConfig.AgentId, agentToken);
+                        
+                        _logger.LogInformation("Đã gửi thành công báo cáo lỗi từ file: {ErrorFile}. Đang xóa file...", errorFile);
+                        File.Delete(errorFile);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Không thể deserialize báo cáo lỗi từ file: {ErrorFile}. Có thể file bị hỏng hoặc nội dung không hợp lệ.", errorFile);
+                    }
+                }
+                catch (JsonException jsonEx)
+                {
+                    _logger.LogError(jsonEx, "Lỗi deserialize JSON từ file báo cáo lỗi offline: {ErrorFile}. File có thể bị hỏng.", errorFile);
+                }
+                catch (HttpRequestException httpEx)
+                {
+                    _logger.LogError(httpEx, "Lỗi HTTP khi gửi báo cáo lỗi từ file {ErrorFile}. Mã trạng thái (nếu có từ inner exception): {StatusCode}. Báo cáo lỗi sẽ được giữ lại.", 
+                        errorFile, httpEx.StatusCode);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Đã xảy ra lỗi không mong muốn khi xử lý file báo cáo lỗi offline: {ErrorFile}. Báo cáo lỗi sẽ được giữ lại.", errorFile);
+                }
+            }
+            _logger.LogInformation("Hoàn tất xử lý các báo cáo lỗi offline.");
         }
     }
 }

@@ -1,4 +1,3 @@
-using System;
 using System.ComponentModel.DataAnnotations;
 using CMSAgent.Common.Enums;
 
@@ -60,21 +59,5 @@ namespace CMSAgent.Common.DTOs
         /// </summary>
         [Required]
         public long total_disk_space { get; set; }
-    }
-
-    /// <summary>
-    /// Payload cho việc tải lên log của agent.
-    /// </summary>
-    public class LogUploadPayload
-    {
-        /// <summary>
-        /// Tên file log được tải lên.
-        /// </summary>
-        public required string log_filename { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Nội dung file log được mã hóa base64.
-        /// </summary>
-        public required string log_content_base64 { get; set; } = string.Empty;
     }
 } 

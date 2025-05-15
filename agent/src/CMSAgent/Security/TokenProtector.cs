@@ -10,23 +10,10 @@ namespace CMSAgent.Security
     /// Lớp bảo vệ token bằng cách mã hóa và giải mã.
     /// </summary>
     [SupportedOSPlatform("windows")]
-    public class TokenProtector
+    public class TokenProtector(ILogger<TokenProtector> logger)
     {
-        private readonly ILogger<TokenProtector> _logger;
-        private readonly byte[] _entropy;
-
-        /// <summary>
-        /// Khởi tạo một instance mới của TokenProtector.
-        /// </summary>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
-        public TokenProtector(ILogger<TokenProtector> logger)
-        {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            
-            // Sử dụng entropy cố định để đảm bảo có thể giải mã token sau khi khởi động lại
-            // Trong môi trường thực tế, nên lưu entropy vào một nơi an toàn
-            _entropy = Encoding.UTF8.GetBytes("CMSAgent_Entropy_Key_2023");
-        }
+        private readonly ILogger<TokenProtector> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        private readonly byte[] _entropy = Encoding.UTF8.GetBytes("CMSAgent_Entropy_Key_2023");
 
         /// <summary>
         /// Mã hóa token.

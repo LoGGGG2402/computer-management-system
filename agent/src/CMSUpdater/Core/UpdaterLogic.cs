@@ -3,6 +3,11 @@ using System.Diagnostics;
 using CMSUpdater.Services;
 using CMSAgent.Common.Enums;
 using System.Runtime.Versioning;
+using CMSAgent.Common.Logging;
+using Microsoft.Extensions.Configuration;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace CMSUpdater.Core;
 
@@ -18,7 +23,6 @@ public class UpdaterLogic
     private readonly int _agentProcessIdToWait;
     private readonly string _newAgentPath;
     private readonly string _currentAgentInstallDir;
-    private readonly string _updaterLogDir;
     private readonly string _currentAgentVersion;
     private readonly string _agentServiceName = "CMSAgentService";
     
@@ -26,6 +30,8 @@ public class UpdaterLogic
     private readonly TimeSpan _processExitTimeout = TimeSpan.FromMinutes(2);
     private readonly TimeSpan _serviceWatchdogTime = TimeSpan.FromMinutes(5);
     private readonly TimeSpan _serviceCheckInterval = TimeSpan.FromSeconds(30);
+    
+    private readonly IConfiguration _configuration;
     
     /// <summary>
     /// Khởi tạo UpdaterLogic
@@ -38,6 +44,7 @@ public class UpdaterLogic
     /// <param name="currentAgentInstallDir">Đường dẫn thư mục cài đặt hiện tại</param>
     /// <param name="updaterLogDir">Nơi ghi file log của updater</param>
     /// <param name="currentAgentVersion">Phiên bản agent hiện tại</param>
+    /// <param name="configuration">Configuration để đọc cấu hình</param>
     public UpdaterLogic(
         ILogger logger,
         RollbackManager rollbackManager,
@@ -46,7 +53,8 @@ public class UpdaterLogic
         string newAgentPath,
         string currentAgentInstallDir,
         string updaterLogDir,
-        string currentAgentVersion)
+        string currentAgentVersion,
+        IConfiguration configuration)
     {
         _logger = logger;
         _rollbackManager = rollbackManager;
@@ -54,8 +62,8 @@ public class UpdaterLogic
         _agentProcessIdToWait = agentProcessIdToWait;
         _newAgentPath = newAgentPath;
         _currentAgentInstallDir = currentAgentInstallDir;
-        _updaterLogDir = updaterLogDir;
         _currentAgentVersion = currentAgentVersion;
+        _configuration = configuration;
     }
     
     /// <summary>
@@ -73,6 +81,10 @@ public class UpdaterLogic
             if (!await WaitForProcessExitAsync(_agentProcessIdToWait, _processExitTimeout))
             {
                 _logger.LogError("Timeout khi chờ process agent cũ (PID: {PID}) dừng", _agentProcessIdToWait);
+                ErrorLogs.LogError(ErrorType.UpdateFailure, 
+                    $"Timeout khi chờ process agent cũ (PID: {_agentProcessIdToWait}) dừng", 
+                    new { ProcessId = _agentProcessIdToWait, Timeout = _processExitTimeout }, 
+                    _logger);
                 return (int)UpdaterExitCodes.AgentStopTimeout;
             }
             
@@ -87,6 +99,7 @@ public class UpdaterLogic
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Không thể dừng service {ServiceName}", _agentServiceName);
+                    ErrorLogs.LogException(ErrorType.ServiceOperationFailure, ex, _logger);
                     return (int)UpdaterExitCodes.StopAgentFailed;
                 }
             }
@@ -100,6 +113,7 @@ public class UpdaterLogic
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Không thể sao lưu agent cũ");
+                ErrorLogs.LogException(ErrorType.BackupFailure, ex, _logger);
                 return (int)UpdaterExitCodes.BackupFailed;
             }
             
@@ -112,6 +126,7 @@ public class UpdaterLogic
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Không thể triển khai agent mới");
+                ErrorLogs.LogException(ErrorType.DeploymentFailure, ex, _logger);
                 
                 try
                 {
@@ -121,6 +136,7 @@ public class UpdaterLogic
                 catch (Exception rollbackEx)
                 {
                     _logger.LogError(rollbackEx, "Rollback sau lỗi triển khai thất bại");
+                    ErrorLogs.LogException(ErrorType.RollbackFailure, rollbackEx, _logger);
                     return (int)UpdaterExitCodes.RollbackFailed;
                 }
             }
@@ -134,6 +150,7 @@ public class UpdaterLogic
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Không thể khởi động service agent mới");
+                ErrorLogs.LogException(ErrorType.ServiceOperationFailure, ex, _logger);
                 
                 try
                 {
@@ -143,6 +160,7 @@ public class UpdaterLogic
                 catch (Exception rollbackEx)
                 {
                     _logger.LogError(rollbackEx, "Rollback sau lỗi khởi động service thất bại");
+                    ErrorLogs.LogException(ErrorType.RollbackFailure, rollbackEx, _logger);
                     return (int)UpdaterExitCodes.RollbackFailed;
                 }
             }
@@ -152,6 +170,10 @@ public class UpdaterLogic
             if (!await WatchdogServiceAsync(_serviceWatchdogTime, _serviceCheckInterval))
             {
                 _logger.LogError("Service agent mới không ổn định, đang thực hiện rollback...");
+                ErrorLogs.LogError(ErrorType.ServiceInstability, 
+                    "Service agent mới không ổn định sau khi cập nhật", 
+                    new { ServiceName = _agentServiceName, WatchdogTime = _serviceWatchdogTime }, 
+                    _logger);
                 
                 try
                 {
@@ -161,6 +183,7 @@ public class UpdaterLogic
                 catch (Exception rollbackEx)
                 {
                     _logger.LogError(rollbackEx, "Rollback sau crash service thất bại");
+                    ErrorLogs.LogException(ErrorType.RollbackFailure, rollbackEx, _logger);
                     return (int)UpdaterExitCodes.RollbackFailed;
                 }
             }
@@ -175,6 +198,7 @@ public class UpdaterLogic
         catch (Exception ex)
         {
             _logger.LogError(ex, "Lỗi không xác định trong quá trình cập nhật");
+            ErrorLogs.LogException(ErrorType.UpdateFailure, ex, _logger);
             
             try
             {
@@ -183,6 +207,7 @@ public class UpdaterLogic
             catch (Exception rollbackEx)
             {
                 _logger.LogError(rollbackEx, "Rollback sau lỗi không xác định thất bại");
+                ErrorLogs.LogException(ErrorType.RollbackFailure, rollbackEx, _logger);
                 return (int)UpdaterExitCodes.RollbackFailed;
             }
             
@@ -216,6 +241,7 @@ public class UpdaterLogic
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi khi kiểm tra process {PID}", pid);
+                ErrorLogs.LogException(ErrorType.ServiceOperationFailure, ex, _logger);
                 // Nếu có lỗi khi kiểm tra, giả định process đã thoát
                 return true;
             }
@@ -272,6 +298,7 @@ public class UpdaterLogic
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Không thể sao lưu {Entry}", entry);
+                ErrorLogs.LogException(ErrorType.BackupFailure, ex, _logger);
                 throw;
             }
         }
@@ -282,69 +309,127 @@ public class UpdaterLogic
     /// <summary>
     /// Triển khai agent mới
     /// </summary>
+    /// <returns>Task đại diện cho quá trình triển khai</returns>
     private async Task DeployNewAgentAsync()
     {
-        // Xóa các file hiện tại (trừ backup và updates)
-        _logger.LogInformation("Xóa các file agent cũ...");
-        foreach (var entry in Directory.GetFileSystemEntries(_currentAgentInstallDir))
+        await Task.Yield(); // Đảm bảo phương thức là async
+        
+        _logger.LogInformation("Đang triển khai agent mới từ {SourceDir} vào {TargetDir}", _newAgentPath, _currentAgentInstallDir);
+        
+        // Kiểm tra xem thư mục mới có tồn tại không
+        if (!Directory.Exists(_newAgentPath))
         {
-            var entryName = Path.GetFileName(entry);
+            _logger.LogError("Thư mục chứa agent mới không tồn tại: {Path}", _newAgentPath);
+            throw new DirectoryNotFoundException($"Không tìm thấy thư mục agent mới: {_newAgentPath}");
+        }
+        
+        // Đọc danh sách file loại trừ từ cấu hình
+        var filesToExclude = _configuration.GetSection("Updater:FilesToExcludeFromUpdate").Get<string[]>() ?? Array.Empty<string>();
+        _logger.LogInformation("Các file sẽ được loại trừ khỏi cập nhật: {Files}", string.Join(", ", filesToExclude));
+
+        // Thu thập tất cả các file trong thư mục nguồn (agent mới)
+        var sourceFiles = Directory.GetFiles(_newAgentPath, "*", SearchOption.AllDirectories);
+        _logger.LogDebug("Tìm thấy {Count} file trong thư mục nguồn", sourceFiles.Length);
+        
+        int filesProcessed = 0;
+        int filesCopied = 0;
+        int filesSkipped = 0;
+        
+        foreach (var sourceFile in sourceFiles)
+        {
+            filesProcessed++;
             
-            // Bỏ qua thư mục backup và updates
-            if (entryName.StartsWith("backup_", StringComparison.OrdinalIgnoreCase) ||
-                entryName.Equals("updates", StringComparison.OrdinalIgnoreCase))
+            // Đường dẫn tương đối so với thư mục nguồn
+            string relativePath = Path.GetRelativePath(_newAgentPath, sourceFile);
+            
+            // Kiểm tra xem file có thuộc danh sách loại trừ không
+            bool shouldExclude = false;
+            foreach (var pattern in filesToExclude)
             {
+                if (IsFileMatchPattern(relativePath, pattern))
+                {
+                    shouldExclude = true;
+                    _logger.LogDebug("Bỏ qua file phù hợp với mẫu loại trừ: {File} (mẫu: {Pattern})", relativePath, pattern);
+                    break;
+                }
+            }
+            
+            if (shouldExclude)
+            {
+                filesSkipped++;
                 continue;
             }
             
-            try
-            {
-                if (File.Exists(entry))
-                {
-                    _logger.LogDebug("Xóa file: {FilePath}", entry);
-                    File.Delete(entry);
-                }
-                else if (Directory.Exists(entry))
-                {
-                    _logger.LogDebug("Xóa thư mục: {DirPath}", entry);
-                    Directory.Delete(entry, true);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Không thể xóa {Entry}", entry);
-                throw;
-            }
-        }
-        
-        // Sao chép file mới
-        _logger.LogInformation("Sao chép các file agent mới...");
-        foreach (var entry in Directory.GetFileSystemEntries(_newAgentPath))
-        {
-            var entryName = Path.GetFileName(entry);
-            var destPath = Path.Combine(_currentAgentInstallDir, entryName);
+            // Đường dẫn đích cho file
+            string targetFile = Path.Combine(_currentAgentInstallDir, relativePath);
             
             try
             {
-                if (File.Exists(entry))
+                // Tạo thư mục đích nếu chưa tồn tại
+                string targetDir = Path.GetDirectoryName(targetFile) ?? string.Empty;
+                if (!string.IsNullOrEmpty(targetDir) && !Directory.Exists(targetDir))
                 {
-                    _logger.LogDebug("Sao chép file: {FilePath} -> {DestPath}", entry, destPath);
-                    File.Copy(entry, destPath, true);
+                    Directory.CreateDirectory(targetDir);
                 }
-                else if (Directory.Exists(entry))
+                
+                // Sao chép file, ghi đè nếu đã tồn tại
+                File.Copy(sourceFile, targetFile, true);
+                filesCopied++;
+                
+                // Log mỗi 100 file để tránh log quá nhiều
+                if (filesProcessed % 100 == 0 || filesProcessed == sourceFiles.Length)
                 {
-                    _logger.LogDebug("Sao chép thư mục: {DirPath} -> {DestPath}", entry, destPath);
-                    CopyDirectory(entry, destPath);
+                    _logger.LogInformation("Tiến độ sao chép: {Processed}/{Total} files (đã sao chép: {Copied}, bỏ qua: {Skipped})",
+                        filesProcessed, sourceFiles.Length, filesCopied, filesSkipped);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Không thể sao chép {Entry}", entry);
-                throw;
+                _logger.LogError(ex, "Lỗi khi sao chép file {Source} đến {Target}", sourceFile, targetFile);
+                throw new IOException($"Không thể sao chép file {sourceFile}: {ex.Message}", ex);
             }
         }
         
-        await Task.CompletedTask; // Để method là async
+        _logger.LogInformation("Triển khai thành công: Tổng số {Total} files, đã sao chép {Copied}, bỏ qua {Skipped}",
+            filesProcessed, filesCopied, filesSkipped);
+    }
+    
+    /// <summary>
+    /// Kiểm tra xem một file có phù hợp với mẫu glob không
+    /// </summary>
+    /// <param name="filePath">Đường dẫn file cần kiểm tra</param>
+    /// <param name="pattern">Mẫu glob (ví dụ: *.json, logs/**)</param>
+    /// <returns>True nếu file phù hợp với mẫu</returns>
+    private bool IsFileMatchPattern(string filePath, string pattern)
+    {
+        // Xử lý các ký tự đặc biệt trong mẫu glob
+        if (pattern.StartsWith("*"))
+        {
+            string extension = pattern.TrimStart('*');
+            return filePath.EndsWith(extension, StringComparison.OrdinalIgnoreCase);
+        }
+        
+        // Kiểm tra nếu filePath khớp chính xác với pattern
+        if (string.Equals(filePath, pattern, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        
+        // Kiểm tra nếu filePath là thư mục cụ thể
+        if (pattern.EndsWith("/") && filePath.StartsWith(pattern, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        
+        // Kiểm tra nếu filePath là một file trong thư mục được chỉ định
+        string directory = pattern;
+        if (directory.EndsWith("/*") || directory.EndsWith("/**"))
+        {
+            directory = directory.Substring(0, directory.LastIndexOf('/'));
+            return filePath.StartsWith(directory + "/", StringComparison.OrdinalIgnoreCase);
+        }
+        
+        return false;
     }
     
     /// <summary>
@@ -396,6 +481,7 @@ public class UpdaterLogic
         {
             // Log lỗi nhưng không ném ngoại lệ vì đây chỉ là dọn dẹp
             _logger.LogWarning(ex, "Có lỗi trong quá trình dọn dẹp sau khi cập nhật");
+            ErrorLogs.LogException(ErrorType.UpdateFailure, ex, _logger);
         }
         
         await Task.CompletedTask; // Để method là async

@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Management;
 using System.Threading.Tasks;
@@ -11,18 +10,10 @@ namespace CMSAgent.Monitoring
     /// <summary>
     /// Thu thập thông tin phần cứng của hệ thống.
     /// </summary>
-    public class HardwareInfoCollector
+    /// <param name="logger">Logger để ghi nhật ký.</param>
+    public class HardwareInfoCollector(ILogger<HardwareInfoCollector> logger)
     {
-        private readonly ILogger<HardwareInfoCollector> _logger;
-
-        /// <summary>
-        /// Khởi tạo một instance mới của HardwareInfoCollector.
-        /// </summary>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
-        public HardwareInfoCollector(ILogger<HardwareInfoCollector> logger)
-        {
-            _logger = logger;
-        }
+        private readonly ILogger<HardwareInfoCollector> _logger = logger;
 
         /// <summary>
         /// Thu thập thông tin phần cứng của hệ thống.
@@ -82,7 +73,7 @@ namespace CMSAgent.Monitoring
             {
                 string osInfo = string.Empty;
 
-                using (var searcher = new ManagementObjectSearcher("SELECT Caption, Version, OSArchitecture FROM Win32_OperatingSystem"))
+                using var searcher = new ManagementObjectSearcher("SELECT Caption, Version, OSArchitecture FROM Win32_OperatingSystem");
                 {
                     foreach (var os in searcher.Get())
                     {
@@ -113,7 +104,7 @@ namespace CMSAgent.Monitoring
             {
                 string cpuInfo = string.Empty;
 
-                using (var searcher = new ManagementObjectSearcher("SELECT Name, NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor"))
+                using var searcher = new ManagementObjectSearcher("SELECT Name, NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor");
                 {
                     foreach (var cpu in searcher.Get())
                     {
@@ -144,7 +135,7 @@ namespace CMSAgent.Monitoring
             {
                 string gpuInfo = string.Empty;
 
-                using (var searcher = new ManagementObjectSearcher("SELECT Name, AdapterRAM FROM Win32_VideoController"))
+                using var searcher = new ManagementObjectSearcher("SELECT Name, AdapterRAM FROM Win32_VideoController");
                 {
                     foreach (var gpu in searcher.Get())
                     {
@@ -172,7 +163,7 @@ namespace CMSAgent.Monitoring
                     // Xóa dấu phẩy cuối cùng nếu có
                     if (gpuInfo.EndsWith("; "))
                     {
-                        gpuInfo = gpuInfo.Substring(0, gpuInfo.Length - 2);
+                        gpuInfo = gpuInfo[..^2];
                     }
                 }
 
@@ -192,7 +183,7 @@ namespace CMSAgent.Monitoring
         {
             try
             {
-                using (var searcher = new ManagementObjectSearcher("SELECT TotalPhysicalMemory FROM Win32_ComputerSystem"))
+                using var searcher = new ManagementObjectSearcher("SELECT TotalPhysicalMemory FROM Win32_ComputerSystem");
                 {
                     foreach (var ram in searcher.Get())
                     {
@@ -219,7 +210,7 @@ namespace CMSAgent.Monitoring
         {
             try
             {
-                DriveInfo driveC = new DriveInfo("C:");
+                DriveInfo driveC = new("C:");
                 return driveC.TotalSize;
             }
             catch (Exception ex)

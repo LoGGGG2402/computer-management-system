@@ -10,10 +10,7 @@ namespace CMSUpdater.Services;
 public class RollbackManager
 {
     private readonly ILogger _logger;
-    private readonly int _agentProcessIdToWait;
-    private readonly string _newAgentPath;
     private readonly string _currentAgentInstallDir;
-    private readonly string _updaterLogDir;
     private readonly string _currentAgentVersion;
     private readonly ServiceHelper _serviceHelper;
     private readonly string _agentServiceName = "CMSAgentService";
@@ -23,26 +20,17 @@ public class RollbackManager
     /// Khởi tạo RollbackManager
     /// </summary>
     /// <param name="logger">Logger để ghi log</param>
-    /// <param name="agentProcessIdToWait">PID của tiến trình agent cũ cần dừng</param>
-    /// <param name="newAgentPath">Đường dẫn đến thư mục chứa file agent mới đã giải nén</param>
     /// <param name="currentAgentInstallDir">Đường dẫn thư mục cài đặt hiện tại</param>
-    /// <param name="updaterLogDir">Nơi ghi file log của updater</param>
     /// <param name="currentAgentVersion">Phiên bản agent hiện tại</param>
     /// <param name="serviceHelper">Helper để tương tác với Windows Service</param>
     public RollbackManager(
         ILogger logger, 
-        int agentProcessIdToWait, 
-        string newAgentPath, 
         string currentAgentInstallDir, 
-        string updaterLogDir, 
         string currentAgentVersion, 
         ServiceHelper serviceHelper)
     {
         _logger = logger;
-        _agentProcessIdToWait = agentProcessIdToWait;
-        _newAgentPath = newAgentPath;
         _currentAgentInstallDir = currentAgentInstallDir;
-        _updaterLogDir = updaterLogDir;
         _currentAgentVersion = currentAgentVersion;
         _serviceHelper = serviceHelper;
         _backupFolderPath = Path.Combine(_currentAgentInstallDir, "backup_" + _currentAgentVersion);
@@ -162,7 +150,7 @@ public class RollbackManager
     /// <summary>
     /// Sao chép toàn bộ thư mục và nội dung bên trong
     /// </summary>
-    private void CopyDirectory(string sourceDir, string destDir)
+    private static void CopyDirectory(string sourceDir, string destDir)
     {
         // Tạo thư mục đích nếu chưa tồn tại
         if (!Directory.Exists(destDir))

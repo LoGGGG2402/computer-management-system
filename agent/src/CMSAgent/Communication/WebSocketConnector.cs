@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Net.Http;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using CMSAgent.Common.Constants;
@@ -23,19 +21,36 @@ namespace CMSAgent.Communication
     /// <summary>
     /// Quản lý kết nối WebSocket (Socket.IO) với server.
     /// </summary>
-    public class WebSocketConnector : IWebSocketConnector, IDisposable
+    /// <remarks>
+    /// Khởi tạo một instance mới của WebSocketConnector.
+    /// </remarks>
+    /// <param name="logger">Logger để ghi nhật ký.</param>
+    /// <param name="configLoader">ConfigLoader để tải cấu hình.</param>
+    /// <param name="tokenProtector">Protector để mã hóa/giải mã token.</param>
+    /// <param name="stateManager">StateManager để quản lý trạng thái agent.</param>
+    /// <param name="options">Cấu hình WebSocket.</param>
+    /// <param name="commandExecutor">CommandExecutor để thực thi lệnh.</param>
+    /// <param name="updateHandler">UpdateHandler để xử lý cập nhật.</param>
+    /// <param name="httpClient">HttpClient để gửi request HTTP.</param>
+    public class WebSocketConnector(
+        ILogger<WebSocketConnector> logger,
+        ConfigLoader configLoader,
+        TokenProtector tokenProtector,
+        StateManager stateManager,
+        IOptions<WebSocketSettingsOptions> options,
+        CommandExecutor commandExecutor,
+        UpdateHandler updateHandler) : IWebSocketConnector, IDisposable
     {
-        private readonly ILogger<WebSocketConnector> _logger;
-        private readonly ConfigLoader _configLoader;
-        private readonly TokenProtector _tokenProtector;
-        private readonly StateManager _stateManager;
-        private readonly CommandExecutor _commandExecutor;
-        private readonly UpdateHandler _updateHandler;
-        private readonly HttpClientWrapper _httpClient;
-        private readonly WebSocketSettingsOptions _settings;
+        private readonly ILogger<WebSocketConnector> _logger = logger;
+        private readonly ConfigLoader _configLoader = configLoader;
+        private readonly TokenProtector _tokenProtector = tokenProtector;
+        private readonly StateManager _stateManager = stateManager;
+        private readonly CommandExecutor _commandExecutor = commandExecutor;
+        private readonly UpdateHandler _updateHandler = updateHandler;
+        private readonly WebSocketSettingsOptions _settings = options.Value;
         
         private SocketIOClient.SocketIO? _socket;
-        private SemaphoreSlim _connectionLock = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim _connectionLock = new(1, 1);
         private int _reconnectAttempts = 0;
         private Timer? _reconnectTimer;
         private bool _isReconnecting = false;
@@ -55,37 +70,6 @@ namespace CMSAgent.Communication
         /// Kiểm tra xem WebSocket có đang kết nối không.
         /// </summary>
         public bool IsConnected => _socket?.Connected ?? false;
-
-        /// <summary>
-        /// Khởi tạo một instance mới của WebSocketConnector.
-        /// </summary>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
-        /// <param name="configLoader">ConfigLoader để tải cấu hình.</param>
-        /// <param name="tokenProtector">Protector để mã hóa/giải mã token.</param>
-        /// <param name="stateManager">StateManager để quản lý trạng thái agent.</param>
-        /// <param name="options">Cấu hình WebSocket.</param>
-        /// <param name="commandExecutor">CommandExecutor để thực thi lệnh.</param>
-        /// <param name="updateHandler">UpdateHandler để xử lý cập nhật.</param>
-        /// <param name="httpClient">HttpClient để gửi request HTTP.</param>
-        public WebSocketConnector(
-            ILogger<WebSocketConnector> logger,
-            ConfigLoader configLoader,
-            TokenProtector tokenProtector,
-            StateManager stateManager,
-            IOptions<WebSocketSettingsOptions> options,
-            CommandExecutor commandExecutor,
-            UpdateHandler updateHandler,
-            HttpClientWrapper httpClient)
-        {
-            _logger = logger;
-            _configLoader = configLoader;
-            _tokenProtector = tokenProtector;
-            _stateManager = stateManager;
-            _settings = options.Value;
-            _commandExecutor = commandExecutor;
-            _updateHandler = updateHandler;
-            _httpClient = httpClient;
-        }
 
         /// <summary>
         /// Kết nối đến server qua WebSocket và xác thực.
@@ -245,6 +229,12 @@ namespace CMSAgent.Communication
                 return;
             }
 
+            if (_socket == null)
+            {
+                _logger.LogWarning("Không thể gửi cập nhật trạng thái: WebSocket là null");
+                return;
+            }
+
             try
             {
                 await _socket.EmitAsync(WebSocketEvents.AgentStatusUpdate, payload);
@@ -267,6 +257,12 @@ namespace CMSAgent.Communication
             if (!IsConnected)
             {
                 _logger.LogWarning("Không thể gửi kết quả lệnh: WebSocket không được kết nối");
+                return false;
+            }
+
+            if (_socket == null)
+            {
+                _logger.LogWarning("Không thể gửi kết quả lệnh: WebSocket là null");
                 return false;
             }
 

@@ -9,19 +9,11 @@ namespace CMSAgent.Core
     /// <summary>
     /// Lớp cơ sở cho các dịch vụ worker, cung cấp xử lý lỗi và cơ chế thử lại.
     /// </summary>
-    public abstract class WorkerServiceBase : BackgroundService
+    /// <param name="logger">Logger để ghi nhật ký.</param>
+    public abstract class WorkerServiceBase(ILogger logger) : BackgroundService
     {
-        protected readonly ILogger _logger;
+        protected readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         private bool _isStopping;
-
-        /// <summary>
-        /// Khởi tạo một instance mới của WorkerServiceBase.
-        /// </summary>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
-        protected WorkerServiceBase(ILogger logger)
-        {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
 
         /// <summary>
         /// Thực thi dịch vụ worker theo chu kỳ với cơ chế thử lại khi gặp lỗi.

@@ -2,18 +2,19 @@ using System;
 using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Reflection;
+using System.Xml.Linq;
+using System.Collections.Generic;
 using CMSAgent.Cli;
 using CMSAgent.Cli.Commands;
 using CMSAgent.Commands;
 using CMSAgent.Commands.Handlers;
-using CMSAgent.Common.Interfaces;
 using CMSAgent.Common.Models;
+using CMSAgent.Common.Logging;
 using CMSAgent.Communication;
 using CMSAgent.Configuration;
 using CMSAgent.Core;
-using CMSAgent.Logging;
 using CMSAgent.Monitoring;
-using CMSAgent.Persistence;
 using CMSAgent.Security;
 using CMSAgent.Update;
 using Microsoft.Extensions.Configuration;
@@ -32,9 +33,17 @@ namespace CMSAgent
     public class Program
     {
         private static bool _shouldRunAsWindowsService = true;
+        private static string _applicationName = "CMSAgent";
+        private static string _version = "1.0.0";
 
         public static async Task<int> Main(string[] args)
         {
+            // Đọc thông tin từ csproj file
+            LoadProjectInfo();
+
+            // Cấu hình Serilog trước khi khởi tạo host
+            ConfigureLogging();
+
             try
             {
                 IHost host = CreateHostBuilder(args).Build();
@@ -62,6 +71,88 @@ namespace CMSAgent
             }
         }
 
+        private static void LoadProjectInfo()
+        {
+            try
+            {
+                string projectFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "CMSAgent.csproj");
+                
+                // Nếu file không tồn tại ở thư mục hiện tại, thử tìm trong thư mục cha
+                if (!File.Exists(projectFilePath))
+                {
+                    string sourcePath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? string.Empty;
+                    
+                    // Kiểm tra sourcePath không null trước khi gọi Directory.GetParent
+                    if (!string.IsNullOrEmpty(sourcePath))
+                    {
+                        string? solutionDir = Directory.GetParent(sourcePath)?.Parent?.FullName;
+                        
+                        if (solutionDir != null)
+                        {
+                            string srcPath = Path.Combine(solutionDir, "src", "CMSAgent");
+                            projectFilePath = Path.Combine(srcPath, "CMSAgent.csproj");
+                        }
+                    }
+                }
+
+                if (File.Exists(projectFilePath))
+                {
+                    XDocument doc = XDocument.Load(projectFilePath);
+                    var propertyGroups = doc.Descendants("PropertyGroup");
+                    
+                    foreach (var propertyGroup in propertyGroups)
+                    {
+                        var description = propertyGroup.Element("Description");
+                        if (description != null && !string.IsNullOrWhiteSpace(description.Value))
+                        {
+                            _applicationName = description.Value;
+                        }
+                        
+                        var version = propertyGroup.Element("Version");
+                        if (version != null && !string.IsNullOrWhiteSpace(version.Value))
+                        {
+                            _version = version.Value;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Sử dụng giá trị mặc định nếu không đọc được từ file
+                Console.WriteLine($"Không thể đọc thông tin từ project file: {ex.Message}");
+            }
+        }
+
+        private static void ConfigureLogging()
+        {
+            // Đọc cấu hình từ appsettings.json
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
+
+            // Lấy thông tin từ assembly
+            var assembly = Assembly.GetExecutingAssembly();
+            
+            // Thêm thông tin từ assembly vào configuration
+            var configDictionary = new Dictionary<string, string?>
+            {
+                { "Application:Name", assembly.GetName().Name ?? _applicationName },
+                { "Application:Version", assembly.GetName().Version?.ToString() ?? _version }
+            };
+
+            // Tạo configuration mới kết hợp cấu hình hiện tại và thông tin từ assembly
+            var combinedConfig = new ConfigurationBuilder()
+                .AddConfiguration(configuration)
+                .AddInMemoryCollection(configDictionary)
+                .Build();
+
+            // Khởi tạo logger với cấu hình kết hợp
+            Log.Logger = (Serilog.ILogger)LoggingSetup.CreateLogger(combinedConfig);
+
+            Log.Information("Ứng dụng {ApplicationName} v{Version} đang khởi động...", _applicationName, _version);
+        }
+
         public static IHostBuilder CreateHostBuilder(string[] args)
         {
             var hostBuilder = Host.CreateDefaultBuilder(args)
@@ -75,6 +166,15 @@ namespace CMSAgent
                           .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: true, reloadOnChange: true)
                           .AddEnvironmentVariables("CMSAGENT_");
 
+                    // Thêm thông tin từ project vào configuration
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        {"Application:Name", _applicationName},
+                        {"Application:Version", _version},
+                        {"CMSAgent:AppName", _applicationName},
+                        {"CMSAgent:Version", _version}
+                    });
+
                     // Tạo thư mục dữ liệu nếu cần
                     var configuration = config.Build();
                     var dataDir = configuration["CMSAgent:DataDirectoryPath"] ?? "AppData";
@@ -87,7 +187,7 @@ namespace CMSAgent
                     // Xác định nếu cần chạy như một Windows Service
                     _shouldRunAsWindowsService = !(args.Length > 0 && args[0].Equals("debug", StringComparison.OrdinalIgnoreCase));
                 })
-                .ConfigureSerilog()
+                .UseSerilog() // Sử dụng Serilog đã được cấu hình trước đó
                 .ConfigureServices(ConfigureServices);
 
             // Cấu hình Windows Service nếu cần
@@ -95,7 +195,7 @@ namespace CMSAgent
             {
                 hostBuilder.UseWindowsService(options =>
                 {
-                    options.ServiceName = "CMSAgent";
+                    options.ServiceName = _applicationName;
                 });
             }
 
@@ -184,7 +284,6 @@ namespace CMSAgent
             services.AddSingleton<HardwareInfoCollector>();
             services.AddSingleton<UpdateHandler>();
             services.AddSingleton<CommandExecutor>();
-            services.AddSingleton<OfflineQueueManager>();
             
             // Đăng ký singleton mutex
             services.AddSingleton<SingletonMutex>(provider =>
@@ -197,7 +296,6 @@ namespace CMSAgent
             // Đăng ký Command Handlers
             services.AddTransient<ConsoleCommandHandler>();
             services.AddTransient<SystemActionCommandHandler>();
-            services.AddTransient<GetLogsCommandHandler>();
 
             // Đăng ký CLI Handlers
             services.AddTransient<ServiceUtils>();

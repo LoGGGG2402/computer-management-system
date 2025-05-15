@@ -12,7 +12,6 @@ $InnoSetupCompiler = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 
 # Đường dẫn đến các project files
 $CMSAgentProject = Join-Path $SourceDir "CMSAgent\CMSAgent.csproj"
-$CMSUpdaterProject = Join-Path $SourceDir "CMSUpdater\CMSUpdater.csproj"
 $CMSAgentCommonProject = Join-Path $SourceDir "CMSAgent.Common\CMSAgent.Common.csproj"
 $SetupScriptFile = Join-Path $SourceDir "Setup\SetupScript.iss"
 #endregion
@@ -234,7 +233,6 @@ try {
     # Cập nhật phiên bản trong các project
     Write-Host "Bắt đầu cập nhật phiên bản trong các project files..." -ForegroundColor Cyan
     Update-ProjectVersion -ProjectFile $CMSAgentProject -Version $Version
-    Update-ProjectVersion -ProjectFile $CMSUpdaterProject -Version $Version
     Update-ProjectVersion -ProjectFile $CMSAgentCommonProject -Version $Version
 
     # Cập nhật phiên bản trong file SetupScript.iss
@@ -251,11 +249,6 @@ try {
     $CMSAgentOutputDir = Join-Path $ReleaseDir "CMSAgent"
     Write-Host "Building CMSAgent..." -ForegroundColor Yellow
     Invoke-DotNetBuild -ProjectPath $CMSAgentProject -OutputPath $CMSAgentOutputDir
-
-    # Build CMSUpdater
-    $CMSUpdaterOutputDir = Join-Path $ReleaseDir "CMSUpdater"
-    Write-Host "Building CMSUpdater..." -ForegroundColor Yellow
-    Invoke-DotNetBuild -ProjectPath $CMSUpdaterProject -OutputPath $CMSUpdaterOutputDir
 
     # Coppy các file cấu hình bổ sung nếu cần
     Write-Host "Sao chép các file cấu hình bổ sung..." -ForegroundColor Yellow
@@ -286,7 +279,7 @@ catch {
 finally {
     # Khôi phục các file về trạng thái ban đầu
     Write-Host "Khôi phục các file về trạng thái ban đầu..." -ForegroundColor Yellow
-    Restore-ProjectFiles -ProjectFiles @($CMSAgentProject, $CMSUpdaterProject, $CMSAgentCommonProject) -SetupScriptFile $SetupScriptFile
+    Restore-ProjectFiles -ProjectFiles @($CMSAgentProject, $CMSAgentCommonProject) -SetupScriptFile $SetupScriptFile
     
     Write-Host "Quá trình build hoàn tất!" -ForegroundColor Green
 }

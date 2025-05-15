@@ -1,5 +1,3 @@
-
-
 [Setup]
 ; Tên ứng dụng và phiên bản
 AppName=CMSAgent
@@ -43,7 +41,6 @@ UsePreviousAppDir=no
 [Files]
 ; Sao chép file thực thi chính và các file hỗ trợ
 Source: "..\..\build\release\CMSAgent\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
-Source: "..\..\build\release\CMSUpdater\*"; DestDir: "{app}\CMSUpdater"; Flags: ignoreversion recursesubdirs
 
 ; Sao chép file cấu hình mặc định
 Source: "..\CMSAgent\appsettings.json"; DestDir: "{app}"; Flags: ignoreversion

@@ -64,10 +64,7 @@ namespace CMSAgent.Core
         /// <returns>True nếu lấy được khóa, ngược lại là False.</returns>
         public bool TryAcquire(TimeSpan timeout)
         {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(SingletonMutex));
-            }
+            ObjectDisposedException.ThrowIf(_disposed, this);
 
             if (_ownsHandle)
             {

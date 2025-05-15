@@ -1,7 +1,4 @@
 using System;
-using System.CommandLine;
-using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using CMSAgent.Common.Constants;
@@ -11,38 +8,26 @@ using CMSAgent.Common.Interfaces;
 using CMSAgent.Common.Models;
 using CMSAgent.Security;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace CMSAgent.Cli.Commands
 {
     /// <summary>
     /// Lớp xử lý lệnh configure để thiết lập cấu hình ban đầu cho agent.
     /// </summary>
-    public class ConfigureCommand
+    /// <param name="logger">Logger để ghi nhật ký.</param>
+    /// <param name="configLoader">ConfigLoader để tải và lưu cấu hình.</param>
+    /// <param name="httpClient">HttpClient để giao tiếp với server.</param>
+    /// <param name="tokenProtector">TokenProtector để mã hóa token.</param>
+    public class ConfigureCommand(
+        ILogger<ConfigureCommand> logger,
+        IConfigLoader configLoader,
+        IHttpClientWrapper httpClient,
+        TokenProtector tokenProtector)
     {
-        private readonly ILogger<ConfigureCommand> _logger;
-        private readonly IConfigLoader _configLoader;
-        private readonly IHttpClientWrapper _httpClient;
-        private readonly TokenProtector _tokenProtector;
-
-        /// <summary>
-        /// Khởi tạo một instance mới của ConfigureCommand.
-        /// </summary>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
-        /// <param name="configLoader">ConfigLoader để tải và lưu cấu hình.</param>
-        /// <param name="httpClient">HttpClient để giao tiếp với server.</param>
-        /// <param name="tokenProtector">TokenProtector để mã hóa token.</param>
-        public ConfigureCommand(
-            ILogger<ConfigureCommand> logger,
-            IConfigLoader configLoader,
-            IHttpClientWrapper httpClient,
-            TokenProtector tokenProtector)
-        {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _configLoader = configLoader ?? throw new ArgumentNullException(nameof(configLoader));
-            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-            _tokenProtector = tokenProtector ?? throw new ArgumentNullException(nameof(tokenProtector));
-        }
+        private readonly ILogger<ConfigureCommand> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        private readonly IConfigLoader _configLoader = configLoader ?? throw new ArgumentNullException(nameof(configLoader));
+        private readonly IHttpClientWrapper _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        private readonly TokenProtector _tokenProtector = tokenProtector ?? throw new ArgumentNullException(nameof(tokenProtector));
 
         /// <summary>
         /// Thực thi lệnh configure.
@@ -302,24 +287,24 @@ namespace CMSAgent.Cli.Commands
                 foreach (var nic in networkInterfaces)
                 {
                     if (nic.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up && 
-                        !nic.Description.ToLower().Contains("virtual") && 
-                        !nic.Description.ToLower().Contains("pseudo"))
+                        !nic.Description.ToLower().Contains("virtual", StringComparison.OrdinalIgnoreCase) && 
+                        !nic.Description.ToLower().Contains("pseudo", StringComparison.OrdinalIgnoreCase))
                     {
                         var mac = nic.GetPhysicalAddress();
                         if (mac != null)
                         {
-                            return BitConverter.ToString(mac.GetAddressBytes()).Replace("-", "");
+                            return Convert.ToHexString(mac.GetAddressBytes());
                         }
                     }
                 }
                 
                 // Fallback nếu không tìm thấy MAC phù hợp
-                return Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
+                return Guid.NewGuid().ToString("N")[..12].ToUpper();
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Không thể lấy địa chỉ MAC, sử dụng GUID thay thế");
-                return Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
+                return Guid.NewGuid().ToString("N")[..12].ToUpper();
             }
         }
 
@@ -329,7 +314,7 @@ namespace CMSAgent.Cli.Commands
         /// <param name="promptMessage">Thông báo nhắc nhở.</param>
         /// <param name="defaultValue">Giá trị mặc định (có thể null).</param>
         /// <returns>Chuỗi người dùng nhập.</returns>
-        private string PromptForInput(string promptMessage, string? defaultValue = null)
+        private static string PromptForInput(string promptMessage, string? defaultValue = null)
         {
             if (!string.IsNullOrEmpty(defaultValue))
             {
@@ -340,14 +325,14 @@ namespace CMSAgent.Cli.Commands
                 Console.Write($"{promptMessage} ");
             }
 
-            string input = Console.ReadLine()?.Trim();
+            string? input = Console.ReadLine()?.Trim();
 
             if (string.IsNullOrEmpty(input) && !string.IsNullOrEmpty(defaultValue))
             {
                 return defaultValue;
             }
 
-            return input;
+            return input ?? string.Empty;
         }
 
         /// <summary>
@@ -357,7 +342,7 @@ namespace CMSAgent.Cli.Commands
         /// <param name="value">Giá trị số nguyên đầu ra.</param>
         /// <param name="defaultValue">Giá trị mặc định.</param>
         /// <returns>True nếu parse thành công, ngược lại là False.</returns>
-        private bool TryParseInt(string promptMessage, out int value, string? defaultValue = null)
+        private static bool TryParseInt(string promptMessage, out int value, string? defaultValue = null)
         {
             string input = PromptForInput(promptMessage, defaultValue);
             

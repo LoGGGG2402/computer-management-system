@@ -37,20 +37,6 @@ namespace CMSAgent.Common.Models
         /// </summary>
         public HttpClientSettingsOptions HttpClientSettings { get; set; } = new();
 
-        /// <summary>
-        /// Cấu hình WebSocket
-        /// </summary>
-        public WebSocketSettingsOptions WebSocketSettings { get; set; } = new();
-
-        /// <summary>
-        /// Cấu hình thực thi lệnh
-        /// </summary>
-        public CommandExecutorSettingsOptions CommandExecutorSettings { get; set; } = new();
-
-        /// <summary>
-        /// Giới hạn tài nguyên
-        /// </summary>
-        public ResourceLimitsOptions ResourceLimits { get; set; } = new();
     }
 
     /// <summary>
@@ -92,15 +78,6 @@ namespace CMSAgent.Common.Models
         /// </summary>
         [Range(3600, 86400 * 7)]
         public int TokenRefreshIntervalSec { get; set; } = 86400;
-
-        /// <summary>
-        /// Cấu hình cho hàng đợi offline
-        /// </summary>
-        public OfflineQueueSettingsOptions OfflineQueue { get; set; } = new()
-        {
-            BasePath = string.Empty,
-            QueueDirectory = string.Empty
-        };
     }
 
     /// <summary>

@@ -6,56 +6,6 @@ namespace CMSAgent.Common.Enums
     public enum ErrorType
     {
         /// <summary>
-        /// Lỗi kết nối WebSocket.
-        /// </summary>
-        WEBSOCKET_CONNECTION_FAILED,
-
-        /// <summary>
-        /// Lỗi xác thực WebSocket.
-        /// </summary>
-        WEBSOCKET_AUTH_FAILED,
-
-        /// <summary>
-        /// Lỗi gửi yêu cầu HTTP.
-        /// </summary>
-        HTTP_REQUEST_FAILED,
-
-        /// <summary>
-        /// Lỗi tải file cấu hình.
-        /// </summary>
-        CONFIG_LOAD_FAILED,
-
-        /// <summary>
-        /// Lỗi xác thực cấu hình không hợp lệ.
-        /// </summary>
-        CONFIG_VALIDATION_FAILED,
-
-        /// <summary>
-        /// Lỗi giải mã token.
-        /// </summary>
-        TOKEN_DECRYPTION_FAILED,
-
-        /// <summary>
-        /// Lỗi thu thập thông tin phần cứng.
-        /// </summary>
-        HARDWARE_INFO_COLLECTION_FAILED,
-
-        /// <summary>
-        /// Lỗi báo cáo trạng thái lên server.
-        /// </summary>
-        STATUS_REPORTING_FAILED,
-
-        /// <summary>
-        /// Lỗi thực thi lệnh.
-        /// </summary>
-        COMMAND_EXECUTION_FAILED,
-
-        /// <summary>
-        /// Lỗi hàng đợi lệnh đã đầy.
-        /// </summary>
-        COMMAND_QUEUE_FULL,
-
-        /// <summary>
         /// Lỗi tải gói cập nhật.
         /// </summary>
         UPDATE_DOWNLOAD_FAILED,
@@ -65,44 +15,35 @@ namespace CMSAgent.Common.Enums
         /// </summary>
         UPDATE_CHECKSUM_MISMATCH,
 
+        
         /// <summary>
-        /// Lỗi giải nén gói cập nhật.
+        /// Lỗi quá trình cập nhật tổng thể.
         /// </summary>
-        UPDATE_EXTRACTION_FAILED,
-
+        UpdateFailure,
+        
         /// <summary>
-        /// Lỗi thực hiện rollback sau khi cập nhật thất bại.
+        /// Lỗi quá trình sao lưu trước khi cập nhật.
         /// </summary>
-        UPDATE_ROLLBACK_FAILED,
-
+        BackupFailure,
+        
         /// <summary>
-        /// Lỗi khởi động service sau khi cập nhật.
+        /// Lỗi quá trình triển khai phiên bản mới.
         /// </summary>
-        UPDATE_SERVICE_START_FAILED,
-
+        DeploymentFailure,
+        
         /// <summary>
-        /// Lỗi ghi log.
+        /// Lỗi quá trình rollback sau khi cập nhật thất bại.
         /// </summary>
-        LOGGING_FAILED,
-
+        RollbackFailure,
+        
         /// <summary>
-        /// Lỗi vượt quá giới hạn tài nguyên.
+        /// Lỗi thao tác với Windows Service.
         /// </summary>
-        RESOURCE_LIMIT_EXCEEDED,
-
+        ServiceOperationFailure,
+        
         /// <summary>
-        /// Lỗi ngoại lệ không được xử lý.
+        /// Lỗi do service không ổn định sau khi cập nhật.
         /// </summary>
-        UNHANDLED_EXCEPTION,
-
-        /// <summary>
-        /// Lỗi khi xử lý queue offline.
-        /// </summary>
-        OFFLINE_QUEUE_ERROR,
-
-        /// <summary>
-        /// Yêu cầu tải lên log từ server.
-        /// </summary>
-        LOG_UPLOAD_REQUESTED
+        ServiceInstability
     }
 }

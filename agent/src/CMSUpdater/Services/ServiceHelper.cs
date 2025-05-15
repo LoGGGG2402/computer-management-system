@@ -9,18 +9,9 @@ namespace CMSUpdater.Services;
 /// Lớp tiện ích tương tác với Windows Service Control Manager (SCM) cho Updater
 /// </summary>
 [SupportedOSPlatform("windows")]
-public class ServiceHelper
+public class ServiceHelper(ILogger logger)
 {
-    private readonly ILogger _logger;
-    
-    /// <summary>
-    /// Khởi tạo ServiceHelper với logger
-    /// </summary>
-    /// <param name="logger">Logger để ghi log</param>
-    public ServiceHelper(ILogger logger)
-    {
-        _logger = logger;
-    }
+    private readonly ILogger _logger = logger;
     
     /// <summary>
     /// Khởi động service agent

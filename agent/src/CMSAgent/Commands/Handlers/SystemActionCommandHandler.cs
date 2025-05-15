@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using CMSAgent.Common.DTOs;
-using CMSAgent.Common.Enums;
 using CMSAgent.Common.Interfaces;
 using CMSAgent.Common.Models;
 using Microsoft.Extensions.Logging;
@@ -14,10 +13,9 @@ namespace CMSAgent.Commands.Handlers
     /// <summary>
     /// Handler để thực thi các lệnh hệ thống (khởi động lại, tắt máy, v.v).
     /// </summary>
-    public class SystemActionCommandHandler : ICommandHandler
+    public class SystemActionCommandHandler(ILogger<SystemActionCommandHandler> logger) : ICommandHandler
     {
-        private readonly ILogger<SystemActionCommandHandler> _logger;
-        private readonly CommandExecutorSettingsOptions _settings;
+        private readonly ILogger<SystemActionCommandHandler> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         // Các hành động hệ thống được hỗ trợ
         private enum SystemAction
@@ -30,19 +28,6 @@ namespace CMSAgent.Commands.Handlers
         }
 
         /// <summary>
-        /// Khởi tạo một instance mới của SystemActionCommandHandler.
-        /// </summary>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
-        /// <param name="options">Cấu hình thực thi lệnh.</param>
-        public SystemActionCommandHandler(
-            ILogger<SystemActionCommandHandler> logger,
-            IOptions<CommandExecutorSettingsOptions> options)
-        {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _settings = options?.Value ?? throw new ArgumentNullException(nameof(options));
-        }
-
-        /// <summary>
         /// Thực thi một lệnh hệ thống.
         /// </summary>
         /// <param name="command">Thông tin lệnh cần thực thi.</param>
@@ -50,8 +35,7 @@ namespace CMSAgent.Commands.Handlers
         /// <returns>Kết quả thực thi lệnh.</returns>
         public async Task<CommandResultPayload> ExecuteAsync(CommandPayload command, CancellationToken cancellationToken)
         {
-            if (command == null)
-                throw new ArgumentNullException(nameof(command));
+            ArgumentNullException.ThrowIfNull(command);
 
             _logger.LogInformation("Bắt đầu thực thi lệnh hệ thống: {CommandId}", command.commandId);
 

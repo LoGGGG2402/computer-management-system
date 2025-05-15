@@ -1,8 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
-using System.Threading;
 using System.Threading.Tasks;
 using CMSAgent.Common.DTOs;
 using Microsoft.Extensions.Logging;
@@ -12,23 +10,14 @@ namespace CMSAgent.Monitoring
     /// <summary>
     /// Thu thập thông tin tài nguyên hệ thống.
     /// </summary>
-    public class SystemMonitor
+    /// <param name="logger">Logger để ghi nhật ký.</param>
+    public class SystemMonitor(ILogger<SystemMonitor> logger)
     {
-        private readonly ILogger<SystemMonitor> _logger;
+        private readonly ILogger<SystemMonitor> _logger = logger;
         private PerformanceCounter? _cpuCounter;
         private bool _isInitialized = false;
         private long _ramTotal = 0;
-        private string _systemDrive;
-
-        /// <summary>
-        /// Khởi tạo một instance mới của SystemMonitor.
-        /// </summary>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
-        public SystemMonitor(ILogger<SystemMonitor> logger)
-        {
-            _logger = logger;
-            _systemDrive = "C:";
-        }
+        private readonly string _systemDrive = "C:";
 
         /// <summary>
         /// Khởi tạo các bộ đếm hiệu suất và thành phần giám sát.
@@ -183,7 +172,7 @@ namespace CMSAgent.Monitoring
         {
             try
             {
-                DriveInfo driveInfo = new DriveInfo(_systemDrive);
+                DriveInfo driveInfo = new(_systemDrive);
                 double totalSize = driveInfo.TotalSize;
                 double freeSpace = driveInfo.AvailableFreeSpace;
                 double usedPercentage = 100.0 * (1.0 - freeSpace / totalSize);
@@ -206,7 +195,7 @@ namespace CMSAgent.Monitoring
             {
                 var process = new Process
                 {
-                    StartInfo = new ProcessStartInfo
+                    StartInfo = new()
                     {
                         FileName = "wmic",
                         Arguments = "ComputerSystem get TotalPhysicalMemory",

@@ -21,6 +21,8 @@ namespace CMSAgent.Configuration
         private readonly string _installPath = string.Empty;
         private readonly string _dataPath;
         private readonly string _runtimeConfigFileName = "runtime_config.json";
+        
+        private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
         /// <summary>
         /// Cấu hình hiện tại của agent từ appsettings.json
@@ -90,7 +92,7 @@ namespace CMSAgent.Configuration
         {
             var config = new RuntimeConfig
             {
-                AgentId = "UNCONFIGURED-" + Guid.NewGuid().ToString("N").Substring(0, 8),
+                AgentId = "UNCONFIGURED-" + Guid.NewGuid().ToString("N")[..8],
                 RoomConfig = new RoomConfig
                 {
                     RoomName = "Default",
@@ -116,7 +118,7 @@ namespace CMSAgent.Configuration
                 if (directoryPath != null)
                 {
                     Directory.CreateDirectory(directoryPath);
-                    var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+                    var json = JsonSerializer.Serialize(config, _jsonOptions);
                     await File.WriteAllTextAsync(_runtimeConfigPath, json);
                     _runtimeConfigCache = config;
                     _logger.LogInformation("Đã lưu cấu hình runtime vào {Path}", _runtimeConfigPath);

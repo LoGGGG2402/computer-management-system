@@ -29,10 +29,5 @@ namespace CMSAgent.Common.DTOs
         /// Checksum SHA256 của gói cập nhật.
         /// </summary>
         public required string checksum_sha256 { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Ghi chú về phiên bản mới.
-        /// </summary>
-        public required string notes { get; set; } = string.Empty;
     }
 }

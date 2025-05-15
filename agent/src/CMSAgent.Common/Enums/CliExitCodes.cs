@@ -45,20 +45,11 @@ namespace CMSAgent.Common.Enums
         /// </summary>
         ServiceNotInstalled = 7,
 
-        /// <summary>
-        /// Tham số không hợp lệ.
-        /// </summary>
-        InvalidArguments = 8,
 
         /// <summary>
         /// Đầu vào không hợp lệ.
         /// </summary>
         InvalidInput = 9,
 
-        /// <summary>
-        /// Mã cơ sở cho lỗi của CMSUpdater.
-        /// Các mã lỗi của updater sẽ được cộng thêm vào giá trị này.
-        /// </summary>
-        UpdaterErrorBase = 10
     }
 }

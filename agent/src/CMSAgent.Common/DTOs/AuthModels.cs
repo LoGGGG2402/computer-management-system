@@ -29,12 +29,6 @@ namespace CMSAgent.Common.DTOs
         /// Trạng thái của yêu cầu: "success" hoặc "error".
         /// </summary>
         public required string status { get; set; } = string.Empty;
-
-        /// <summary>
-        /// ID của agent (chỉ được trả về khi thành công).
-        /// </summary>
-        public required string agentId { get; set; } = string.Empty;
-
         /// <summary>
         /// Token xác thực (chỉ được trả về khi thành công).
         /// </summary>

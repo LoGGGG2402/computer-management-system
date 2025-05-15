@@ -14,10 +14,5 @@ namespace CMSAgent.Common.Enums
         /// Lệnh hành động hệ thống (ví dụ: khởi động lại, tắt máy).
         /// </summary>
         SYSTEM_ACTION,
-
-        /// <summary>
-        /// Lệnh yêu cầu thu thập và gửi log.
-        /// </summary>
-        GET_LOGS
     }
 }

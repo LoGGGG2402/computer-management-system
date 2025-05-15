@@ -14,12 +14,6 @@ namespace CMSAgent.Common.Enums
         /// Đang thiết lập kết nối đến server.
         /// </summary>
         CONNECTING,
-
-        /// <summary>
-        /// Đang trong quá trình kết nối và xác thực WebSocket với server.
-        /// </summary>
-        AUTHENTICATING,
-
         /// <summary>
         /// Xác thực với server thất bại.
         /// </summary>
@@ -49,21 +43,10 @@ namespace CMSAgent.Common.Enums
         /// Đang trong quá trình tải xuống và chuẩn bị cho việc cập nhật phiên bản mới.
         /// </summary>
         UPDATING,
-
-        /// <summary>
-        /// Gặp lỗi nghiêm trọng không thể phục hồi (ví dụ: cấu hình hỏng), không thể hoạt động.
-        /// </summary>
-        ERROR,
-
         /// <summary>
         /// Lỗi cấu hình không hợp lệ.
         /// </summary>
         CONFIGURATION_ERROR,
-        
-        /// <summary>
-        /// Đang trong quá trình dừng hoạt động một cách an toàn (ví dụ: khi SCM yêu cầu).
-        /// </summary>
-        STOPPING,
 
         /// <summary>
         /// Đang trong quá trình tắt hoàn toàn dịch vụ.

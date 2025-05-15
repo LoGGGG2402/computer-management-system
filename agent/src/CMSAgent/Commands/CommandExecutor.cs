@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using CMSAgent.Common.DTOs;
 using CMSAgent.Common.Models;
 using CMSAgent.Common.Interfaces;
-using CMSAgent.Commands;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -19,10 +18,9 @@ namespace CMSAgent.Commands
         private readonly ILogger<CommandExecutor> _logger;
         private readonly CommandHandlerFactory _commandHandlerFactory;
         private readonly IWebSocketConnector _webSocketConnector;
-        private readonly IOfflineQueueManager _offlineQueueManager;
         private readonly CommandExecutorSettingsOptions _settings;
         
-        private readonly ConcurrentQueue<CommandPayload> _commandQueue = new ConcurrentQueue<CommandPayload>();
+        private readonly ConcurrentQueue<CommandPayload> _commandQueue = new();
         private readonly SemaphoreSlim _executionSemaphore;
         private bool _isProcessing = false;
 
@@ -32,19 +30,16 @@ namespace CMSAgent.Commands
         /// <param name="logger">Logger để ghi nhật ký.</param>
         /// <param name="commandHandlerFactory">Factory để tạo handler thực thi lệnh.</param>
         /// <param name="webSocketConnector">WebSocket connector để gửi kết quả lệnh.</param>
-        /// <param name="offlineQueueManager">Manager của queue offline.</param>
         /// <param name="settingsOptions">Cấu hình thực thi lệnh.</param>
         public CommandExecutor(
             ILogger<CommandExecutor> logger,
             CommandHandlerFactory commandHandlerFactory,
             IWebSocketConnector webSocketConnector,
-            IOfflineQueueManager offlineQueueManager,
             IOptions<CommandExecutorSettingsOptions> settingsOptions)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _commandHandlerFactory = commandHandlerFactory ?? throw new ArgumentNullException(nameof(commandHandlerFactory));
             _webSocketConnector = webSocketConnector ?? throw new ArgumentNullException(nameof(webSocketConnector));
-            _offlineQueueManager = offlineQueueManager ?? throw new ArgumentNullException(nameof(offlineQueueManager));
             _settings = settingsOptions?.Value ?? throw new ArgumentNullException(nameof(settingsOptions));
             
             // Khởi tạo semaphore với số lượng lệnh có thể thực thi đồng thời
@@ -58,8 +53,7 @@ namespace CMSAgent.Commands
         /// <returns>True nếu thêm thành công, False nếu hàng đợi đã đầy.</returns>
         public bool TryEnqueueCommand(CommandPayload command)
         {
-            if (command == null)
-                throw new ArgumentNullException(nameof(command));
+            ArgumentNullException.ThrowIfNull(command);
 
             // Kiểm tra xem hàng đợi đã đầy chưa
             if (_commandQueue.Count >= _settings.MaxQueueSize)
@@ -152,7 +146,7 @@ namespace CMSAgent.Commands
             _logger.LogInformation("Bắt đầu thực thi lệnh {CommandType}: {CommandId}", 
                 command.commandType, command.commandId);
 
-            CommandResultPayload? result = null;
+            CommandResultPayload result;
 
             try
             {
@@ -185,12 +179,12 @@ namespace CMSAgent.Commands
                 };
             }
             
-            // Gửi kết quả lên server (hoặc thêm vào queue offline nếu mất kết nối)
+            // Gửi kết quả lên server
             await SendCommandResultAsync(result);
         }
 
         /// <summary>
-        /// Gửi kết quả lệnh lên server hoặc thêm vào queue offline.
+        /// Gửi kết quả lệnh lên server.
         /// </summary>
         /// <param name="result">Kết quả lệnh cần gửi.</param>
         /// <returns>Task đại diện cho việc gửi kết quả.</returns>
@@ -198,33 +192,20 @@ namespace CMSAgent.Commands
         {
             try
             {
-                // Gửi qua WebSocket nếu đang kết nối
-                if (_webSocketConnector.IsConnected)
+                // Thử gửi kết quả qua WebSocket trước
+                if (await _webSocketConnector.SendCommandResultAsync(result))
                 {
-                    await _webSocketConnector.SendCommandResultAsync(result);
+                    _logger.LogInformation("Đã gửi kết quả lệnh {CommandId} thành công qua WebSocket", 
+                        result.commandId);
                     return;
                 }
                 
-                // Không có kết nối, thêm vào queue offline
-                _logger.LogInformation("WebSocket không được kết nối, thêm kết quả lệnh {CommandId} vào hàng đợi offline", 
+                _logger.LogWarning("Không thể gửi kết quả lệnh {CommandId} qua WebSocket (server có thể không khả dụng)", 
                     result.commandId);
-                
-                await _offlineQueueManager.EnqueueCommandResultAsync(result);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi khi gửi kết quả lệnh {CommandId}", result.commandId);
-                
-                // Thử thêm vào queue offline trong trường hợp lỗi
-                try
-                {
-                    await _offlineQueueManager.EnqueueCommandResultAsync(result);
-                }
-                catch (Exception queueEx)
-                {
-                    _logger.LogError(queueEx, "Không thể thêm kết quả lệnh {CommandId} vào hàng đợi offline", 
-                        result.commandId);
-                }
             }
         }
     }

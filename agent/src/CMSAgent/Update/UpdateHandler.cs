@@ -1,14 +1,17 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Net.Http;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using System.IO.Compression;
+using System.Text.Json;
 using CMSAgent.Common.Constants;
 using CMSAgent.Common.DTOs;
 using CMSAgent.Common.Enums;
 using CMSAgent.Common.Interfaces;
+using CMSAgent.Common.Logging;
 using CMSAgent.Common.Models;
 using CMSAgent.Core;
 using Microsoft.Extensions.Hosting;
@@ -20,42 +23,23 @@ namespace CMSAgent.Update
     /// <summary>
     /// Xử lý logic kiểm tra, tải xuống và khởi chạy quá trình cập nhật.
     /// </summary>
-    public class UpdateHandler
+    public class UpdateHandler(
+        ILogger<UpdateHandler> logger,
+        IHttpClientWrapper httpClient,
+        IConfigLoader configLoader,
+        StateManager stateManager,
+        IHostApplicationLifetime applicationLifetime,
+        IOptions<AgentSpecificSettingsOptions> options)
     {
-        private readonly ILogger<UpdateHandler> _logger;
-        private readonly IHttpClientWrapper _httpClient;
-        private readonly IConfigLoader _configLoader;
-        private readonly StateManager _stateManager;
-        private readonly IHostApplicationLifetime _applicationLifetime;
-        private readonly AgentSpecificSettingsOptions _settings;
+        private readonly ILogger<UpdateHandler> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        private readonly IHttpClientWrapper _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        private readonly IConfigLoader _configLoader = configLoader ?? throw new ArgumentNullException(nameof(configLoader));
+        private readonly StateManager _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
+        private readonly IHostApplicationLifetime _applicationLifetime = applicationLifetime ?? throw new ArgumentNullException(nameof(applicationLifetime));
+        private readonly AgentSpecificSettingsOptions _settings = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
         private bool _isUpdating = false;
-        private readonly SemaphoreSlim _updateLock = new SemaphoreSlim(1, 1);
-
-        /// <summary>
-        /// Khởi tạo một instance mới của UpdateHandler.
-        /// </summary>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
-        /// <param name="httpClient">HttpClient để tải xuống các gói cập nhật.</param>
-        /// <param name="configLoader">ConfigLoader để tải cấu hình agent.</param>
-        /// <param name="stateManager">Quản lý trạng thái agent.</param>
-        /// <param name="applicationLifetime">ApplicationLifetime để dừng agent sau khi cập nhật.</param>
-        /// <param name="options">Cấu hình đặc biệt cho agent.</param>
-        public UpdateHandler(
-            ILogger<UpdateHandler> logger,
-            IHttpClientWrapper httpClient,
-            IConfigLoader configLoader,
-            StateManager stateManager,
-            IHostApplicationLifetime applicationLifetime,
-            IOptions<AgentSpecificSettingsOptions> options)
-        {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-            _configLoader = configLoader ?? throw new ArgumentNullException(nameof(configLoader));
-            _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
-            _applicationLifetime = applicationLifetime ?? throw new ArgumentNullException(nameof(applicationLifetime));
-            _settings = options?.Value ?? throw new ArgumentNullException(nameof(options));
-        }
+        private readonly SemaphoreSlim _updateLock = new(1, 1);
 
         /// <summary>
         /// Kiểm tra xem có phiên bản mới của agent không.
@@ -101,7 +85,7 @@ namespace CMSAgent.Update
                     if (response.update_available)
                     {
                         _logger.LogInformation("Phát hiện phiên bản mới: {NewVersion}", response.version);
-                        
+
                         // Xử lý thông tin cập nhật
                         await ProcessUpdateAsync(response);
                     }
@@ -118,6 +102,7 @@ namespace CMSAgent.Update
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi khi kiểm tra cập nhật");
+                ErrorLogs.LogException(ErrorType.UPDATE_DOWNLOAD_FAILED, ex, _logger);
             }
         }
 
@@ -128,8 +113,7 @@ namespace CMSAgent.Update
         /// <returns>Task đại diện cho quá trình cập nhật.</returns>
         public async Task ProcessUpdateAsync(UpdateCheckResponse updateInfo)
         {
-            if (updateInfo == null)
-                throw new ArgumentNullException(nameof(updateInfo));
+            ArgumentNullException.ThrowIfNull(updateInfo);
 
             // Sử dụng semaphore để đảm bảo chỉ có một quá trình cập nhật diễn ra cùng lúc
             await _updateLock.WaitAsync();
@@ -143,7 +127,7 @@ namespace CMSAgent.Update
                 }
 
                 _isUpdating = true;
-                
+
                 // Cập nhật trạng thái agent sang UPDATING
                 var previousState = _stateManager.CurrentState;
                 _stateManager.SetState(AgentState.UPDATING);
@@ -155,26 +139,35 @@ namespace CMSAgent.Update
                 {
                     // Tạo thư mục tạm để tải xuống
                     Directory.CreateDirectory(tempDirectory);
-                    
+
                     // Đường dẫn tới file cập nhật
                     downloadPath = Path.Combine(tempDirectory, $"CMSUpdater_{updateInfo.version}.zip");
 
                     // Tải xuống gói cập nhật
                     _logger.LogInformation("Đang tải xuống gói cập nhật từ {DownloadUrl}", updateInfo.download_url);
-                    
+
                     // Lấy thông tin đăng nhập
                     string agentId = _configLoader.GetAgentId();
                     string encryptedToken = _configLoader.GetEncryptedAgentToken();
 
                     using (var fileStream = File.Create(downloadPath))
                     {
-                        // Tải file cập nhật
-                        var downloadStream = await _httpClient.DownloadFileAsync(
-                            updateInfo.download_url,
-                            agentId,
-                            encryptedToken);
-                            
-                        await downloadStream.CopyToAsync(fileStream);
+                        try
+                        {
+                            // Tải file cập nhật
+                            var downloadStream = await _httpClient.DownloadFileAsync(
+                                updateInfo.download_url,
+                                agentId,
+                                encryptedToken);
+
+                            await downloadStream.CopyToAsync(fileStream);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Không thể tải xuống gói cập nhật");
+                            ErrorLogs.LogException(ErrorType.UPDATE_DOWNLOAD_FAILED, ex, _logger);
+                            throw;
+                        }
                     }
 
                     // Kiểm tra checksum
@@ -183,44 +176,72 @@ namespace CMSAgent.Update
                     if (!await VerifyChecksumAsync(downloadPath, updateInfo.checksum_sha256))
                     {
                         _logger.LogError("Kiểm tra tính toàn vẹn thất bại: Checksum không khớp");
+                        ErrorLogs.LogError(ErrorType.UPDATE_CHECKSUM_MISMATCH, 
+                            "Kiểm tra tính toàn vẹn thất bại: Checksum không khớp", 
+                            new { ExpectedChecksum = updateInfo.checksum_sha256, FilePath = downloadPath }, 
+                            _logger);
                         return;
                     }
-
-                    // Lưu đường dẫn cài đặt
-                    string installDirectory = AppDomain.CurrentDomain.BaseDirectory;
                     
-                    // Lưu thông tin cập nhật vào registry hoặc file cấu hình
-                    // để CMSUpdater có thể sử dụng sau khi agent được khởi động lại
-                    _logger.LogInformation("Đang chuẩn bị CMSUpdater");
-                    
-                    // Tạo thông tin cài đặt cho CMSUpdater
-                    if (!PrepareCMSUpdater(downloadPath, installDirectory, updateInfo.version))
-                    {
-                        _logger.LogError("Không thể chuẩn bị CMSUpdater");
-                        return;
-                    }
+                    _logger.LogInformation("Đang chuẩn bị khởi chạy CMSUpdater");
 
                     // Thông báo chuẩn bị khởi động lại
                     _logger.LogWarning("Agent sẽ dừng và khởi chạy CMSUpdater để hoàn tất quá trình cập nhật");
 
-                    // Khởi chạy CMSUpdater và thoát agent
-                    if (await StartCMSUpdaterAsync())
+                    // Tạo thư mục giải nén tạm thời cho gói cập nhật (chứa cả agent mới và updater mới)
+                    string extractedUpdateDir = Path.Combine(Path.GetTempPath(), $"cmsagent_update_extracted_{DateTime.UtcNow.Ticks}");
+                    Directory.CreateDirectory(extractedUpdateDir);
+
+                    try
                     {
-                        // Dừng host để service được khởi động lại sau khi cập nhật
-                        _logger.LogInformation("Đang dừng agent để hoàn tất quá trình cập nhật");
-                        _applicationLifetime.StopApplication();
+                        _logger.LogInformation("Giải nén gói cập nhật {PackagePath} vào {ExtractDir}", downloadPath, extractedUpdateDir);
+                        ZipFile.ExtractToDirectory(downloadPath, extractedUpdateDir, true);
+
+                        // Khởi chạy CMSUpdater và thoát agent
+                        // Truyền downloadPath (đường dẫn file zip) và extractedUpdateDir (đường dẫn thư mục đã giải nén)
+                        if (await StartCMSUpdaterAsync(downloadPath, extractedUpdateDir)) // MODIFIED: Added extractedUpdateDir
+                        {
+                            // Dừng host để service được khởi động lại sau khi cập nhật
+                            _logger.LogInformation("Đang dừng agent để hoàn tất quá trình cập nhật");
+                            _applicationLifetime.StopApplication();
+                        }
+                        else
+                        {
+                            _logger.LogError("Không thể khởi chạy CMSUpdater");
+                            ErrorLogs.LogError(ErrorType.UpdateFailure, "Không thể khởi chạy CMSUpdater", new { }, _logger);
+                            
+                            // Khôi phục trạng thái trước đó
+                            _stateManager.SetState(previousState);
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        _logger.LogError("Không thể khởi chạy CMSUpdater");
-                        
-                        // Khôi phục trạng thái trước đó
+                        _logger.LogError(ex, "Lỗi trong quá trình cập nhật khi giải nén hoặc khởi chạy updater");
+                        ErrorLogs.LogException(ErrorType.UpdateFailure, ex, _logger);
                         _stateManager.SetState(previousState);
+                    }
+                    finally
+                    {
+                        // Dọn dẹp thư mục giải nén extractedUpdateDir sau khi updater đã được khởi chạy (hoặc nếu có lỗi)
+                        // CMSUpdater sẽ tự copy những gì nó cần từ extractedUpdateDir
+                        try
+                        {
+                            if (Directory.Exists(extractedUpdateDir))
+                            {
+                                Directory.Delete(extractedUpdateDir, true);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Không thể xóa thư mục giải nén tạm thời: {ExtractDir}", extractedUpdateDir);
+                            ErrorLogs.LogException(ErrorType.UpdateFailure, ex, _logger);
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Lỗi trong quá trình cập nhật");
+                    ErrorLogs.LogException(ErrorType.UpdateFailure, ex, _logger);
                     
                     // Khôi phục trạng thái trước đó
                     _stateManager.SetState(previousState);
@@ -229,7 +250,7 @@ namespace CMSAgent.Update
                 {
                     _isUpdating = false;
 
-                    // Dọn dẹp thư mục tạm nếu cần
+                    // Dọn dẹp thư mục tạm downloadPath nếu cần
                     try
                     {
                         if (Directory.Exists(tempDirectory))
@@ -240,6 +261,7 @@ namespace CMSAgent.Update
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "Không thể xóa thư mục tạm sau khi cập nhật: {TempDirectory}", tempDirectory);
+                        ErrorLogs.LogException(ErrorType.UpdateFailure, ex, _logger);
                     }
                 }
             }
@@ -259,69 +281,22 @@ namespace CMSAgent.Update
         {
             try
             {
-                using (var sha256 = SHA256.Create())
-                using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                {
-                    byte[] hash = await sha256.ComputeHashAsync(stream);
-                    string actualChecksum = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
-                    
-                    bool isValid = string.Equals(actualChecksum, expectedChecksum, StringComparison.OrdinalIgnoreCase);
-                    
-                    _logger.LogDebug("Kiểm tra checksum: Mong đợi = {ExpectedChecksum}, Thực tế = {ActualChecksum}, Kết quả = {IsValid}",
-                        expectedChecksum, actualChecksum, isValid);
-                    
-                    return isValid;
-                }
+                using var sha256 = SHA256.Create();
+                using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                byte[] hash = await sha256.ComputeHashAsync(stream);
+                string actualChecksum = Convert.ToHexStringLower(hash);
+
+                bool isValid = string.Equals(actualChecksum, expectedChecksum, StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogDebug("Kiểm tra checksum: Mong đợi = {ExpectedChecksum}, Thực tế = {ActualChecksum}, Kết quả = {IsValid}",
+                    expectedChecksum, actualChecksum, isValid);
+
+                return isValid;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi khi tính toán checksum cho file {FilePath}", filePath);
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Chuẩn bị CMSUpdater với thông tin cần thiết.
-        /// </summary>
-        /// <param name="updaterPackagePath">Đường dẫn đến gói cập nhật.</param>
-        /// <param name="installDirectory">Thư mục cài đặt.</param>
-        /// <param name="newVersion">Phiên bản mới.</param>
-        /// <returns>True nếu chuẩn bị thành công, ngược lại là False.</returns>
-        private bool PrepareCMSUpdater(string updaterPackagePath, string installDirectory, string newVersion)
-        {
-            try
-            {
-                // Tìm đường dẫn đến CMSUpdater
-                string updaterExePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "CMSUpdater", "CMSUpdater.exe");
-                
-                if (!File.Exists(updaterExePath))
-                {
-                    _logger.LogError("Không tìm thấy CMSUpdater tại {UpdaterPath}", updaterExePath);
-                    return false;
-                }
-
-                // Tạo file cấu hình cho CMSUpdater
-                string updaterConfigPath = Path.Combine(Path.GetDirectoryName(updaterExePath) ?? string.Empty, "update_config.json");
-                
-                // Tạo nội dung cấu hình
-                string configContent = $@"{{
-  ""package_path"": ""{updaterPackagePath.Replace("\\", "\\\\")}"",
-  ""install_directory"": ""{installDirectory.Replace("\\", "\\\\")}"",
-  ""new_version"": ""{newVersion}"",
-  ""backup_directory"": ""{Path.Combine(Path.GetTempPath(), "CMSAgent_backup").Replace("\\", "\\\\")}"",
-  ""timestamp"": ""{DateTime.UtcNow:yyyy-MM-ddTHH:mm:ss.fffZ}""
-}}";
-
-                // Lưu file cấu hình
-                File.WriteAllText(updaterConfigPath, configContent);
-                
-                _logger.LogDebug("Đã tạo file cấu hình cho CMSUpdater tại {ConfigPath}", updaterConfigPath);
-                
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Lỗi khi chuẩn bị CMSUpdater");
+                ErrorLogs.LogException(ErrorType.UPDATE_CHECKSUM_MISMATCH, ex, _logger);
                 return false;
             }
         }
@@ -329,34 +304,62 @@ namespace CMSAgent.Update
         /// <summary>
         /// Khởi chạy CMSUpdater.
         /// </summary>
+        /// <param name="downloadedPackagePath">Đường dẫn đến gói cập nhật đã tải xuống (file zip).</param>
+        /// <param name="extractedUpdateDir">Đường dẫn đến thư mục đã giải nén gói cập nhật.</param>
         /// <returns>True nếu khởi chạy thành công, ngược lại là False.</returns>
-        private async Task<bool> StartCMSUpdaterAsync()
+        private async Task<bool> StartCMSUpdaterAsync(string downloadedPackagePath, string extractedUpdateDir)
         {
             try
             {
-                // Tìm đường dẫn đến CMSUpdater
-                string updaterExePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "CMSUpdater", "CMSUpdater.exe");
-                
+                // Tìm đường dẫn đến CMSUpdater trong thư mục đã giải nén
+                string updaterExePath = Path.Combine(extractedUpdateDir, "CMSUpdater", "CMSUpdater.exe");
+
                 if (!File.Exists(updaterExePath))
                 {
-                    _logger.LogError("Không tìm thấy CMSUpdater tại {UpdaterPath}", updaterExePath);
+                    _logger.LogError("Không tìm thấy CMSUpdater.exe trong gói cập nhật đã giải nén tại {UpdaterPath}", updaterExePath);
+                    ErrorLogs.LogError(ErrorType.UpdateFailure, 
+                        $"Không tìm thấy CMSUpdater.exe trong gói cập nhật đã giải nén", 
+                        new { UpdaterPath = updaterExePath }, 
+                        _logger);
                     return false;
                 }
 
                 // Lấy ID của process hiện tại
-                int currentProcessId = Process.GetCurrentProcess().Id;
+                int currentProcessId = Environment.ProcessId;
+                
+                // Thư mục cài đặt hiện tại của agent
+                string installDirectory = AppDomain.CurrentDomain.BaseDirectory;
+                
+                // Phiên bản hiện tại của agent
+                string currentVersion = _configLoader.GetAgentVersion();
+                
+                // Gói cập nhật zip (downloadedPackagePath) vẫn được truyền cho CMSUpdater
+                // CMSUpdater sẽ chịu trách nhiệm xử lý file zip này (ví dụ: lưu lại để rollback hoặc backup)
+                // hoặc có thể không cần dùng đến nếu tất cả đã được giải nén ra extractedUpdateDir
+                // Quan trọng là extractedUpdateDir chứa phiên bản agent mới và updater mới (nếu có).
 
-                // Khởi chạy CMSUpdater với tham số là ID của process hiện tại
+                // Xây dựng tham số gọi CMSUpdater
+                // --downloaded-package-path: đường dẫn file zip gốc (có thể CMSUpdater cần để backup hoặc kiểm tra lại)
+                // --new-agent-path: đường dẫn thư mục đã giải nén (nơi chứa agent mới và updater mới)
+                // --current-agent-install-dir: thư mục cài đặt agent hiện tại
+                // --current-agent-version: phiên bản agent hiện tại
+                string arguments = $"--pid {currentProcessId} " +
+                                  $"--downloaded-package-path \"{downloadedPackagePath}\" " +
+                                  $"--new-agent-path \"{extractedUpdateDir}\" " +
+                                  $"--current-agent-install-dir \"{installDirectory}\" " +
+                                  $"--current-agent-version \"{currentVersion}\"";
+
+                // Khởi chạy CMSUpdater với các tham số đầy đủ
                 var processStartInfo = new ProcessStartInfo
                 {
                     FileName = updaterExePath,
-                    Arguments = $"--wait-for-pid {currentProcessId}",
+                    Arguments = arguments,
                     UseShellExecute = true,
                     WindowStyle = ProcessWindowStyle.Normal,
                     CreateNoWindow = false
                 };
 
-                _logger.LogInformation("Khởi chạy CMSUpdater: {UpdaterPath} {Arguments}", 
+                _logger.LogInformation("Khởi chạy CMSUpdater: {UpdaterPath} {Arguments}",
                     updaterExePath, processStartInfo.Arguments);
 
                 // Khởi chạy CMSUpdater
@@ -364,13 +367,64 @@ namespace CMSAgent.Update
 
                 // Đợi một chút để đảm bảo CMSUpdater đã khởi động
                 await Task.Delay(1000);
-                
+
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi khi khởi chạy CMSUpdater");
+                ErrorLogs.LogException(ErrorType.UpdateFailure, ex, _logger);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Sao chép thư mục và tất cả các thư mục con và tệp tin.
+        /// </summary>
+        /// <param name="sourceDirName">Thư mục nguồn.</param>
+        /// <param name="destDirName">Thư mục đích.</param>
+        /// <param name="copySubDirs">Có sao chép thư mục con hay không.</param>
+        private static void DirectoryCopy(string sourceDirName, string destDirName, bool copySubDirs)
+        {
+            // Lấy thư mục nguồn
+            DirectoryInfo dir = new(sourceDirName);
+
+            if (!dir.Exists)
+            {
+                throw new DirectoryNotFoundException(
+                    $"Không tìm thấy thư mục nguồn: {sourceDirName}");
+            }
+
+            // Tạo thư mục đích nếu chưa tồn tại
+            if (!Directory.Exists(destDirName))
+            {
+                Directory.CreateDirectory(destDirName);
+            }
+
+            // Lấy tất cả các tệp tin trong thư mục
+            FileInfo[] files = dir.GetFiles();
+            foreach (FileInfo file in files)
+            {
+                // Tạo đường dẫn đích cho tệp tin
+                string tempPath = Path.Combine(destDirName, file.Name);
+
+                // Sao chép tệp tin
+                file.CopyTo(tempPath, true);
+            }
+
+            // Nếu bao gồm thư mục con
+            if (copySubDirs)
+            {
+                // Lấy tất cả thư mục con
+                DirectoryInfo[] subDirs = dir.GetDirectories();
+                foreach (DirectoryInfo subDir in subDirs)
+                {
+                    // Tạo thư mục đích mới
+                    string newDestDirName = Path.Combine(destDirName, subDir.Name);
+
+                    // Gọi đệ quy để sao chép thư mục con
+                    DirectoryCopy(subDir.FullName, newDestDirName, copySubDirs);
+                }
             }
         }
     }
