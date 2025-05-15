@@ -5,16 +5,16 @@ using CMSAgent.Common.DTOs;
 namespace CMSAgent.Common.Interfaces
 {
     /// <summary>
-    /// Interface định nghĩa một command handler có khả năng xử lý một loại command cụ thể.
+    /// Interface defining a command handler capable of processing a specific type of command.
     /// </summary>
     public interface ICommandHandler
     {
         /// <summary>
-        /// Thực thi một command và trả về kết quả.
+        /// Executes a command and returns the result.
         /// </summary>
-        /// <param name="command">Command cần thực thi.</param>
-        /// <param name="cancellationToken">Token để hủy thao tác.</param>
-        /// <returns>Kết quả của việc thực thi command.</returns>
+        /// <param name="command">Command to execute.</param>
+        /// <param name="cancellationToken">Token to cancel the operation.</param>
+        /// <returns>Result of command execution.</returns>
         Task<CommandResultPayload> ExecuteAsync(CommandPayload command, CancellationToken cancellationToken);
     }
 }

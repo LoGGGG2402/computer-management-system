@@ -9,7 +9,7 @@ using CMSAgent.Common.Enums;
 namespace CMSAgent.Common.Logging
 {
     /// <summary>
-    /// Lớp tiện ích để ghi lại các lỗi dưới dạng JSON theo chuẩn ErrorReportPayload
+    /// Utility class for logging errors in JSON format according to ErrorReportPayload standard
     /// </summary>
     public static class ErrorLogs
     {
@@ -25,17 +25,17 @@ namespace CMSAgent.Common.Logging
             "error_reports");
             
         /// <summary>
-        /// Ghi lỗi vào file JSON
+        /// Log error to JSON file
         /// </summary>
-        /// <param name="errorType">Loại lỗi</param>
-        /// <param name="errorMessage">Thông điệp lỗi</param>
-        /// <param name="errorDetails">Chi tiết lỗi (có thể là string hoặc object)</param>
-        /// <param name="logger">Logger để ghi log bổ sung (tùy chọn)</param>
+        /// <param name="errorType">Error type</param>
+        /// <param name="errorMessage">Error message</param>
+        /// <param name="errorDetails">Error details (can be string or object)</param>
+        /// <param name="logger">Logger for additional logging (optional)</param>
         public static void LogError(ErrorType errorType, string errorMessage, object errorDetails, ILogger? logger = null)
         {
             try
             {
-                // Tạo payload lỗi
+                // Create error payload
                 var errorPayload = new ErrorReportPayload
                 {
                     error_type = errorType,
@@ -44,37 +44,37 @@ namespace CMSAgent.Common.Logging
                     timestamp = DateTime.Now
                 };
                 
-                // Đảm bảo thư mục tồn tại
+                // Ensure directory exists
                 if (!Directory.Exists(_errorLogDirectory))
                 {
                     Directory.CreateDirectory(_errorLogDirectory);
                 }
                 
-                // Tạo tên file với timestamp
+                // Create file name with timestamp
                 string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                 string errorFile = Path.Combine(_errorLogDirectory, 
                     $"error_{errorType}_{timestamp}.json");
                 
-                // Serialize và ghi ra file
+                // Serialize and write to file
                 string jsonContent = JsonSerializer.Serialize(errorPayload, _jsonOptions);
                 File.WriteAllText(errorFile, jsonContent);
                 
-                // Ghi log nếu ILogger được cung cấp
-                logger?.LogError("Đã xảy ra lỗi {ErrorType}: {ErrorMessage}", errorType, errorMessage);
+                // Log if ILogger is provided
+                logger?.LogError("An error occurred {ErrorType}: {ErrorMessage}", errorType, errorMessage);
             }
             catch (Exception ex)
             {
-                // Xử lý lỗi khi ghi log thất bại
-                logger?.LogError(ex, "Không thể ghi lỗi vào file JSON: {ErrorMessage}", ex.Message);
+                // Handle error when logging fails
+                logger?.LogError(ex, "Could not write error to JSON file: {ErrorMessage}", ex.Message);
             }
         }
         
         /// <summary>
-        /// Ghi lỗi từ Exception vào file JSON
+        /// Log error from Exception to JSON file
         /// </summary>
-        /// <param name="errorType">Loại lỗi</param>
-        /// <param name="exception">Exception cần ghi lại</param>
-        /// <param name="logger">Logger để ghi log bổ sung (tùy chọn)</param>
+        /// <param name="errorType">Error type</param>
+        /// <param name="exception">Exception to log</param>
+        /// <param name="logger">Logger for additional logging (optional)</param>
         public static void LogException(ErrorType errorType, Exception exception, ILogger? logger = null)
         {
             LogError(
@@ -90,4 +90,4 @@ namespace CMSAgent.Common.Logging
             );
         }
     }
-} 
+}

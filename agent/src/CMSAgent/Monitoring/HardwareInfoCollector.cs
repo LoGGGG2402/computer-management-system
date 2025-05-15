@@ -8,17 +8,17 @@ using Microsoft.Extensions.Logging;
 namespace CMSAgent.Monitoring
 {
     /// <summary>
-    /// Thu thập thông tin phần cứng của hệ thống.
+    /// Collects system hardware information.
     /// </summary>
-    /// <param name="logger">Logger để ghi nhật ký.</param>
+    /// <param name="logger">Logger for logging.</param>
     public class HardwareInfoCollector(ILogger<HardwareInfoCollector> logger)
     {
         private readonly ILogger<HardwareInfoCollector> _logger = logger;
 
         /// <summary>
-        /// Thu thập thông tin phần cứng của hệ thống.
+        /// Collects system hardware information.
         /// </summary>
-        /// <returns>Thông tin phần cứng đã thu thập.</returns>
+        /// <returns>Collected hardware information.</returns>
         public async Task<HardwareInfoPayload> CollectHardwareInfoAsync()
         {
             var hwInfo = new HardwareInfoPayload
@@ -38,21 +38,21 @@ namespace CMSAgent.Monitoring
                 hwInfo.total_ram = GetTotalRam();
                 hwInfo.total_disk_space = GetTotalDiskSpace();
 
-                _logger.LogInformation("Đã thu thập thông tin phần cứng thành công");
+                _logger.LogInformation("Hardware information collected successfully");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thu thập thông tin phần cứng");
+                _logger.LogError(ex, "Error collecting hardware information");
                 
-                // Nếu có lỗi, vẫn trả về object với các thông tin đã thu thập được
+                // If there's an error, still return object with collected information
                 if (string.IsNullOrEmpty(hwInfo.os_info))
-                    hwInfo.os_info = "Không thể thu thập thông tin hệ điều hành";
+                    hwInfo.os_info = "Unable to collect operating system information";
                 
                 if (string.IsNullOrEmpty(hwInfo.cpu_info))
-                    hwInfo.cpu_info = "Không thể thu thập thông tin CPU";
+                    hwInfo.cpu_info = "Unable to collect CPU information";
                 
                 if (string.IsNullOrEmpty(hwInfo.gpu_info))
-                    hwInfo.gpu_info = "Không thể thu thập thông tin GPU";
+                    hwInfo.gpu_info = "Unable to collect GPU information";
                 
                 if (hwInfo.total_ram <= 0)
                     hwInfo.total_ram = 0;
@@ -65,7 +65,7 @@ namespace CMSAgent.Monitoring
         }
 
         /// <summary>
-        /// Thu thập thông tin hệ điều hành.
+        /// Collects operating system information.
         /// </summary>
         private string GetOsInfo()
         {
@@ -90,13 +90,13 @@ namespace CMSAgent.Monitoring
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thu thập thông tin hệ điều hành");
-                return "Không thể thu thập thông tin hệ điều hành";
+                _logger.LogError(ex, "Error collecting operating system information");
+                return "Unable to collect operating system information";
             }
         }
 
         /// <summary>
-        /// Thu thập thông tin CPU.
+        /// Collects CPU information.
         /// </summary>
         private string GetCpuInfo()
         {
@@ -121,13 +121,13 @@ namespace CMSAgent.Monitoring
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thu thập thông tin CPU");
-                return "Không thể thu thập thông tin CPU";
+                _logger.LogError(ex, "Error collecting CPU information");
+                return "Unable to collect CPU information";
             }
         }
 
         /// <summary>
-        /// Thu thập thông tin GPU.
+        /// Collects GPU information.
         /// </summary>
         private string GetGpuInfo()
         {
@@ -160,24 +160,24 @@ namespace CMSAgent.Monitoring
                         }
                     }
 
-                    // Xóa dấu phẩy cuối cùng nếu có
+                    // Remove the last semicolon if present
                     if (gpuInfo.EndsWith("; "))
                     {
                         gpuInfo = gpuInfo[..^2];
                     }
                 }
 
-                return string.IsNullOrEmpty(gpuInfo) ? "Không thể thu thập thông tin GPU" : gpuInfo;
+                return string.IsNullOrEmpty(gpuInfo) ? "Unable to collect GPU information" : gpuInfo;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thu thập thông tin GPU");
-                return "Không thể thu thập thông tin GPU";
+                _logger.LogError(ex, "Error collecting GPU information");
+                return "Unable to collect GPU information";
             }
         }
 
         /// <summary>
-        /// Thu thập thông tin tổng RAM.
+        /// Collects total RAM information.
         /// </summary>
         private long GetTotalRam()
         {
@@ -198,13 +198,13 @@ namespace CMSAgent.Monitoring
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thu thập thông tin tổng RAM");
+                _logger.LogError(ex, "Error collecting total RAM information");
                 return 0;
             }
         }
 
         /// <summary>
-        /// Thu thập thông tin tổng dung lượng ổ đĩa chính.
+        /// Collects information about the main disk drive's total space.
         /// </summary>
         private long GetTotalDiskSpace()
         {
@@ -215,7 +215,7 @@ namespace CMSAgent.Monitoring
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thu thập thông tin ổ đĩa");
+                _logger.LogError(ex, "Error collecting disk information");
                 return 0;
             }
         }

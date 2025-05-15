@@ -1,5 +1,3 @@
-
-
 Below is the current folder structure of the project, including three main components: Backend (Node.js/Express), Frontend (React/Vite), and Agent (Python).
 
 #
@@ -107,20 +105,7 @@ computer-management-system/
             └── admin.service.js    
 ```
 
-#
-
-##
-- Modular structure with entry point in `main.py`
-- Main logic in `core/agent.py` and state management in `core/agent_state.py`
-- The `command_handlers/` module contains handlers for various commands
-- The `communication/` module handles HTTP and WebSocket communication with the server
-- The `monitoring/` module collects system information
-- The `ipc/` module handles inter-process communication
-- The `system/` module contains utilities for system interaction
-- The `config/` module manages Agent configuration and state
-- The `utils/` module provides utilities such as logging
-
-##
+## Backend Structure
 - MVC pattern with Sequelize ORM
 - Controllers in `controllers/` handle API requests
 - Routes in `routes/` define endpoints
@@ -129,7 +114,7 @@ computer-management-system/
 - Database migrations in `database/migrations/`
 - Authentication and access control middleware
 
-##
+## Frontend Structure
 - Feature-based structure with directories `components/`, `pages/`, `contexts/`, `hooks/`
 - Uses React Router for routing management
 - Services in `services/` handle communication with Backend API

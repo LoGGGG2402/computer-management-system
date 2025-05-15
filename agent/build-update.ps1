@@ -1,15 +1,15 @@
 #region Configuration
-# Build Script cho CMSAgent Update Package
-# Script này sẽ build dự án và tạo gói cập nhật cho CMSAgent
+# Build Script for CMSAgent Update Package
+# This script will build the project and create update package for CMSAgent
 
-# Cấu hình đường dẫn
+# Path Configuration
 $ProjectRoot = $PSScriptRoot
 $SourceDir = Join-Path $ProjectRoot "src"
 $BuildDir = Join-Path $ProjectRoot "build"
 $UpdateDir = Join-Path $BuildDir "update"
 $TempDir = Join-Path $UpdateDir "temp"
 
-# Đường dẫn đến các project files
+# Paths to project files
 $CMSAgentProject = Join-Path $SourceDir "CMSAgent\CMSAgent.csproj"
 $CMSUpdaterProject = Join-Path $SourceDir "CMSUpdater\CMSUpdater.csproj"
 $CMSAgentCommonProject = Join-Path $SourceDir "CMSAgent.Common\CMSAgent.Common.csproj"
@@ -18,13 +18,13 @@ $CMSAgentCommonProject = Join-Path $SourceDir "CMSAgent.Common\CMSAgent.Common.c
 #region Helper Functions
 <#
 .SYNOPSIS
-    Cập nhật phiên bản trong file .csproj
+    Update version in .csproj file
 .DESCRIPTION
-    Hàm này tạo bản sao lưu file .csproj, sau đó cập nhật hoặc thêm thẻ Version với giá trị mới
+    This function creates a backup of the .csproj file, then updates or adds the Version tag with a new value
 .PARAMETER ProjectFile
-    Đường dẫn đến file .csproj cần cập nhật
+    Path to the .csproj file to update
 .PARAMETER Version
-    Chuỗi phiên bản mới
+    New version string
 #>
 function Update-ProjectVersion {
     param (
@@ -35,34 +35,34 @@ function Update-ProjectVersion {
         [string]$Version
     )
     
-    Write-Host "Cập nhật phiên bản $Version cho $ProjectFile"
+    Write-Host "Updating version $Version for $ProjectFile"
     
-    # Tạo bản sao lưu trước khi sửa đổi
+    # Create a backup before modifying
     Copy-Item -Path $ProjectFile -Destination "$ProjectFile.bak" -Force
     
-    # Đọc nội dung file
+    # Read file content
     $Content = Get-Content -Path $ProjectFile -Raw
     
-    # Kiểm tra xem thẻ Version đã tồn tại chưa
+    # Check if Version tag already exists
     if ($Content -match '<Version>[0-9.]+</Version>') {
-        # Cập nhật phiên bản nếu đã tồn tại
+        # Update version if it exists
         $UpdatedContent = $Content -replace '<Version>[0-9.]+</Version>', "<Version>$Version</Version>"
     } else {
-        # Thêm thẻ Version vào sau thẻ Nullable nếu chưa tồn tại
+        # Add Version tag after Nullable tag if it doesn't exist
         $UpdatedContent = $Content -replace '(<Nullable>.*?</Nullable>)', "$1`r`n    <Version>$Version</Version>"
     }
     
-    # Lưu nội dung đã cập nhật
+    # Save updated content
     Set-Content -Path $ProjectFile -Value $UpdatedContent
 }
 
 <#
 .SYNOPSIS
-    Khôi phục các file về trạng thái ban đầu từ bản sao lưu
+    Restore files to their original state from backup
 .DESCRIPTION
-    Khôi phục các file .csproj về trạng thái ban đầu sau khi quá trình build hoàn tất
+    Restore .csproj files to their original state after the build process is complete
 .PARAMETER ProjectFiles
-    Mảng đường dẫn đến các file .csproj cần khôi phục
+    Array of paths to .csproj files to restore
 #>
 function Restore-ProjectFiles {
     param (
@@ -72,7 +72,7 @@ function Restore-ProjectFiles {
     
     foreach ($ProjectFile in $ProjectFiles) {
         if (Test-Path "$ProjectFile.bak") {
-            Write-Host "Khôi phục file $ProjectFile về trạng thái ban đầu"
+            Write-Host "Restoring file $ProjectFile to its original state"
             Copy-Item -Path "$ProjectFile.bak" -Destination $ProjectFile -Force
             Remove-Item -Path "$ProjectFile.bak" -Force
         }
@@ -81,15 +81,15 @@ function Restore-ProjectFiles {
 
 <#
 .SYNOPSIS
-    Build dự án .NET
+    Build .NET project
 .DESCRIPTION
-    Hàm này dùng để build một dự án .NET với các cài đặt được chỉ định
+    This function is used to build a .NET project with specified settings
 .PARAMETER ProjectPath
-    Đường dẫn đến file project (.csproj)
+    Path to the project file (.csproj)
 .PARAMETER OutputPath
-    Đường dẫn thư mục đầu ra
+    Output directory path
 .PARAMETER Configuration
-    Cấu hình build (mặc định: Release)
+    Build configuration (default: Release)
 #>
 function Invoke-DotNetBuild {
     param (
@@ -105,12 +105,12 @@ function Invoke-DotNetBuild {
     
     Write-Host "Building $ProjectPath to $OutputPath"
     
-    # Tạo thư mục đầu ra nếu chưa tồn tại
+    # Create output directory if it doesn't exist
     if (-not (Test-Path $OutputPath)) {
         New-Item -ItemType Directory -Path $OutputPath | Out-Null
     }
     
-    # Build dự án
+    # Build project
     dotnet publish $ProjectPath `
         --configuration $Configuration `
         --output $OutputPath `
@@ -121,19 +121,19 @@ function Invoke-DotNetBuild {
         -p:PublishReadyToRun=true
     
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Không thể build dự án $ProjectPath"
+        Write-Error "Failed to build project $ProjectPath"
         exit $LASTEXITCODE
     }
 }
 
 <#
 .SYNOPSIS
-    Tạo các thư mục build cần thiết
+    Create necessary build directories
 .DESCRIPTION
-    Tạo các thư mục build, update và temp nếu chưa tồn tại
+    Create build, update, and temp directories if they don't exist
 #>
 function Initialize-BuildDirectories {
-    # Tạo thư mục build nếu chưa tồn tại
+    # Create build directory if it doesn't exist
     if (-not (Test-Path $BuildDir)) {
         New-Item -ItemType Directory -Path $BuildDir | Out-Null
     }
@@ -149,12 +149,12 @@ function Initialize-BuildDirectories {
 
 <#
 .SYNOPSIS
-    Xóa các bản build cũ
+    Delete old builds
 .DESCRIPTION
-    Xóa nội dung của thư mục temp để chuẩn bị cho bản build mới
+    Delete the contents of the temp directory to prepare for a new build
 #>
 function Clear-OldBuilds {
-    Write-Host "Xóa các bản build cũ..."
+    Write-Host "Deleting old builds..."
     if (Test-Path $TempDir) {
         Remove-Item -Path "$TempDir\*" -Recurse -Force
     }
@@ -162,15 +162,15 @@ function Clear-OldBuilds {
 
 <#
 .SYNOPSIS
-    Tạo file update_info.json cho gói cập nhật
+    Create update_info.json file for the update package
 .DESCRIPTION
-    Tạo file update_info.json chứa thông tin về gói cập nhật, với định dạng tương thích với CMSUpdater
+    Create update_info.json file containing information about the update package, compatible with CMSUpdater
 .PARAMETER Version
-    Phiên bản của gói cập nhật
+    Version of the update package
 .PARAMETER FilePath
-    Đường dẫn đến file update_info.json sẽ được tạo
+    Path to the update_info.json file to be created
 .PARAMETER PackagePath
-    Đường dẫn đến file package khi được giải nén
+    Path to the package file when extracted
 #>
 function New-UpdateInfo {
     param (
@@ -194,16 +194,16 @@ function New-UpdateInfo {
     $UpdateInfoJson = $UpdateInfo | ConvertTo-Json -Depth 10
     Set-Content -Path $FilePath -Value $UpdateInfoJson -Encoding UTF8
     
-    Write-Host "Đã tạo file update_info.json tại $FilePath"
+    Write-Host "Created update_info.json file at $FilePath"
 }
 
 <#
 .SYNOPSIS
-    Tính toán checksum SHA256 của một file
+    Calculate SHA256 checksum of a file
 .DESCRIPTION
-    Tính toán và trả về chuỗi checksum SHA256 của file được chỉ định
+    Calculate and return the SHA256 checksum string of the specified file
 .PARAMETER FilePath
-    Đường dẫn đến file cần tính checksum
+    Path to the file to calculate checksum
 #>
 function Get-FileChecksum {
     param (
@@ -223,27 +223,27 @@ function Get-FileChecksum {
 
 #region Main Script
 try {
-    # Lấy thông tin phiên bản từ người dùng
-    $Version = Read-Host "Nhập phiên bản gói cập nhật (ví dụ: 1.0.0)"
+    # Get version information from user
+    $Version = Read-Host "Enter update package version (e.g., 1.0.0)"
     if ([string]::IsNullOrWhiteSpace($Version)) {
-        Write-Error "Phiên bản không được để trống. Đang dừng quá trình build."
+        Write-Error "Version cannot be empty. Stopping the build process."
         exit 1
     }
     $Version = $Version.Trim()
     Write-Host "Building update package version: $Version" -ForegroundColor Cyan
 
-    # Cập nhật phiên bản trong các project
-    Write-Host "Bắt đầu cập nhật phiên bản trong các project files..." -ForegroundColor Cyan
+    # Update version in projects
+    Write-Host "Starting to update version in project files..." -ForegroundColor Cyan
     Update-ProjectVersion -ProjectFile $CMSAgentProject -Version $Version
     Update-ProjectVersion -ProjectFile $CMSUpdaterProject -Version $Version
     Update-ProjectVersion -ProjectFile $CMSAgentCommonProject -Version $Version
 
-    # Tạo thư mục build và xóa các bản build cũ
+    # Create build directories and delete old builds
     Initialize-BuildDirectories
     Clear-OldBuilds
 
-    # Build các project
-    Write-Host "Bắt đầu quá trình build..." -ForegroundColor Cyan
+    # Build projects
+    Write-Host "Starting build process..." -ForegroundColor Cyan
     
     # Build CMSAgent
     $CMSAgentOutputDir = Join-Path $TempDir "CMSAgent"
@@ -255,7 +255,7 @@ try {
     Write-Host "Building CMSUpdater..." -ForegroundColor Yellow
     Invoke-DotNetBuild -ProjectPath $CMSUpdaterProject -OutputPath $CMSUpdaterOutputDir
 
-    # Đọc danh sách file cần loại trừ từ cài đặt Updater
+    # Read excluded files list from Updater settings
     $UpdaterSettingsPath = Join-Path $SourceDir "CMSUpdater\appsettings.json"
     $ExcludedFiles = @()
     
@@ -264,22 +264,22 @@ try {
             $UpdaterSettings = Get-Content -Path $UpdaterSettingsPath -Raw | ConvertFrom-Json
             if ($UpdaterSettings.Updater.FilesToExcludeFromUpdate) {
                 $ExcludedFiles = $UpdaterSettings.Updater.FilesToExcludeFromUpdate
-                Write-Host "Đã đọc danh sách file loại trừ từ cài đặt Updater: $($ExcludedFiles -join ', ')" -ForegroundColor Cyan
+                Write-Host "Read excluded files list from Updater settings: $($ExcludedFiles -join ', ')" -ForegroundColor Cyan
             }
         } catch {
-            Write-Warning "Không thể đọc danh sách file loại trừ từ cài đặt Updater: $_"
+            Write-Warning "Unable to read excluded files list from Updater settings: $_"
         }
     }
 
-    # Tạo file update_info.json (placeholder - sẽ được UpdateHandler thay thế)
+    # Create update_info.json file (placeholder - will be replaced by UpdateHandler)
     $UpdateInfoPath = Join-Path $CMSUpdaterOutputDir "update_info.json"
     $PlaceholderPackagePath = "C:\\Path\\To\\Package\\CMSAgent_Update_v$Version.zip"
     New-UpdateInfo -Version $Version -FilePath $UpdateInfoPath -PackagePath $PlaceholderPackagePath
 
-    # Tạo file ZIP chứa gói cập nhật
+    # Create ZIP file for the update package
     $UpdatePackagePath = Join-Path $UpdateDir "CMSAgent_Update_v$Version.zip"
     
-    Write-Host "Đang tạo gói cập nhật $UpdatePackagePath..." -ForegroundColor Cyan
+    Write-Host "Creating update package $UpdatePackagePath..." -ForegroundColor Cyan
     
     if (Test-Path $UpdatePackagePath) {
         Remove-Item -Path $UpdatePackagePath -Force
@@ -287,14 +287,14 @@ try {
     
     Compress-Archive -Path "$TempDir\*" -DestinationPath $UpdatePackagePath -CompressionLevel Optimal
     
-    # Tính toán checksum SHA256 cho gói cập nhật
+    # Calculate SHA256 checksum for the update package
     $Checksum = Get-FileChecksum -FilePath $UpdatePackagePath
     
-    # Tạo file checksum
+    # Create checksum file
     $ChecksumFilePath = Join-Path $UpdateDir "CMSAgent_Update_v$Version.sha256"
     Set-Content -Path $ChecksumFilePath -Value $Checksum -Encoding UTF8
     
-    # Tạo file thông tin cập nhật (để sử dụng cho API)
+    # Create update info file (for API usage)
     $UpdateInfoPath = Join-Path $UpdateDir "update_info_v$Version.json"
     $UpdateInfo = @{
         version = $Version
@@ -302,7 +302,7 @@ try {
         download_url = "REPLACE_WITH_ACTUAL_DOWNLOAD_URL"
         checksum_sha256 = $Checksum
         file_size_bytes = (Get-Item -Path $UpdatePackagePath).Length
-        notes = "Gói cập nhật CMSAgent phiên bản $Version"
+        notes = "CMSAgent update package version $Version"
         is_mandatory = $false
         supported_versions = @("*")
     }
@@ -310,27 +310,27 @@ try {
     $UpdateInfoJson = $UpdateInfo | ConvertTo-Json -Depth 10
     Set-Content -Path $UpdateInfoPath -Value $UpdateInfoJson -Encoding UTF8
 
-    # Kiểm tra và thông báo kết quả
+    # Validate and notify results
     if (Test-Path $UpdatePackagePath) {
-        Write-Host "Đã tạo thành công gói cập nhật: $UpdatePackagePath" -ForegroundColor Green
+        Write-Host "Successfully created update package: $UpdatePackagePath" -ForegroundColor Green
         Write-Host "Checksum SHA256: $Checksum" -ForegroundColor Green
-        Write-Host "Kích thước: $([Math]::Round((Get-Item -Path $UpdatePackagePath).Length / 1MB, 2)) MB" -ForegroundColor Green
-        Write-Host "File thông tin cập nhật: $UpdateInfoPath" -ForegroundColor Green
-        Write-Host "LƯU Ý: Cần thay thế URL tải xuống trong file thông tin cập nhật trước khi sử dụng." -ForegroundColor Yellow
+        Write-Host "Size: $([Math]::Round((Get-Item -Path $UpdatePackagePath).Length / 1MB, 2)) MB" -ForegroundColor Green
+        Write-Host "Update info file: $UpdateInfoPath" -ForegroundColor Green
+        Write-Host "NOTE: Download URL in update info file must be replaced before use." -ForegroundColor Yellow
     } else {
-        Write-Error "Không tìm thấy gói cập nhật sau khi build."
+        Write-Error "Update package not found after build."
         exit 1
     }
 }
 catch {
-    Write-Error "Đã xảy ra lỗi trong quá trình build: $_"
+    Write-Error "An error occurred during build process: $_"
     exit 1
 }
 finally {
-    # Khôi phục các file về trạng thái ban đầu
-    Write-Host "Khôi phục các file về trạng thái ban đầu..." -ForegroundColor Yellow
+    # Restore files to original state
+    Write-Host "Restoring files to original state..." -ForegroundColor Yellow
     Restore-ProjectFiles -ProjectFiles @($CMSAgentProject, $CMSUpdaterProject, $CMSAgentCommonProject)
     
-    Write-Host "Quá trình build hoàn tất!" -ForegroundColor Green
+    Write-Host "Build process completed!" -ForegroundColor Green
 }
-#endregion 
+#endregion

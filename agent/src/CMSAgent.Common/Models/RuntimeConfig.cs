@@ -3,51 +3,51 @@ using System.Text.Json.Serialization;
 namespace CMSAgent.Common.Models
 {
     /// <summary>
-    /// Đại diện cho cấu trúc dữ liệu của file runtime_config.json.
-    /// Chứa thông tin định danh agent và thông tin vị trí được lưu trữ giữa các lần chạy.
+    /// Represents the data structure of the runtime_config.json file.
+    /// Contains agent identification and location information stored between runs.
     /// </summary>
     public class RuntimeConfig
     {
         /// <summary>
-        /// Định danh duy nhất của agent.
+        /// Unique identifier of the agent.
         /// </summary>
         [JsonPropertyName("agentId")]
         public required string AgentId { get; set; }
 
         /// <summary>
-        /// Cấu hình vị trí của agent trong phòng.
+        /// Location configuration of the agent in the room.
         /// </summary>
         [JsonPropertyName("room_config")]
         public required RoomConfig RoomConfig { get; set; }
 
         /// <summary>
-        /// Token đã được mã hóa bằng DPAPI để xác thực với server.
+        /// DPAPI encrypted token for server authentication.
         /// </summary>
         [JsonPropertyName("agent_token_encrypted")]
         public required string AgentTokenEncrypted { get; set; }
     }
 
     /// <summary>
-    /// Đại diện cho cấu hình vị trí của agent trong phòng.
+    /// Represents the location configuration of the agent in the room.
     /// </summary>
     public class RoomConfig
     {
         /// <summary>
-        /// Tên phòng mà agent được đặt trong đó.
+        /// Name of the room where the agent is located.
         /// </summary>
         [JsonPropertyName("roomName")]
         public required string RoomName { get; set; }
 
         /// <summary>
-        /// Tọa độ X trong bản đồ phòng.
+        /// X coordinate in the room map.
         /// </summary>
         [JsonPropertyName("posX")]
         public int PosX { get; set; }
 
         /// <summary>
-        /// Tọa độ Y trong bản đồ phòng.
+        /// Y coordinate in the room map.
         /// </summary>
         [JsonPropertyName("posY")]
         public int PosY { get; set; }
     }
-} 
+}

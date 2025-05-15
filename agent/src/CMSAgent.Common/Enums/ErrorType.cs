@@ -1,48 +1,47 @@
 namespace CMSAgent.Common.Enums
 {
     /// <summary>
-    /// Các loại lỗi để báo cáo lên server.
+    /// Error types for reporting to server.
     /// </summary>
     public enum ErrorType
     {
         /// <summary>
-        /// Lỗi tải gói cập nhật.
+        /// Failed to download update package.
         /// </summary>
         UPDATE_DOWNLOAD_FAILED,
 
         /// <summary>
-        /// Lỗi kiểm tra checksum gói cập nhật.
+        /// Update package checksum verification failed.
         /// </summary>
         UPDATE_CHECKSUM_MISMATCH,
 
-        
         /// <summary>
-        /// Lỗi quá trình cập nhật tổng thể.
+        /// Overall update process failure.
         /// </summary>
         UpdateFailure,
-        
+
         /// <summary>
-        /// Lỗi quá trình sao lưu trước khi cập nhật.
+        /// Pre-update backup failure.
         /// </summary>
         BackupFailure,
-        
+
         /// <summary>
-        /// Lỗi quá trình triển khai phiên bản mới.
+        /// New version deployment failure.
         /// </summary>
         DeploymentFailure,
-        
+
         /// <summary>
-        /// Lỗi quá trình rollback sau khi cập nhật thất bại.
+        /// Rollback failure after update failure.
         /// </summary>
         RollbackFailure,
-        
+
         /// <summary>
-        /// Lỗi thao tác với Windows Service.
+        /// Windows Service operation failure.
         /// </summary>
         ServiceOperationFailure,
-        
+
         /// <summary>
-        /// Lỗi do service không ổn định sau khi cập nhật.
+        /// Service instability after update.
         /// </summary>
         ServiceInstability
     }

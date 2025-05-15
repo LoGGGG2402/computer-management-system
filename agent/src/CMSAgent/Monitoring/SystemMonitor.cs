@@ -8,9 +8,9 @@ using Microsoft.Extensions.Logging;
 namespace CMSAgent.Monitoring
 {
     /// <summary>
-    /// Thu thập thông tin tài nguyên hệ thống.
+    /// Collects system resource information.
     /// </summary>
-    /// <param name="logger">Logger để ghi nhật ký.</param>
+    /// <param name="logger">Logger for logging.</param>
     public class SystemMonitor(ILogger<SystemMonitor> logger)
     {
         private readonly ILogger<SystemMonitor> _logger = logger;
@@ -20,43 +20,43 @@ namespace CMSAgent.Monitoring
         private readonly string _systemDrive = "C:";
 
         /// <summary>
-        /// Khởi tạo các bộ đếm hiệu suất và thành phần giám sát.
+        /// Initializes performance counters and monitoring components.
         /// </summary>
         public void Initialize()
         {
             try
             {
                 _cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
-                // Đọc giá trị đầu tiên (luôn trả về 0)
+                // Read the first value (always returns 0)
                 _cpuCounter.NextValue();
 
-                // Lấy tổng RAM
+                // Get total RAM
                 _ramTotal = GetTotalRam();
 
                 _isInitialized = true;
-                _logger.LogInformation("Đã khởi tạo thành công SystemMonitor");
+                _logger.LogInformation("SystemMonitor initialized successfully");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Không thể khởi tạo SystemMonitor");
+                _logger.LogError(ex, "Cannot initialize SystemMonitor");
                 _isInitialized = false;
             }
         }
 
         /// <summary>
-        /// Lấy trạng thái sử dụng tài nguyên hiện tại.
+        /// Gets the current resource usage status.
         /// </summary>
-        /// <returns>Dữ liệu về mức sử dụng CPU, RAM và disk.</returns>
+        /// <returns>Data about CPU, RAM, and disk usage.</returns>
         public async Task<StatusUpdatePayload> GetCurrentStatusAsync()
         {
             if (!_isInitialized)
             {
-                _logger.LogWarning("SystemMonitor chưa được khởi tạo. Thử khởi tạo lại...");
+                _logger.LogWarning("SystemMonitor not initialized. Trying to initialize again...");
                 Initialize();
 
                 if (!_isInitialized)
                 {
-                    _logger.LogError("Không thể lấy thông tin tài nguyên vì SystemMonitor không được khởi tạo");
+                    _logger.LogError("Cannot retrieve resource information because SystemMonitor is not initialized");
                     return new StatusUpdatePayload
                     {
                         cpuUsage = 0,
@@ -70,28 +70,28 @@ namespace CMSAgent.Monitoring
 
             try
             {
-                // Lấy CPU usage
+                // Get CPU usage
                 status.cpuUsage = await GetCpuUsageAsync();
 
-                // Lấy RAM usage
+                // Get RAM usage
                 status.ramUsage = GetRamUsage();
 
-                // Lấy Disk usage
+                // Get Disk usage
                 status.diskUsage = GetDiskUsage();
 
-                _logger.LogDebug("Thông tin tài nguyên: CPU {CpuUsage:F1}%, RAM {RamUsage:F1}%, Disk {DiskUsage:F1}%",
+                _logger.LogDebug("Resource information: CPU {CpuUsage:F1}%, RAM {RamUsage:F1}%, Disk {DiskUsage:F1}%",
                     status.cpuUsage, status.ramUsage, status.diskUsage);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thu thập thông tin tài nguyên");
+                _logger.LogError(ex, "Error collecting resource information");
             }
 
             return status;
         }
 
         /// <summary>
-        /// Lấy phần trăm sử dụng CPU.
+        /// Gets the CPU usage percentage.
         /// </summary>
         private async Task<double> GetCpuUsageAsync()
         {
@@ -108,13 +108,13 @@ namespace CMSAgent.Monitoring
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thu thập thông tin CPU");
+                _logger.LogError(ex, "Error collecting CPU information");
                 return 0;
             }
         }
 
         /// <summary>
-        /// Lấy phần trăm sử dụng RAM.
+        /// Gets the RAM usage percentage.
         /// </summary>
         private double GetRamUsage()
         {
@@ -160,13 +160,13 @@ namespace CMSAgent.Monitoring
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thu thập thông tin RAM");
+                _logger.LogError(ex, "Error collecting RAM information");
                 return 0;
             }
         }
 
         /// <summary>
-        /// Lấy phần trăm sử dụng ổ đĩa.
+        /// Gets the disk usage percentage.
         /// </summary>
         private double GetDiskUsage()
         {
@@ -181,13 +181,13 @@ namespace CMSAgent.Monitoring
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thu thập thông tin ổ đĩa");
+                _logger.LogError(ex, "Error collecting disk information");
                 return 0;
             }
         }
 
         /// <summary>
-        /// Lấy tổng dung lượng RAM của hệ thống (bytes).
+        /// Gets the total system RAM (in bytes).
         /// </summary>
         private long GetTotalRam()
         {
@@ -223,7 +223,7 @@ namespace CMSAgent.Monitoring
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi lấy tổng RAM");
+                _logger.LogError(ex, "Error retrieving total RAM");
                 return 0;
             }
         }

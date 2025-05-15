@@ -4,37 +4,37 @@ using System.ComponentModel.DataAnnotations;
 namespace CMSAgent.Common.Models
 {
     /// <summary>
-    /// Cấu hình cho HttpClient
+    /// Configuration for HttpClient
     /// </summary>
     public class HttpClientSettingsOptions
     {
         /// <summary>
-        /// Thời gian chờ tối đa cho request HTTP (giây)
+        /// Maximum timeout for HTTP requests (seconds)
         /// </summary>
         [Range(5, 120)]
         public int RequestTimeoutSec { get; set; } = 15;
     }
 
     /// <summary>
-    /// Cấu hình cho kết nối WebSocket
+    /// Configuration for WebSocket connection
     /// </summary>
     public class WebSocketSettingsOptions
     {
         /// <summary>
-        /// Thời gian chờ ban đầu (giây) trước khi thử kết nối lại WebSocket
+        /// Initial delay (seconds) before attempting to reconnect WebSocket
         /// </summary>
         [Range(1, 60)]
         public int ReconnectDelayInitialSec { get; set; } = 5;
 
         /// <summary>
-        /// Thời gian chờ tối đa (giây) trước khi thử kết nối lại WebSocket
+        /// Maximum delay (seconds) before attempting to reconnect WebSocket
         /// </summary>
         [Range(5, 300)]
         public int ReconnectDelayMaxSec { get; set; } = 60;
 
         /// <summary>
-        /// Số lần thử kết nối lại tối đa (null = không giới hạn)
+        /// Maximum number of reconnection attempts (null = unlimited)
         /// </summary>
         public int? ReconnectAttemptsMax { get; set; }
     }
-} 
+}

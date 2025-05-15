@@ -4,62 +4,62 @@ using CMSAgent.Common.Models;
 namespace CMSAgent.Common.Interfaces
 {
     /// <summary>
-    /// Interface cho việc tải và lưu cấu hình agent.
+    /// Interface for loading and saving agent configuration.
     /// </summary>
     public interface IConfigLoader
     {
         /// <summary>
-        /// Cấu hình chính của agent từ appsettings.json.
+        /// Main agent configuration from appsettings.json.
         /// </summary>
         CmsAgentSettingsOptions Settings { get; }
 
         /// <summary>
-        /// Cấu hình đặc thù cho agent từ appsettings.json.
+        /// Agent-specific configuration from appsettings.json.
         /// </summary>
         AgentSpecificSettingsOptions AgentSettings { get; }
 
         /// <summary>
-        /// Tải cấu hình runtime từ file.
+        /// Loads runtime configuration from file.
         /// </summary>
-        /// <param name="forceReload">Bắt buộc tải lại từ đĩa thay vì dùng bộ nhớ đệm.</param>
-        /// <returns>Cấu hình runtime hoặc null nếu không thể tải.</returns>
+        /// <param name="forceReload">Force reload from disk instead of using cache.</param>
+        /// <returns>Runtime configuration or null if loading fails.</returns>
         Task<RuntimeConfig> LoadRuntimeConfigAsync(bool forceReload = false);
 
         /// <summary>
-        /// Lưu cấu hình runtime xuống file.
+        /// Saves runtime configuration to file.
         /// </summary>
-        /// <param name="config">Cấu hình runtime cần lưu.</param>
-        /// <returns>Task đại diện cho việc lưu cấu hình.</returns>
+        /// <param name="config">Runtime configuration to save.</param>
+        /// <returns>Task representing the save operation.</returns>
         Task SaveRuntimeConfigAsync(RuntimeConfig config);
 
         /// <summary>
-        /// Lấy ID của agent từ cấu hình runtime đã tải.
+        /// Gets agent ID from loaded runtime configuration.
         /// </summary>
-        /// <returns>ID của agent hoặc null nếu chưa tải cấu hình.</returns>
+        /// <returns>Agent ID or null if configuration not loaded.</returns>
         string GetAgentId();
 
         /// <summary>
-        /// Lấy token đã mã hóa của agent từ cấu hình runtime đã tải.
+        /// Gets encrypted agent token from loaded runtime configuration.
         /// </summary>
-        /// <returns>Token đã mã hóa hoặc null nếu chưa tải cấu hình.</returns>
+        /// <returns>Encrypted token or null if configuration not loaded.</returns>
         string GetEncryptedAgentToken();
 
         /// <summary>
-        /// Lấy đường dẫn cài đặt của agent.
+        /// Gets agent installation path.
         /// </summary>
-        /// <returns>Đường dẫn thư mục cài đặt.</returns>
+        /// <returns>Installation directory path.</returns>
         string GetInstallPath();
 
         /// <summary>
-        /// Lấy đường dẫn thư mục dữ liệu của agent.
+        /// Gets agent data directory path.
         /// </summary>
-        /// <returns>Đường dẫn thư mục dữ liệu.</returns>
+        /// <returns>Data directory path.</returns>
         string GetDataPath();
 
         /// <summary>
-        /// Lấy phiên bản hiện tại của agent.
+        /// Gets current agent version.
         /// </summary>
-        /// <returns>Phiên bản agent.</returns>
+        /// <returns>Agent version.</returns>
         string GetAgentVersion();
     }
 }

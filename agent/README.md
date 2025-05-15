@@ -1,115 +1,112 @@
-# CMSAgent - Agent Quản lý Máy tính Khách
+# CMSAgent - Client Computer Management Agent
 
-**Ngày cập nhật:** 12 tháng 5 năm 2025
+**Last updated:** May 12, 2025
 
-## Giới thiệu
+## Introduction
 
-CMSAgent là một ứng dụng client mạnh mẽ được thiết kế để chạy trên các máy tính Windows. Nhiệm vụ chính của nó là thu thập thông tin hệ thống, giám sát tài nguyên, giao tiếp an toàn với một server trung tâm, thực thi các lệnh từ xa và tự động cập nhật phiên bản mới. CMSAgent được thiết kế để hoạt động ổn định như một Windows Service, đảm bảo hoạt động nền, liên tục và tự khởi động cùng hệ thống.
+CMSAgent is a powerful client application designed to run on Windows computers. Its main tasks are collecting system information, monitoring resources, securely communicating with a central server, executing remote commands, and automatically updating to new versions. CMSAgent is designed to operate stably as a Windows Service, ensuring background, continuous operation and automatic startup with the system.
 
-Dự án này bao gồm mã nguồn cho CMSAgent, tiến trình cập nhật CMSUpdater, và các thành phần phụ trợ khác.
+This project includes source code for CMSAgent, the CMSUpdater process, and other supporting components.
 
-## Các Tính Năng Chính
+## Key Features
 
-- **Thu thập thông tin hệ thống:**
-    - Lấy thông tin chi tiết về phần cứng (OS, CPU, GPU, RAM, Disk).
-    - Theo dõi trạng thái sử dụng tài nguyên (CPU, RAM, Disk) theo thời gian thực.
-- **Giao tiếp an toàn với Server:**
-    - Thiết lập và duy trì kết nối WebSocket (Socket.IO) bảo mật (WSS) với server trung tâm.
-    - Sử dụng token xác thực (Agent Token) cho mọi giao tiếp.
-    - Giao tiếp API qua HTTPS.
-- **Thực thi lệnh từ xa:**
-    - Nhận và thực thi các lệnh được gửi từ server (ví dụ: chạy script console, thực hiện các hành động hệ thống).
-    - Báo cáo kết quả về server.
-- **Tự động cập nhật:**
-    - Kiểm tra phiên bản mới định kỳ hoặc nhận thông báo từ server.
-    - Tải gói cập nhật, xác minh checksum.
-    - Sử dụng một tiến trình `CMSUpdater.exe` riêng biệt để thay thế file một cách an toàn và khởi động lại service.
-    - Hỗ trợ rollback tự động nếu phiên bản mới gặp sự cố khi khởi động.
-- **Hoạt động như Windows Service:**
-    - Chạy nền, liên tục.
-    - Tự động khởi động cùng Windows.
-    - Đảm bảo chỉ một instance của agent chạy trên mỗi máy.
-- **Cấu hình linh hoạt:**
-    - Sử dụng `appsettings.json` cho các cấu hình chính của agent và logging (Serilog).
-    - Sử dụng `runtime_config.json` cho các thông tin định danh và token đặc thù của từng máy (được tạo trong quá trình `configure`).
-- **Logging chi tiết:**
-    - Ghi log ra file, Windows Event Log, và console (khi debug).
-    - Hỗ trợ nhiều mức độ log.
-    - Có khả năng thu thập log từ xa theo yêu cầu của server.
-- **Xử lý lỗi và phục hồi:**
-    - Cơ chế retry cho các lỗi mạng.
-    - Lưu trữ tạm (queue) dữ liệu khi offline và gửi lại khi có kết nối.
-    - Xử lý an toàn các lỗi nghiêm trọng.
-- **Giao diện dòng lệnh (CLI):**
-    - `CMSAgent.exe configure`: Cấu hình agent lần đầu hoặc cấu hình lại.
-    - `CMSAgent.exe start/stop/uninstall/debug`: Quản lý service và gỡ lỗi.
+- **System Information Collection:**
+    - Gather detailed hardware information (OS, CPU, GPU, RAM, Disk).
+    - Monitor resource usage status (CPU, RAM, Disk) in real-time.
+- **Secure Communication with Server:**
+    - Establish and maintain secure WebSocket connections (Socket.IO over WSS) with the central server.
+    - Use authentication tokens (Agent Token) for all communications.
+    - API communication via HTTPS.
+- **Remote Command Execution:**
+    - Receive and execute commands sent from the server (e.g., run console scripts, perform system actions).
+    - Report results back to the server.
+- **Automatic Updates:**
+    - Check for new versions periodically or receive notifications from the server.
+    - Download update packages, verify checksums.
+    - Use a separate `CMSUpdater.exe` process to safely replace files and restart the service.
+    - Support automatic rollback if the new version encounters issues during startup.
+- **Operating as a Windows Service:**
+    - Run in the background, continuously.
+    - Start automatically with Windows.
+    - Ensure only one instance of the agent runs on each machine.
+- **Flexible Configuration:**
+    - Use `appsettings.json` for the main agent configurations and logging (Serilog).
+    - Use `runtime_config.json` for machine-specific identification information and tokens (created during the `configure` process).
+- **Detailed Logging:**
+    - Log to files, Windows Event Log, and console (when debugging).
+    - Support multiple log levels.
+    - Capability to collect logs remotely at the server's request.
+- **Error Handling and Recovery:**
+    - Retry mechanism for network errors.
+    - Temporary storage (queue) of data when offline and resend when connection is restored.
+    - Safe handling of critical errors.
+- **Command Line Interface (CLI):**
+    - `CMSAgent.exe configure`: Configure the agent initially or reconfigure it.
+    - `CMSAgent.exe start/stop/uninstall/debug`: Manage service and debug.
 
-## Cấu trúc Thư mục Dự án
-
-(Tham khảo Phần XII trong "Tài liệu Toàn Diện CMSAgent v7.4" để biết chi tiết cấu trúc thư mục dự án.)
-
+## Project Directory Structure
 ```
 agent/
 ├── src/
-│   ├── CMSAgent/           # Dự án chính (Windows Service & CLI)
-│   ├── CMSUpdater/         # Dự án cho tiến trình Updater
-│   ├── CMSAgent.Common/    # Thư viện dùng chung (DTOs, Enums, Constants, Interfaces)
-│   └── Setup/              # Script tạo bộ cài đặt (ví dụ: Inno Setup)
+│   ├── CMSAgent/           # Main project (Windows Service & CLI)
+│   ├── CMSUpdater/         # Project for the Updater process
+│   ├── CMSAgent.Common/    # Shared library (DTOs, Enums, Constants, Interfaces)
+│   └── Setup/              # Installation package script (e.g., Inno Setup)
 ├── tests/
 │   ├── CMSAgent.UnitTests/
 │   └── CMSUpdater.UnitTests/
 │   └── CMSAgent.IntegrationTests/
-├── docs/                     # Tài liệu dự án
-├── scripts/                  # Các script hỗ trợ
+├── docs/                     # Project documentation
+├── scripts/                  # Support scripts
 ├── .gitignore
 ├── CMSAgent.sln
-└── README.md                 # File này
+└── README.md                 # This file
 
 ```
 
-## Yêu Cầu Hệ Thống và Phần Mềm Phụ Thuộc
+## System Requirements and Dependencies
 
-- **Hệ điều hành hỗ trợ:** Windows 10 (1903+), Windows 11, Windows Server 2016/2019/2022 (chỉ 64-bit).
-- **.NET Runtime:** Phiên bản .NET mà agent được biên dịch (ví dụ: .NET 9.0 LTS).
-- **Thư viện bên ngoài:** Xem chi tiết phiên bản trong Phần II của "Tài liệu Toàn Diện CMSAgent v7.4".
+- **Supported operating systems:** Windows 10 (1903+), Windows 11, Windows Server 2016/2019/2022 (64-bit only).
+- **.NET Runtime:** The .NET version the agent is compiled for (e.g., .NET 9.0 LTS).
+- **External libraries:** See detailed versions in Section II of "Comprehensive CMSAgent v7.4 Documentation".
 
-## Cài đặt và Cấu hình
+## Installation and Configuration
 
-1. **Build dự án:** Build solution `CMSAgent.sln` để tạo các file thực thi `CMSAgent.exe` và `CMSUpdater.exe`.
-2. **Tạo gói cài đặt:** Sử dụng script Inno Setup trong thư mục `src/Setup/` để đóng gói các file cần thiết thành một file `Setup.CMSAgent.exe`.
-3. **Chạy trình cài đặt:** Thực thi `Setup.CMSAgent.exe` với quyền Administrator trên máy client.
-4. **Cấu hình ban đầu:**
-    - Sau khi cài đặt, trình cài đặt sẽ tự động chạy lệnh:
+1. **Build the project:** Build the `CMSAgent.sln` solution to create the executable files `CMSAgent.exe` and `CMSUpdater.exe`.
+2. **Create installation package:** Use the Inno Setup script in the `src/Setup/` directory to package the necessary files into a `Setup.CMSAgent.exe` file.
+3. **Run the installer:** Execute `Setup.CMSAgent.exe` with Administrator privileges on the client machine.
+4. **Initial configuration:**
+    - After installation, the installer will automatically run the command:
     `"C:\Program Files\CMSAgent\CMSAgent.exe" configure`
-    - Làm theo hướng dẫn trên giao diện dòng lệnh để nhập thông tin phòng, tọa độ. Agent sẽ kết nối server để xác thực và lấy `agentToken`.
-    - Thông tin này (ngoại trừ token đã mã hóa) sẽ được lưu trong `C:\ProgramData\CMSAgent\runtime_config\runtime_config.json`.
-    - Các cấu hình hoạt động chính của agent (như URL server, khoảng thời gian báo cáo) được đặt trong `C:\Program Files\CMSAgent\appsettings.json` và có thể được chỉnh sửa thủ công nếu cần.
-5. **Service sẽ tự động khởi động** sau khi cấu hình thành công.
+    - Follow the instructions in the command-line interface to enter room information and coordinates. The agent will connect to the server for authentication and obtain an `agentToken`.
+    - This information (except for the encrypted token) will be saved in `C:\ProgramData\CMSAgent\runtime_config\runtime_config.json`.
+    - The main operational configurations of the agent (such as server URL, reporting interval) are set in `C:\Program Files\CMSAgent\appsettings.json` and can be manually edited if needed.
+5. **The service will automatically start** after successful configuration.
 
-## Sử dụng Giao diện Dòng lệnh (CLI)
+## Using the Command Line Interface (CLI)
 
-Sau khi cài đặt, bạn có thể sử dụng `CMSAgent.exe` từ thư mục cài đặt với các tham số sau (yêu cầu quyền Administrator cho hầu hết các lệnh):
+After installation, you can use `CMSAgent.exe` from the installation directory with the following parameters (Administrator privileges required for most commands):
 
-- `CMSAgent.exe configure`: Cấu hình lại agent.
-- `CMSAgent.exe start`: Khởi động CMSAgent Service.
-- `CMSAgent.exe stop`: Dừng CMSAgent Service.
-- `CMSAgent.exe uninstall`: Gỡ cài đặt agent.
-    - `CMSAgent.exe uninstall --remove-data`: Gỡ cài đặt và xóa toàn bộ dữ liệu của agent.
-- `CMSAgent.exe debug`: Chạy agent ở chế độ console để gỡ lỗi.
+- `CMSAgent.exe configure`: Reconfigure the agent.
+- `CMSAgent.exe start`: Start the CMSAgent Service.
+- `CMSAgent.exe stop`: Stop the CMSAgent Service.
+- `CMSAgent.exe uninstall`: Uninstall the agent.
+    - `CMSAgent.exe uninstall --remove-data`: Uninstall and remove all agent data.
+- `CMSAgent.exe debug`: Run the agent in console mode for debugging.
 
 ## Logging
 
-- Log chính của Agent Service: `C:\ProgramData\CMSAgent\logs\agent_YYYYMMDD.log`
-- Log của Updater: `C:\ProgramData\CMSAgent\logs\updater_YYYYMMDD_HHMMSS.log`
-- Log của tiến trình cấu hình: `C:\ProgramData\CMSAgent\logs\configure_YYYYMMDD_HHMMSS.log`
-- Các sự kiện quan trọng cũng được ghi vào Windows Event Log (Application log, Source: "CMSAgentService").
+- Main Agent Service logs: `C:\ProgramData\CMSAgent\logs\agent_YYYYMMDD.log`
+- Updater logs: `C:\ProgramData\CMSAgent\logs\updater_YYYYMMDD_HHMMSS.log`
+- Configuration process logs: `C:\ProgramData\CMSAgent\logs\configure_YYYYMMDD_HHMMSS.log`
+- Important events are also recorded in the Windows Event Log (Application log, Source: "CMSAgentService").
 
-## Đóng góp
+## Contribution
 
-(Phần này có thể được bổ sung nếu dự án là mã nguồn mở và chấp nhận đóng góp từ cộng đồng, bao gồm hướng dẫn về cách báo lỗi, đề xuất tính năng, hoặc gửi pull request.)
+(This section can be supplemented if the project is open source and accepts community contributions, including guidelines on how to report bugs, suggest features, or send pull requests.)
 
-## Giấy phép
+## License
 
-(Thông tin về giấy phép của dự án, ví dụ: MIT, Apache 2.0, hoặc giấy phép độc quyền.)
+(Information about the project's license, e.g., MIT, Apache 2.0, or proprietary license.)
 
-Để biết thông tin chi tiết hơn về hoạt động, giao tiếp, cấu hình, bảo mật và xử lý lỗi, vui lòng tham khảo tài liệu đầy đủ: **"Tài liệu Toàn Diện: Hoạt động, Giao tiếp và Cấu hình CMSAgent v7.4"**.
+For more detailed information on operations, communications, configuration, security, and error handling, please refer to the complete documentation: **"Comprehensive Documentation: Operations, Communications, and Configuration of CMSAgent v7.4"**.

@@ -1,55 +1,53 @@
 namespace CMSAgent.Common.Enums
 {
     /// <summary>
-    /// Mã lỗi cho các lệnh CLI của CMSAgent.exe.
+    /// Exit codes for CMSAgent.exe CLI commands.
     /// </summary>
     public enum CliExitCodes
     {
         /// <summary>
-        /// Thành công.
+        /// Operation successful.
         /// </summary>
         Success = 0,
 
         /// <summary>
-        /// Lỗi chung.
+        /// General error.
         /// </summary>
         GeneralError = 1,
 
         /// <summary>
-        /// Thiếu quyền (Administrator).
+        /// Missing permissions (Administrator).
         /// </summary>
         MissingPermissions = 2,
 
         /// <summary>
-        /// Người dùng hủy thao tác.
+        /// Operation cancelled by user.
         /// </summary>
         UserCancelled = 3,
 
         /// <summary>
-        /// Lỗi kết nối hoặc xác thực với server.
+        /// Server connection or authentication failed.
         /// </summary>
         ServerConnectionFailed = 4,
 
         /// <summary>
-        /// Lỗi lưu file cấu hình.
+        /// Failed to save configuration file.
         /// </summary>
         ConfigSaveFailed = 5,
 
         /// <summary>
-        /// Lỗi dừng/gỡ bỏ service.
+        /// Service stop/uninstall operation failed.
         /// </summary>
         ServiceOperationFailed = 6,
 
         /// <summary>
-        /// Service không được cài đặt.
+        /// Service is not installed.
         /// </summary>
         ServiceNotInstalled = 7,
 
-
         /// <summary>
-        /// Đầu vào không hợp lệ.
+        /// Invalid input.
         /// </summary>
         InvalidInput = 9,
-
     }
 }

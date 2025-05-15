@@ -11,7 +11,7 @@ using Microsoft.Extensions.Options;
 namespace CMSAgent.Commands
 {
     /// <summary>
-    /// Quản lý hàng đợi lệnh và thực thi lệnh.
+    /// Manages command queue and executes commands.
     /// </summary>
     public class CommandExecutor
     {
@@ -25,12 +25,12 @@ namespace CMSAgent.Commands
         private bool _isProcessing = false;
 
         /// <summary>
-        /// Khởi tạo một instance mới của CommandExecutor.
+        /// Initialize a new instance of CommandExecutor.
         /// </summary>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
-        /// <param name="commandHandlerFactory">Factory để tạo handler thực thi lệnh.</param>
-        /// <param name="webSocketConnector">WebSocket connector để gửi kết quả lệnh.</param>
-        /// <param name="settingsOptions">Cấu hình thực thi lệnh.</param>
+        /// <param name="logger">Logger to log events.</param>
+        /// <param name="commandHandlerFactory">Factory to create command execution handlers.</param>
+        /// <param name="webSocketConnector">WebSocket connector to send command results.</param>
+        /// <param name="settingsOptions">Command execution configuration.</param>
         public CommandExecutor(
             ILogger<CommandExecutor> logger,
             CommandHandlerFactory commandHandlerFactory,
@@ -42,71 +42,71 @@ namespace CMSAgent.Commands
             _webSocketConnector = webSocketConnector ?? throw new ArgumentNullException(nameof(webSocketConnector));
             _settings = settingsOptions?.Value ?? throw new ArgumentNullException(nameof(settingsOptions));
             
-            // Khởi tạo semaphore với số lượng lệnh có thể thực thi đồng thời
+            // Initialize semaphore with the number of commands that can be executed simultaneously
             _executionSemaphore = new SemaphoreSlim(_settings.MaxParallelCommands, _settings.MaxParallelCommands);
         }
 
         /// <summary>
-        /// Thử thêm một lệnh vào hàng đợi.
+        /// Try to add a command to the queue.
         /// </summary>
-        /// <param name="command">Lệnh cần thêm vào hàng đợi.</param>
-        /// <returns>True nếu thêm thành công, False nếu hàng đợi đã đầy.</returns>
+        /// <param name="command">Command to add to the queue.</param>
+        /// <returns>True if added successfully, False if the queue is full.</returns>
         public bool TryEnqueueCommand(CommandPayload command)
         {
             ArgumentNullException.ThrowIfNull(command);
 
-            // Kiểm tra xem hàng đợi đã đầy chưa
+            // Check if the queue is already full
             if (_commandQueue.Count >= _settings.MaxQueueSize)
             {
-                _logger.LogWarning("Không thể thêm lệnh vào hàng đợi: Hàng đợi đã đầy ({QueueSize}/{MaxSize})",
+                _logger.LogWarning("Cannot add command to queue: Queue is full ({QueueSize}/{MaxSize})",
                     _commandQueue.Count, _settings.MaxQueueSize);
                 return false;
             }
 
             _commandQueue.Enqueue(command);
-            _logger.LogInformation("Đã thêm lệnh {CommandType} vào hàng đợi: {CommandId} (kích thước hàng đợi: {QueueSize})",
+            _logger.LogInformation("Added {CommandType} command to queue: {CommandId} (queue size: {QueueSize})",
                 command.commandType, command.commandId, _commandQueue.Count);
             
             return true;
         }
 
         /// <summary>
-        /// Bắt đầu xử lý các lệnh trong hàng đợi.
+        /// Start processing commands in the queue.
         /// </summary>
-        /// <param name="cancellationToken">Token để hủy thao tác.</param>
-        /// <returns>Task đại diện cho quá trình xử lý lệnh.</returns>
+        /// <param name="cancellationToken">Token to cancel the operation.</param>
+        /// <returns>Task representing the command processing.</returns>
         public async Task StartProcessingAsync(CancellationToken cancellationToken)
         {
             if (_isProcessing)
             {
-                _logger.LogWarning("Đã có một quá trình xử lý lệnh đang chạy");
+                _logger.LogWarning("A command processing task is already running");
                 return;
             }
 
             _isProcessing = true;
-            _logger.LogInformation("Bắt đầu xử lý hàng đợi lệnh");
+            _logger.LogInformation("Starting command queue processing");
 
             try
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    // Không có lệnh nào trong hàng đợi, đợi một chút rồi kiểm tra lại
+                    // No commands in the queue, wait a bit and check again
                     if (_commandQueue.IsEmpty)
                     {
                         await Task.Delay(500, cancellationToken);
                         continue;
                     }
 
-                    // Lấy lệnh từ hàng đợi
+                    // Get command from queue
                     if (!_commandQueue.TryDequeue(out var command))
                     {
                         continue;
                     }
 
-                    // Chờ semaphore để đảm bảo không vượt quá số lượng lệnh thực thi đồng thời
+                    // Wait for semaphore to ensure we don't exceed maximum number of concurrent commands
                     await _executionSemaphore.WaitAsync(cancellationToken);
 
-                    // Thực thi lệnh trong task riêng
+                    // Execute command in a separate task
                     _ = Task.Run(async () =>
                     {
                         try
@@ -115,7 +115,7 @@ namespace CMSAgent.Commands
                         }
                         finally
                         {
-                            // Giải phóng semaphore khi hoàn thành
+                            // Release semaphore when done
                             _executionSemaphore.Release();
                         }
                     }, cancellationToken);
@@ -123,11 +123,11 @@ namespace CMSAgent.Commands
             }
             catch (OperationCanceledException)
             {
-                _logger.LogInformation("Quá trình xử lý hàng đợi lệnh đã bị hủy");
+                _logger.LogInformation("Command queue processing was cancelled");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi xử lý hàng đợi lệnh");
+                _logger.LogError(ex, "Error when processing command queue");
             }
             finally
             {
@@ -136,34 +136,34 @@ namespace CMSAgent.Commands
         }
 
         /// <summary>
-        /// Thực thi một lệnh cụ thể.
+        /// Execute a specific command.
         /// </summary>
-        /// <param name="command">Lệnh cần thực thi.</param>
-        /// <param name="cancellationToken">Token để hủy thao tác.</param>
-        /// <returns>Task đại diện cho việc thực thi lệnh.</returns>
+        /// <param name="command">Command to execute.</param>
+        /// <param name="cancellationToken">Token to cancel the operation.</param>
+        /// <returns>Task representing command execution.</returns>
         private async Task ExecuteCommandAsync(CommandPayload command, CancellationToken cancellationToken)
         {
-            _logger.LogInformation("Bắt đầu thực thi lệnh {CommandType}: {CommandId}", 
+            _logger.LogInformation("Starting execution of {CommandType} command: {CommandId}", 
                 command.commandType, command.commandId);
 
             CommandResultPayload result;
 
             try
             {
-                // Lấy handler phù hợp từ factory
+                // Get appropriate handler from factory
                 var handler = _commandHandlerFactory.GetHandler(command.commandType);
                 
-                // Thực thi lệnh
+                // Execute command
                 result = await handler.ExecuteAsync(command, cancellationToken);
                 
-                _logger.LogInformation("Đã thực thi lệnh {CommandId} với kết quả: {Success}", 
-                    command.commandId, result.success ? "Thành công" : "Thất bại");
+                _logger.LogInformation("Executed command {CommandId} with result: {Success}", 
+                    command.commandId, result.success ? "Success" : "Failure");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thực thi lệnh {CommandId}", command.commandId);
+                _logger.LogError(ex, "Error when executing command {CommandId}", command.commandId);
                 
-                // Tạo kết quả lỗi
+                // Create error result
                 result = new CommandResultPayload
                 {
                     commandId = command.commandId,
@@ -173,39 +173,39 @@ namespace CMSAgent.Commands
                     {
                         stdout = string.Empty,
                         stderr = string.Empty,
-                        errorMessage = $"Lỗi không xử lý được: {ex.Message}",
+                        errorMessage = $"Unhandled error: {ex.Message}",
                         errorCode = string.Empty
                     }
                 };
             }
             
-            // Gửi kết quả lên server
+            // Send result to server
             await SendCommandResultAsync(result);
         }
 
         /// <summary>
-        /// Gửi kết quả lệnh lên server.
+        /// Send command result to server.
         /// </summary>
-        /// <param name="result">Kết quả lệnh cần gửi.</param>
-        /// <returns>Task đại diện cho việc gửi kết quả.</returns>
+        /// <param name="result">Command result to send.</param>
+        /// <returns>Task representing the sending operation.</returns>
         private async Task SendCommandResultAsync(CommandResultPayload result)
         {
             try
             {
-                // Thử gửi kết quả qua WebSocket trước
+                // Try to send result via WebSocket first
                 if (await _webSocketConnector.SendCommandResultAsync(result))
                 {
-                    _logger.LogInformation("Đã gửi kết quả lệnh {CommandId} thành công qua WebSocket", 
+                    _logger.LogInformation("Successfully sent command result {CommandId} via WebSocket", 
                         result.commandId);
                     return;
                 }
                 
-                _logger.LogWarning("Không thể gửi kết quả lệnh {CommandId} qua WebSocket (server có thể không khả dụng)", 
+                _logger.LogWarning("Unable to send command result {CommandId} via WebSocket (server may be unavailable)", 
                     result.commandId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi gửi kết quả lệnh {CommandId}", result.commandId);
+                _logger.LogError(ex, "Error when sending command result {CommandId}", result.commandId);
             }
         }
     }

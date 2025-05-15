@@ -7,7 +7,7 @@ using System.Runtime.Versioning;
 namespace CMSAgent.Security
 {
     /// <summary>
-    /// Lớp bảo vệ token bằng cách mã hóa và giải mã.
+    /// Class for protecting tokens through encryption and decryption.
     /// </summary>
     [SupportedOSPlatform("windows")]
     public class TokenProtector(ILogger<TokenProtector> logger)
@@ -16,15 +16,15 @@ namespace CMSAgent.Security
         private readonly byte[] _entropy = Encoding.UTF8.GetBytes("CMSAgent_Entropy_Key_2023");
 
         /// <summary>
-        /// Mã hóa token.
+        /// Encrypts a token.
         /// </summary>
-        /// <param name="token">Token cần mã hóa.</param>
-        /// <returns>Token đã được mã hóa dưới dạng chuỗi Base64.</returns>
+        /// <param name="token">Token to encrypt.</param>
+        /// <returns>Encrypted token as a Base64 string.</returns>
         public string EncryptToken(string token)
         {
             if (string.IsNullOrEmpty(token))
             {
-                throw new ArgumentException("Token không được để trống", nameof(token));
+                throw new ArgumentException("Token cannot be empty", nameof(token));
             }
 
             try
@@ -39,21 +39,21 @@ namespace CMSAgent.Security
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi mã hóa token");
+                _logger.LogError(ex, "Error when encrypting token");
                 throw;
             }
         }
 
         /// <summary>
-        /// Giải mã token.
+        /// Decrypts a token.
         /// </summary>
-        /// <param name="encryptedToken">Token đã mã hóa dưới dạng chuỗi Base64.</param>
-        /// <returns>Token gốc.</returns>
+        /// <param name="encryptedToken">Encrypted token as a Base64 string.</param>
+        /// <returns>Original token.</returns>
         public string DecryptToken(string encryptedToken)
         {
             if (string.IsNullOrEmpty(encryptedToken))
             {
-                throw new ArgumentException("Token đã mã hóa không được để trống", nameof(encryptedToken));
+                throw new ArgumentException("Encrypted token cannot be empty", nameof(encryptedToken));
             }
 
             try
@@ -68,9 +68,9 @@ namespace CMSAgent.Security
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi giải mã token");
+                _logger.LogError(ex, "Error when decrypting token");
                 throw;
             }
         }
     }
-} 
+}

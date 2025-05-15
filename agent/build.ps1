@@ -1,8 +1,8 @@
 #region Configuration
-# Build Script cho CMSAgent Setup
-# Script này sẽ build dự án và tạo file cài đặt
+# Build Script for CMSAgent Setup
+# This script will build the project and create installation file
 
-# Cấu hình đường dẫn
+# Path Configuration
 $ProjectRoot = $PSScriptRoot
 $SourceDir = Join-Path $ProjectRoot "src"
 $BuildDir = Join-Path $ProjectRoot "build"
@@ -10,7 +10,7 @@ $ReleaseDir = Join-Path $BuildDir "release"
 $InstallerDir = Join-Path $BuildDir "installer"
 $InnoSetupCompiler = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 
-# Đường dẫn đến các project files
+# Paths to project files
 $CMSAgentProject = Join-Path $SourceDir "CMSAgent\CMSAgent.csproj"
 $CMSAgentCommonProject = Join-Path $SourceDir "CMSAgent.Common\CMSAgent.Common.csproj"
 $SetupScriptFile = Join-Path $SourceDir "Setup\SetupScript.iss"
@@ -19,13 +19,13 @@ $SetupScriptFile = Join-Path $SourceDir "Setup\SetupScript.iss"
 #region Helper Functions
 <#
 .SYNOPSIS
-    Cập nhật phiên bản trong file .csproj
+    Update version in .csproj file
 .DESCRIPTION
-    Hàm này tạo bản sao lưu file .csproj, sau đó cập nhật hoặc thêm thẻ Version với giá trị mới
+    This function creates a backup of the .csproj file, then updates or adds the Version tag with a new value
 .PARAMETER ProjectFile
-    Đường dẫn đến file .csproj cần cập nhật
+    Path to the .csproj file to update
 .PARAMETER Version
-    Chuỗi phiên bản mới
+    New version string
 #>
 function Update-ProjectVersion {
     param (
@@ -36,37 +36,37 @@ function Update-ProjectVersion {
         [string]$Version
     )
     
-    Write-Host "Cập nhật phiên bản $Version cho $ProjectFile"
+    Write-Host "Updating version $Version for $ProjectFile"
     
-    # Tạo bản sao lưu trước khi sửa đổi
+    # Create backup before modification
     Copy-Item -Path $ProjectFile -Destination "$ProjectFile.bak" -Force
     
-    # Đọc nội dung file
+    # Read file content
     $Content = Get-Content -Path $ProjectFile -Raw
     
-    # Kiểm tra xem thẻ Version đã tồn tại chưa
+    # Check if Version tag already exists
     if ($Content -match '<Version>[0-9.]+</Version>') {
-        # Cập nhật phiên bản nếu đã tồn tại
+        # Update version if it exists
         $UpdatedContent = $Content -replace '<Version>[0-9.]+</Version>', "<Version>$Version</Version>"
     } else {
-        # Thêm thẻ Version vào sau thẻ Nullable nếu chưa tồn tại
+        # Add Version tag after Nullable tag if it doesn't exist
         $UpdatedContent = $Content -replace '(<Nullable>.*?</Nullable>)', "$1`r`n    <Version>$Version</Version>"
     }
     
-    # Lưu nội dung đã cập nhật
+    # Save updated content
     Set-Content -Path $ProjectFile -Value $UpdatedContent
 }
 
 <#
 .SYNOPSIS
-    Cập nhật phiên bản trong file SetupScript.iss
+    Update version in SetupScript.iss file
 .DESCRIPTION
-    Hàm này tạo bản sao lưu file SetupScript.iss và thay thế việc đọc phiên bản từ file
-    bằng cách sử dụng trực tiếp giá trị phiên bản được cung cấp
+    This function creates a backup of the SetupScript.iss file and replaces the version reading from file
+    by directly using the provided version value
 .PARAMETER SetupScriptFile
-    Đường dẫn đến file SetupScript.iss
+    Path to the SetupScript.iss file
 .PARAMETER Version
-    Chuỗi phiên bản mới
+    New version string
 #>
 function Update-SetupScript {
     param (
@@ -77,32 +77,32 @@ function Update-SetupScript {
         [string]$Version
     )
     
-    Write-Host "Cập nhật phiên bản trong file setup script: $SetupScriptFile"
+    Write-Host "Updating version in setup script file: $SetupScriptFile"
     
-    # Tạo bản sao lưu
+    # Create backup
     Copy-Item -Path $SetupScriptFile -Destination "$SetupScriptFile.bak" -Force
     
-    # Đọc nội dung file
+    # Read file content
     $Content = Get-Content -Path $SetupScriptFile -Raw
     
-    # Thêm định nghĩa AppVersion vào đầu file
+    # Add AppVersion definition at the beginning of the file
     $NewContent = "#define AppVersion `"$Version`"`r`n" + $Content
     
-    # Lưu nội dung đã cập nhật
+    # Save updated content
     $NewContent | Set-Content -Path $SetupScriptFile
     
-    Write-Host "Đã thêm #define AppVersion `"$Version`" vào đầu file setup script"
+    Write-Host "Added #define AppVersion `"$Version`" at the beginning of setup script file"
 }
 
 <#
 .SYNOPSIS
-    Khôi phục các file về trạng thái ban đầu từ bản sao lưu
+    Restore files to their original state from backups
 .DESCRIPTION
-    Khôi phục các file .csproj và SetupScript.iss về trạng thái ban đầu sau khi quá trình build hoàn tất
+    Restore .csproj and SetupScript.iss files to their original state after the build process is completed
 .PARAMETER ProjectFiles
-    Mảng đường dẫn đến các file .csproj cần khôi phục
+    Array of paths to .csproj files to restore
 .PARAMETER SetupScriptFile
-    Đường dẫn đến file SetupScript.iss cần khôi phục
+    Path to the SetupScript.iss file to restore
 #>
 function Restore-ProjectFiles {
     param (
@@ -115,14 +115,14 @@ function Restore-ProjectFiles {
     
     foreach ($ProjectFile in $ProjectFiles) {
         if (Test-Path "$ProjectFile.bak") {
-            Write-Host "Khôi phục file $ProjectFile về trạng thái ban đầu"
+            Write-Host "Restoring file $ProjectFile to original state"
             Copy-Item -Path "$ProjectFile.bak" -Destination $ProjectFile -Force
             Remove-Item -Path "$ProjectFile.bak" -Force
         }
     }
     
     if (-not [string]::IsNullOrEmpty($SetupScriptFile) -and (Test-Path "$SetupScriptFile.bak")) {
-        Write-Host "Khôi phục file $SetupScriptFile về trạng thái ban đầu"
+        Write-Host "Restoring file $SetupScriptFile to original state"
         Copy-Item -Path "$SetupScriptFile.bak" -Destination $SetupScriptFile -Force
         Remove-Item -Path "$SetupScriptFile.bak" -Force
     }
@@ -130,15 +130,15 @@ function Restore-ProjectFiles {
 
 <#
 .SYNOPSIS
-    Build dự án .NET
+    Build .NET project
 .DESCRIPTION
-    Hàm này dùng để build một dự án .NET với các cài đặt được chỉ định
+    This function is used to build a .NET project with specified settings
 .PARAMETER ProjectPath
-    Đường dẫn đến file project (.csproj)
+    Path to the project file (.csproj)
 .PARAMETER OutputPath
-    Đường dẫn thư mục đầu ra
+    Path to the output directory
 .PARAMETER Configuration
-    Cấu hình build (mặc định: Release)
+    Build configuration (default: Release)
 #>
 function Invoke-DotNetBuild {
     param (
@@ -154,12 +154,12 @@ function Invoke-DotNetBuild {
     
     Write-Host "Building $ProjectPath to $OutputPath"
     
-    # Tạo thư mục đầu ra nếu chưa tồn tại
+    # Create output directory if it doesn't exist
     if (-not (Test-Path $OutputPath)) {
         New-Item -ItemType Directory -Path $OutputPath | Out-Null
     }
     
-    # Build dự án
+    # Build project
     dotnet publish $ProjectPath `
         --configuration $Configuration `
         --output $OutputPath `
@@ -170,19 +170,19 @@ function Invoke-DotNetBuild {
         -p:PublishReadyToRun=true
     
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Không thể build dự án $ProjectPath"
+        Write-Error "Cannot build project $ProjectPath"
         exit $LASTEXITCODE
     }
 }
 
 <#
 .SYNOPSIS
-    Tạo các thư mục build cần thiết
+    Create necessary build directories
 .DESCRIPTION
-    Tạo các thư mục build, release và installer nếu chưa tồn tại
+    Create build, release, and installer directories if they don't exist
 #>
 function Initialize-BuildDirectories {
-    # Tạo thư mục build nếu chưa tồn tại
+    # Create build directory if it doesn't exist
     if (-not (Test-Path $BuildDir)) {
         New-Item -ItemType Directory -Path $BuildDir | Out-Null
     }
@@ -198,12 +198,12 @@ function Initialize-BuildDirectories {
 
 <#
 .SYNOPSIS
-    Xóa các bản build cũ
+    Delete old builds
 .DESCRIPTION
-    Xóa nội dung của thư mục release và installer để chuẩn bị cho bản build mới
+    Delete contents of release and installer directories to prepare for new build
 #>
 function Clear-OldBuilds {
-    Write-Host "Xóa các bản build cũ..."
+    Write-Host "Deleting old builds..."
     if (Test-Path $ReleaseDir) {
         Remove-Item -Path "$ReleaseDir\*" -Recurse -Force
     }
@@ -215,72 +215,72 @@ function Clear-OldBuilds {
 
 #region Main Script
 try {
-    # Lấy thông tin phiên bản từ người dùng
-    $Version = Read-Host "Nhập phiên bản (ví dụ: 1.0.0)"
+    # Get version information from user
+    $Version = Read-Host "Enter version (e.g., 1.0.0)"
     if ([string]::IsNullOrWhiteSpace($Version)) {
-        Write-Error "Phiên bản không được để trống. Đang dừng quá trình build."
+        Write-Error "Version cannot be empty. Stopping the build process."
         exit 1
     }
     $Version = $Version.Trim()
     Write-Host "Building version: $Version" -ForegroundColor Cyan
 
-    # Kiểm tra Inno Setup
+    # Check Inno Setup
     if (-not (Test-Path $InnoSetupCompiler)) {
-        Write-Error "Không tìm thấy Inno Setup Compiler. Vui lòng cài đặt Inno Setup 6 tại đường dẫn mặc định hoặc cập nhật đường dẫn trong script."
+        Write-Error "Inno Setup Compiler not found. Please install Inno Setup 6 at the default path or update the path in script."
         exit 1
     }
 
-    # Cập nhật phiên bản trong các project
-    Write-Host "Bắt đầu cập nhật phiên bản trong các project files..." -ForegroundColor Cyan
+    # Update version in projects
+    Write-Host "Starting to update version in project files..." -ForegroundColor Cyan
     Update-ProjectVersion -ProjectFile $CMSAgentProject -Version $Version
     Update-ProjectVersion -ProjectFile $CMSAgentCommonProject -Version $Version
 
-    # Cập nhật phiên bản trong file SetupScript.iss
+    # Update version in SetupScript.iss file
     Update-SetupScript -SetupScriptFile $SetupScriptFile -Version $Version
 
-    # Tạo thư mục build và xóa các bản build cũ
+    # Create build directories and clear old builds
     Initialize-BuildDirectories
     Clear-OldBuilds
 
-    # Build các project
-    Write-Host "Bắt đầu quá trình build..." -ForegroundColor Cyan
+    # Build projects
+    Write-Host "Starting build process..." -ForegroundColor Cyan
     
     # Build CMSAgent
     $CMSAgentOutputDir = Join-Path $ReleaseDir "CMSAgent"
     Write-Host "Building CMSAgent..." -ForegroundColor Yellow
     Invoke-DotNetBuild -ProjectPath $CMSAgentProject -OutputPath $CMSAgentOutputDir
 
-    # Coppy các file cấu hình bổ sung nếu cần
-    Write-Host "Sao chép các file cấu hình bổ sung..." -ForegroundColor Yellow
-    # TODO: Thêm các lệnh copy file cấu hình nếu cần
+    # Copy additional configuration files if needed
+    Write-Host "Copying additional configuration files..." -ForegroundColor Yellow
+    # TODO: Add configuration file copy commands if needed
 
-    # Tạo file cài đặt với Inno Setup
-    Write-Host "Tạo file cài đặt với Inno Setup..." -ForegroundColor Cyan
+    # Create installer with Inno Setup
+    Write-Host "Creating installer with Inno Setup..." -ForegroundColor Cyan
     & $InnoSetupCompiler $SetupScriptFile
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Không thể tạo file cài đặt với Inno Setup."
+        Write-Error "Cannot create installer with Inno Setup."
         exit $LASTEXITCODE
     }
 
-    # Kiểm tra và thông báo kết quả
+    # Check and report results
     $SetupFile = Join-Path $InstallerDir "Setup.CMSAgent.v$Version.exe"
     if (Test-Path $SetupFile) {
-        Write-Host "Đã tạo thành công file cài đặt: $SetupFile" -ForegroundColor Green
+        Write-Host "Successfully created installer: $SetupFile" -ForegroundColor Green
     } else {
-        Write-Error "Không tìm thấy file cài đặt sau khi build."
+        Write-Error "Installer file not found after build."
         exit 1
     }
 }
 catch {
-    Write-Error "Đã xảy ra lỗi trong quá trình build: $_"
+    Write-Error "An error occurred during build process: $_"
     exit 1
 }
 finally {
-    # Khôi phục các file về trạng thái ban đầu
-    Write-Host "Khôi phục các file về trạng thái ban đầu..." -ForegroundColor Yellow
+    # Restore files to original state
+    Write-Host "Restoring files to original state..." -ForegroundColor Yellow
     Restore-ProjectFiles -ProjectFiles @($CMSAgentProject, $CMSAgentCommonProject) -SetupScriptFile $SetupScriptFile
     
-    Write-Host "Quá trình build hoàn tất!" -ForegroundColor Green
+    Write-Host "Build process completed!" -ForegroundColor Green
 }
 #endregion

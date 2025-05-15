@@ -1,196 +1,196 @@
-# Tài liệu Toàn Diện: Hoạt động, Giao tiếp và Cấu hình CMSAgent
+# Comprehensive Documentation: Operation, Communication, and Configuration of CMSAgent
 
-**Ngày cập nhật:** 13 tháng 5 năm 2025
+**Last updated:** May 13, 2025
 
-## I. Tổng Quan về Agent
+## I. Agent Overview
 
-CMSAgent là một ứng dụng chạy trên máy client với các nhiệm vụ chính sau:
+CMSAgent is an application running on client machines with the following main tasks:
 
-- **Thu thập thông tin:** Lấy thông tin chi tiết về phần cứng hệ thống và theo dõi trạng thái sử dụng tài nguyên (CPU, RAM, disk) theo thời gian thực.
-- **Giao tiếp với Server:** Thiết lập và duy trì kết nối an toàn với server trung tâm để gửi thông tin thu thập được và nhận các chỉ thị điều khiển.
-- **Thực thi lệnh:** Nhận và thực thi các lệnh từ xa được gửi từ server (ví dụ: chạy script, thu thập log cụ thể).
-- **Tự động cập nhật:** Có khả năng tự động tải và cài đặt phiên bản mới của chính nó khi có thông báo từ server.
-- **Hoạt động ổn định:** Được thiết kế để chạy như một Windows Service, đảm bảo hoạt động nền, liên tục và tự khởi động cùng hệ thống.
+- **Information Collection:** Gather detailed system hardware information and monitor resource usage status (CPU, RAM, disk) in real-time.
+- **Server Communication:** Establish and maintain secure connections with the central server to send collected information and receive control instructions.
+- **Command Execution:** Receive and execute remote commands sent from the server (e.g., run scripts, collect specific logs).
+- **Automatic Updates:** Ability to automatically download and install new versions of itself when notified by the server.
+- **Stable Operation:** Designed to run as a Windows Service, ensuring background operation, continuous functionality, and automatic startup with the system.
 
-## II. Môi Trường Hoạt Động và Yêu Cầu
+## II. Operating Environment and Requirements
 
-- **Hệ Điều Hành Hỗ Trợ:**
-    - Windows 10 (khuyến nghị phiên bản 1903 trở lên, 64-bit).
+- **Supported Operating Systems:**
+    - Windows 10 (version 1903 or later recommended, 64-bit).
     - Windows 11 (64-bit).
     - Windows Server 2016, Windows Server 2019, Windows Server 2022 (64-bit).
-    - *Lưu ý:* Cần kiểm tra kỹ lưỡng khả năng tương thích của các API hệ thống cụ thể (ví dụ: WMI, Performance Counters) nếu có kế hoạch hỗ trợ các phiên bản Windows cũ hơn hoặc phiên bản 32-bit.
-- **Yêu Cầu Phần Mềm Phụ Thuộc:**
-    - **.NET Runtime:** Phiên bản .NET mà agent được biên dịch (ví dụ: .NET 6.0 LTS hoặc .NET 8.0 LTS). Runtime này cần được cài đặt trên máy client nếu agent không được triển khai dưới dạng "self-contained application".
-    - **Thư Viện Bên Ngoài (NuGet Packages Dự Kiến):**
+    - *Note:* Thorough compatibility testing of specific system APIs (e.g., WMI, Performance Counters) is required if there are plans to support older Windows versions or 32-bit versions.
+- **Software Dependencies:**
+    - **.NET Runtime:** The .NET version the agent is compiled with (e.g., .NET 6.0 LTS or .NET 8.0 LTS). This runtime needs to be installed on the client machine if the agent is not deployed as a "self-contained application".
+    - **External Libraries (Expected NuGet Packages):**
         
         
-        | Package | Phiên bản đề xuất | Ghi chú |
+        | Package | Recommended Version | Notes |
         | --- | --- | --- |
-        | SocketIOClient.Net | 3.x.x | Giao tiếp WebSocket (Socket.IO) với server. |
-        | Serilog | 2.x.x hoặc 3.x.x | Framework logging. |
-        | Serilog.Sinks.File | 5.x.x | Ghi log vào file. |
-        | Serilog.Sinks.Console | 3.x.x hoặc 4.x.x | Ghi log ra console (hữu ích khi debug). |
-        | Serilog.Sinks.EventLog | 3.x.x | Ghi log vào Windows Event Log. |
-        | System.Management | 6.0.x / 8.0.x | Truy cập Windows Management Instrumentation (WMI) lấy thông tin phần cứng. |
-        | System.CommandLine | 2.0.0-betaX | Xử lý tham số dòng lệnh mạnh mẽ. |
-        | Microsoft.Extensions.DependencyInjection | 6.0.x / 8.0.x | Triển khai Dependency Injection. |
-        | Microsoft.Extensions.Hosting | 6.0.x / 8.0.x | Hỗ trợ host ứng dụng console như một Windows Service. |
-        | Microsoft.Extensions.Hosting.WindowsServices | 6.0.x / 8.0.x | Tích hợp với Windows Services. |
-        | Microsoft.Extensions.Logging | 6.0.x / 8.0.x | Framework logging cơ bản của .NET. |
-        | Microsoft.Extensions.Logging.EventLog | 6.0.x / 8.0.x | Provider ghi log vào Event Log cho Microsoft.Extensions.Logging. |
-- **Quyền Hạn Cần Thiết:**
-    - **Trong Quá Trình Cài Đặt (Setup.CMSAgent.exe và CMSAgent.exe configure):**
-        - Yêu cầu quyền Administrator để:
-            - Ghi file vào thư mục cài đặt (ví dụ: C:\Program Files\CMSAgent).
-            - Tạo và ghi file/thư mục vào thư mục dữ liệu chung (ví dụ: C:\ProgramData\CMSAgent).
-            - Đăng ký, cấu hình và khởi động Windows Service.
-    - **Khi Agent Hoạt Động Như Windows Service (chạy dưới tài khoản LocalSystem):**
-        - Thư mục dữ liệu (C:\ProgramData\CMSAgent và các thư mục con): Tài khoản LocalSystem cần quyền Full Control.
-        - Thư mục cài đặt (C:\Program Files\CMSAgent): Tài khoản LocalSystem cần quyền Read & Execute. Trong quá trình cập nhật, CMSUpdater.exe sẽ cần quyền Modify.
-        - Truy cập mạng: Để kết nối đến server.
-        - Đọc thông tin hệ thống: Quyền truy cập WMI, performance counters, registry.
-        - Thực thi lệnh console: Lệnh sẽ chạy với quyền của LocalSystem.
-        - *Xem chi tiết cách thiết lập quyền truy cập thư mục trong **Phần VIII.3**.*
-    - **Khi Chạy Lệnh CLI (sau cài đặt bởi người dùng/quản trị viên):**
-        - CMSAgent.exe start, stop, uninstall: Yêu cầu quyền Administrator.
-        - CMSAgent.exe configure (để cấu hình lại): Yêu cầu quyền Administrator để ghi vào C:\ProgramData\CMSAgent\runtime_config\runtime_config.json.
-        - CMSAgent.exe debug: Có thể chạy với quyền người dùng thông thường, nhưng khả năng truy cập một số tài nguyên hệ thống hoặc ghi vào ProgramData có thể bị hạn chế.
+        | SocketIOClient.Net | 3.x.x | WebSocket (Socket.IO) communication with server. |
+        | Serilog | 2.x.x or 3.x.x | Logging framework. |
+        | Serilog.Sinks.File | 5.x.x | File logging. |
+        | Serilog.Sinks.Console | 3.x.x or 4.x.x | Console logging (useful for debugging). |
+        | Serilog.Sinks.EventLog | 3.x.x | Windows Event Log logging. |
+        | System.Management | 6.0.x / 8.0.x | Access to Windows Management Instrumentation (WMI) for hardware information. |
+        | System.CommandLine | 2.0.0-betaX | Powerful command-line argument processing. |
+        | Microsoft.Extensions.DependencyInjection | 6.0.x / 8.0.x | Dependency Injection implementation. |
+        | Microsoft.Extensions.Hosting | 6.0.x / 8.0.x | Support for hosting console applications as Windows Services. |
+        | Microsoft.Extensions.Hosting.WindowsServices | 6.0.x / 8.0.x | Windows Services integration. |
+        | Microsoft.Extensions.Logging | 6.0.x / 8.0.x | Basic .NET logging framework. |
+        | Microsoft.Extensions.Logging.EventLog | 6.0.x / 8.0.x | Event Log provider for Microsoft.Extensions.Logging. |
+- **Required Permissions:**
+    - **During Installation (Setup.CMSAgent.exe and CMSAgent.exe configure):**
+        - Administrator rights are required to:
+            - Write files to the installation directory (e.g., C:\Program Files\CMSAgent).
+            - Create and write files/directories to the common data directory (e.g., C:\ProgramData\CMSAgent).
+            - Register, configure, and start Windows Service.
+    - **When Agent Operates As Windows Service (running under LocalSystem account):**
+        - Data directory (C:\ProgramData\CMSAgent and its subdirectories): LocalSystem account needs Full Control.
+        - Installation directory (C:\Program Files\CMSAgent): LocalSystem account needs Read & Execute. During updates, CMSUpdater.exe will need Modify permission.
+        - Network access: For connecting to the server.
+        - System information access: Permission to access WMI, performance counters, registry.
+        - Console command execution: Commands will run with LocalSystem privileges.
+        - *See details on directory access permissions setup in **Section VIII.3**.*
+    - **When Running CLI Commands (by user/administrator after installation):**
+        - CMSAgent.exe start, stop, uninstall: Requires Administrator privileges.
+        - CMSAgent.exe configure (for reconfiguration): Requires Administrator privileges to write to C:\ProgramData\CMSAgent\runtime_config\runtime_config.json.
+        - CMSAgent.exe debug: Can run with regular user privileges, but access to some system resources or writing to ProgramData may be limited.
 
-## III. Luồng Cài Đặt và Cấu Hình Ban Đầu
+## III. Installation and Initial Configuration Flow
 
-Luồng này mô tả quá trình từ khi người dùng thực thi file cài đặt cho đến khi agent được cài đặt, cấu hình lần đầu và bắt đầu hoạt động như một Windows Service.
+This flow describes the process from when a user executes the installation file until the agent is installed, initially configured, and begins operating as a Windows Service.
 
-1. **Chuẩn Bị Gói Cài Đặt (Developer Task):**
-    - Một gói cài đặt (ví dụ: Setup.CMSAgent.exe) được tạo ra, chứa các thành phần:
-        - CMSAgent.exe: File thực thi chính của agent.
-        - CMSUpdater.exe: File thực thi cho tiến trình tự cập nhật.
-        - `appsettings.json` (mặc định): File cấu hình chính mặc định.
-        - Các thư viện DLL cần thiết khác.
-2. **Thực Thi Trình Cài Đặt (Bởi Người Dùng/Quản Trị Viên):**
-    - Người dùng chạy Setup.CMSAgent.exe với quyền Administrator.
-3. **Bước 1: Sao Chép File Ứng Dụng:**
-    - Trình cài đặt sao chép các file cần thiết vào thư mục cài đặt (ví dụ: C:\Program Files\CMSAgent).
-4. **Bước 2: Tạo Cấu Trúc Thư Mục Dữ Liệu và Thiết Lập Quyền:**
-    - Tạo thư mục dữ liệu chính (ví dụ: C:\ProgramData\CMSAgent) và các thư mục con: `logs/`, `runtime_config/`, `updates/`, `error_reports/`.
-    - **Quan trọng:** Thiết lập quyền "Full Control" cho LocalSystem trên `C:\\ProgramData\\CMSAgent` và các thư mục con. (Xem Phần VIII.3).
-5. **Thu Thập và Xác Thực Cấu Hình Runtime (qua `CMSAgent.exe configure`):**
-    - **Kích Hoạt:** Trình cài đặt thực thi: `"<Đường_dẫn_cài_đặt>\\CMSAgent.exe" configure`.
-    - **Tương tác CLI:** `CMSAgent.exe configure` mở console để thu thập thông tin vị trí và thực hiện xác thực ban đầu với server.
-    - **Tạo/Kiểm Tra `agentId`:** Lưu `agentId` duy nhất vào `runtime_config/runtime_config.json`.
-    - **Nhập Thông Tin Vị Trí và Xác Thực Server:** Yêu cầu `roomName`, `posX`, `posY`. Gửi yêu cầu định danh đến server. Xử lý phản hồi (lỗi vị trí, yêu cầu MFA, thành công).
-    - **Xử lý hủy cấu hình:** Nếu người dùng hủy (Ctrl+C), thoát mà không lưu thay đổi (trừ `agentId`).
-6. **Lưu Trữ Cấu Hình Runtime và Token:**
-    - Sau khi xác thực thành công, lưu `room_config` và `agent_token` (đã mã hóa) vào `runtime_config/runtime_config.json`.
-7. **Đăng Ký và Khởi Động Windows Service (Bởi Trình Cài Đặt):**
-    - Đăng ký `CMSAgent.exe` làm Windows Service (ServiceName: "CMSAgentService", StartType: Automatic, Account: LocalSystem).
-    - Khởi động service.
-8. **Hoàn Tất Cài Đặt:** Thông báo cài đặt thành công.
+1. **Prepare Installation Package (Developer Task):**
+    - An installation package (e.g., Setup.CMSAgent.exe) is created, containing components:
+        - CMSAgent.exe: Main agent executable.
+        - CMSUpdater.exe: Executable for the self-update process.
+        - `appsettings.json` (default): Default main configuration file.
+        - Other necessary DLL libraries.
+2. **Execute Installer (By User/Administrator):**
+    - User runs Setup.CMSAgent.exe with Administrator privileges.
+3. **Step 1: Copy Application Files:**
+    - Installer copies necessary files to installation directory (e.g., C:\Program Files\CMSAgent).
+4. **Step 2: Create Data Directory Structure and Set Permissions:**
+    - Create main data directory (e.g., C:\ProgramData\CMSAgent) and subdirectories: `logs/`, `runtime_config/`, `updates/`, `error_reports/`.
+    - **Important:** Set "Full Control" permissions for LocalSystem on `C:\\ProgramData\\CMSAgent` and its subdirectories. (See Section VIII.3).
+5. **Collect and Validate Runtime Configuration (via `CMSAgent.exe configure`):**
+    - **Activation:** Installer executes: `"<Installation_path>\\CMSAgent.exe" configure`.
+    - **CLI Interaction:** `CMSAgent.exe configure` opens console to collect location information and perform initial validation with server.
+    - **Create/Check `agentId`:** Save unique `agentId` to `runtime_config/runtime_config.json`.
+    - **Enter Location Information and Server Validation:** Request `roomName`, `posX`, `posY`. Send identification request to server. Process response (position error, MFA request, success).
+    - **Handle configuration cancellation:** If user cancels (Ctrl+C), exit without saving changes (except `agentId`).
+6. **Store Runtime Configuration and Token:**
+    - After successful validation, save `room_config` and `agent_token` (encrypted) to `runtime_config/runtime_config.json`.
+7. **Register and Start Windows Service (By Installer):**
+    - Register `CMSAgent.exe` as Windows Service (ServiceName: "CMSAgentService", StartType: Automatic, Account: LocalSystem).
+    - Start service.
+8. **Complete Installation:** Display installation success message.
 
-## IV. Luồng Hoạt Động Thường Xuyên của Agent
+## IV. Regular Agent Operation Flow
 
-1. **Khởi Động Service:** SCM khởi động `CMSAgent.exe`. Agent chuyển sang trạng thái `INITIALIZING`.
-2. **Thiết Lập Logging:** Khởi tạo Serilog (đọc cấu hình từ `appsettings.json`). Ghi log trạng thái `INITIALIZING`.
-3. **Đảm Bảo Cấu Trúc Thư Mục Dữ Liệu:** Tạo nếu chưa có.
-4. **Đảm Bảo Chỉ Một Instance:** Sử dụng Mutex (Xem Phần VIII.5).
-5. **Tải Cấu Hình:**
-    - Đọc cấu hình từ `appsettings.json`.
-    - Đọc `runtime_config/runtime_config.json`.
-    - Xác thực cấu hình (Xem Phần VII.4).
-    - Giải mã `agent_token`.
-6. **Kiểm Tra Tính Toàn Vẹn Cấu Hình Runtime:** Nếu thiếu hoặc không hợp lệ, chuyển trạng thái `ERROR`.
-7. **Khởi Tạo Module:** HTTP client, WebSocket client, giám sát tài nguyên, thực thi lệnh, xử lý cập nhật.
-8. **Lưu Ý Khi Hoạt Động Như Windows Service:** Quyền hạn cần thiết, tính sẵn sàng của file cấu hình, kết nối mạng ổn định, xử lý lỗi an toàn trong `OnStart()`, không tương tác với desktop, quản lý tài nguyên cẩn thận, luôn sử dụng đường dẫn tuyệt đối hoặc tương đối với file thực thi, và `CMSUpdater.exe` cần quyền tương tác SCM.
-9. **Xác Thực và Kết Nối Ban Đầu với Server:**
-    - Agent chuyển sang trạng thái `AUTHENTICATING`. Ghi log trạng thái.
-    - **Kết Nối WebSocket (Socket.IO):**
-        - Agent sử dụng `agentId` (là `agentId`) và `agent_token` để thiết lập kết nối WebSocket đến server.
-        - **Trong quá trình handshake của WebSocket, Agent BẮT BUỘC gửi header `x-client-type: agent`.**
-        - **Agent BẮT BUỘC gửi các header sau trong quá trình handshake:**
+1. **Service Start:** SCM starts `CMSAgent.exe`. Agent switches to `INITIALIZING` state.
+2. **Set up Logging:** Initialize Serilog (read configuration from `appsettings.json`). Log `INITIALIZING` state.
+3. **Ensure Data Directory Structure:** Create if not exists.
+4. **Ensure Single Instance:** Use Mutex (See Section VIII.5).
+5. **Load Configuration:**
+    - Read configuration from `appsettings.json`.
+    - Read `runtime_config/runtime_config.json`.
+    - Validate configuration (See Section VII.4).
+    - Decrypt `agent_token`.
+6. **Check Runtime Configuration Integrity:** If missing or invalid, switch to `ERROR` state.
+7. **Initialize Modules:** HTTP client, WebSocket client, resource monitoring, command execution, update handling.
+8. **Notes When Operating As Windows Service:** Required permissions, availability of configuration files, stable network connection, safe error handling in `OnStart()`, no desktop interaction, careful resource management, always use absolute paths or paths relative to executable, and `CMSUpdater.exe` requires SCM interaction privileges.
+9. **Initial Authentication and Connection with Server:**
+    - Agent switches to `AUTHENTICATING` state. Log state.
+    - **WebSocket Connection (Socket.IO):**
+        - Agent uses `agentId` (as `agentId`) and `agent_token` to establish WebSocket connection to server.
+        - **During WebSocket handshake, Agent MUST send header `x-client-type: agent`.**
+        - **Agent MUST send the following headers during handshake:**
             - `Authorization: Bearer <agent_token>`
             - `X-Agent-Id: <agentId>` 
-        - Server middleware sẽ tự động cố gắng trích xuất `authToken` và `agentId` từ các header này và lưu vào `socket.data`.
-        - Logic xác thực đầy đủ phía server (trong `setupAgentHandlers`) sẽ sử dụng thông tin trong `socket.data` (nếu có từ header) hoặc có thể chờ sự kiện `agent:authenticate` nếu thông tin từ header không đủ hoặc không được gửi.
-        - **Xác thực qua Sự kiện (Dự phòng):** Nếu agent không gửi các header xác thực, hoặc nếu logic phía server (trong `setupAgentHandlers`) xác định thông tin từ header không hợp lệ/đủ, server có thể chờ agent gửi sự kiện `agent:authenticate` với payload `{ agentId, token }`.
-        - Lắng nghe sự kiện `agent:ws_auth_success` từ server. Khi nhận được, chuyển sang trạng thái `CONNECTED`. Ghi log trạng thái.
-        - Nếu nhận `agent:ws_auth_failed` (ví dụ, token hết hạn/không hợp lệ):
-            - Ghi log lỗi.
-            - Thử thực hiện lại quy trình POST `/api/agent/identify` (sử dụng `agentId` và `room_config` đã lưu, không `forceRenewToken`).
-            - Nếu `identify` thành công và nhận được token mới, cập nhật token cục bộ (mã hóa và lưu vào `runtime_config.json`), quay lại bước kết nối WebSocket (bao gồm gửi các header cần thiết).
-            - Nếu `identify` yêu cầu MFA, agent trong ngữ cảnh service không thể xử lý, sẽ ghi log lỗi và chuyển sang trạng thái `DISCONNECTED`, thử lại sau một khoảng thời gian.
-            - Nếu `identify` thất bại vì lý do khác, ghi log lỗi, chuyển sang trạng thái `DISCONNECTED`, thử lại sau.
-    - **Gửi Thông Tin Phần Cứng Ban Đầu (HTTP POST `/api/agent/hardware-info`):**
-        - Sau khi kết nối WebSocket được xác thực (`CONNECTED`) hoặc sau khi có token hợp lệ từ HTTP `identify`, thu thập thông tin phần cứng chi tiết.
-        - Gửi thông tin này lên server. Nếu thất bại, ghi log lỗi và tiếp tục.
-10. **Vòng Lặp Hoạt Động Chính (Trạng thái `CONNECTED`):**
-    - Gửi báo cáo trạng thái định kỳ (WebSocket `agent:status_update`).
-    - Kiểm tra cập nhật (GET `/api/agent/check-update` hoặc WebSocket `agent:new_version_available`). Nếu có, chuyển trạng thái `UPDATING`.
-    - Xử lý lệnh từ server (WebSocket `command:execute`).
-    - Báo cáo lỗi phát sinh (POST `/api/agent/report-error`). Nếu thất bại, lưu vào `error_reports/`.
-11. **Xử Lý Mất Kết Nối (Trạng thái `DISCONNECTED`):**
-    - SocketIOClient.Net tự động thử kết nối lại.
-    - Tạm dừng gửi báo cáo trạng thái. Lưu trữ tạm dữ liệu (Xem IV.12).
-    - Khi kết nối lại, chuyển về `AUTHENTICATING` -> `CONNECTED`.
-12. **Hoạt Động Offline và Lưu Trữ Tạm (Queueing):**
-    - Lưu trữ tạm trên đĩa cho: báo cáo trạng thái, kết quả lệnh, báo cáo lỗi.
-    - Giới hạn lưu trữ cấu hình trong `appsettings.json`.
-    - Gửi lại khi kết nối được khôi phục.
-13. **Quản Lý Trạng Thái Nội Bộ:** Agent quản lý và ghi log các trạng thái hoạt động chính.
+        - Server middleware will automatically try to extract `authToken` and `agentId` from these headers and store in `socket.data`.
+        - Complete server-side authentication logic (in `setupAgentHandlers`) will use information in `socket.data` (if available from headers) or might wait for `agent:authenticate` event if header information is insufficient or not sent.
+        - **Authentication via Event (Fallback):** If agent doesn't send authentication headers, or if server-side logic (in `setupAgentHandlers`) determines header information is invalid/insufficient, server might wait for agent to send `agent:authenticate` event with payload `{ agentId, token }`.
+        - Listen for `agent:ws_auth_success` event from server. Upon receipt, switch to `CONNECTED` state. Log state.
+        - If receiving `agent:ws_auth_failed` (e.g., expired/invalid token):
+            - Log error.
+            - Try to perform POST `/api/agent/identify` process again (using stored `agentId` and `room_config`, without `forceRenewToken`).
+            - If `identify` succeeds and receives new token, update local token (encrypt and save to `runtime_config.json`), return to WebSocket connection step (including sending required headers).
+            - If `identify` requires MFA, agent in service context cannot process, will log error and switch to `DISCONNECTED` state, retry after a time interval.
+            - If `identify` fails for other reasons, log error, switch to `DISCONNECTED` state, retry later.
+    - **Send Initial Hardware Information (HTTP POST `/api/agent/hardware-info`):**
+        - After WebSocket connection is authenticated (`CONNECTED`) or after having valid token from HTTP `identify`, collect detailed hardware information.
+        - Send this information to server. If fails, log error and continue.
+10. **Main Operation Loop (State `CONNECTED`):**
+    - Send periodic status reports (WebSocket `agent:status_update`).
+    - Check for updates (GET `/api/agent/check-update` or WebSocket `agent:new_version_available`). If available, switch to `UPDATING` state.
+    - Process commands from server (WebSocket `command:execute`).
+    - Report occurring errors (POST `/api/agent/report-error`). If fails, save to `error_reports/`.
+11. **Handle Connection Loss (State `DISCONNECTED`):**
+    - SocketIOClient.Net automatically attempts to reconnect.
+    - Pause status reporting. Temporarily store data (See IV.12).
+    - When reconnected, switch back to `AUTHENTICATING` -> `CONNECTED`.
+12. **Offline Operation and Temporary Storage (Queueing):**
+    - Temporary disk storage for: status reports, command results, error reports.
+    - Storage limits configured in `appsettings.json`.
+    - Send when connection is restored.
+13. **Internal State Management:** Agent manages and logs key operational states.
     
     
-    | Trạng thái | Ý nghĩa |
+    | State | Meaning |
     | --- | --- |
-    | `INITIALIZING` | Agent khởi động, đang tải cấu hình và các module ban đầu. |
-    | `AUTHENTICATING` | Đang trong quá trình kết nối và xác thực WebSocket với server. |
-    | `CONNECTED` | Đã kết nối và xác thực thành công với server, hoạt động bình thường. |
-    | `DISCONNECTED` | Mất kết nối với server, đang trong quá trình thử kết nối lại tự động. |
-    | `UPDATING` | Đang trong quá trình tải xuống và chuẩn bị cho việc cập nhật phiên bản mới. |
-    | `ERROR` | Gặp lỗi nghiêm trọng không thể phục hồi (ví dụ: cấu hình hỏng), không thể hoạt động. |
-    | `STOPPING` | Đang trong quá trình dừng hoạt động một cách an toàn (ví dụ: khi SCM yêu cầu). |
-14. **Dừng Hoạt Động An Toàn:** Chuyển trạng thái `STOPPING`. Ngắt WebSocket, hoàn thành lệnh đang chạy, hủy timer, giải phóng Mutex.
+    | `INITIALIZING` | Agent starting, loading initial configuration and modules. |
+    | `AUTHENTICATING` | In the process of connecting and authenticating WebSocket with server. |
+    | `CONNECTED` | Successfully connected and authenticated with server, operating normally. |
+    | `DISCONNECTED` | Lost connection with server, in process of automatic reconnection attempts. |
+    | `UPDATING` | In the process of downloading and preparing for new version update. |
+    | `ERROR` | Encountered critical unrecoverable error (e.g., corrupted configuration), cannot operate. |
+    | `STOPPING` | In the process of safely stopping (e.g., when requested by SCM). |
+14. **Safe Shutdown:** Switch to `STOPPING` state. Disconnect WebSocket, complete running commands, cancel timers, release Mutex.
 
-## V. Luồng Cập Nhật Agent
+## V. Agent Update Flow
 
-1. **Kích Hoạt Cập Nhật:** Nhận thông tin phiên bản mới từ server.
-2. **Chuẩn Bị Cập Nhật:**
-    - Chuyển trạng thái `UPDATING`.
-    - Thông báo server (`agent:update_status` với `status: "update_started"`).
-    - Tải gói cập nhật. Thông báo server (`status: "update_downloaded"`).
-    - Xác minh checksum. Nếu lỗi, thông báo server (`status: "update_failed", reason: "checksum_mismatch"`), quay lại `CONNECTED`.
-    - Giải nén gói. Thông báo server (`status: "update_extracted"`).
-    - Xác định file `CMSUpdater.exe`.
-    - Khởi chạy `CMSUpdater.exe`. Thông báo server (`status: "updater_launched"`).
-3. **Agent Cũ Tự Dừng:** Chuyển trạng thái `STOPPING`.
-4. **Hoạt Động Của Tiến Trình Updater (`CMSUpdater.exe`):**
-    - Chờ agent cũ dừng.
-    - Sao lưu agent cũ.
-    - Triển khai agent mới. Nếu lỗi, rollback.
-    - Khởi động agent mới. Nếu lỗi, rollback, agent cũ (nếu khôi phục được) báo lỗi (`status: "update_failed", reason: "service_start_failed"`).
-    - **Xử lý Crash Sau Cập Nhật (Rollback Nâng Cao):** Cơ chế "Watchdog" trong Updater tự động rollback nếu agent mới crash liên tục.
-    - **Dọn Dẹp:** Nếu thành công, xóa backup, file tạm. Agent mới báo thành công (`status: "update_success"`) khi khởi động.
-5. **Xử lý lỗi trong quá trình cập nhật:**
-    - **Không tải được gói cập nhật:** Agent ghi log lỗi `UPDATE_DOWNLOAD_FAILED`, thử lại theo cơ chế retry (sử dụng `NetworkRetryMaxAttempts` và `NetworkRetryInitialDelaySec` từ `CMSAgentSettings:AgentSettings` trong `appsettings.json`). Nếu thất bại hoàn toàn sau các lần thử lại, agent sẽ thông báo lỗi lên server (ví dụ: `agent:update_status` với `status: "update_failed", reason: "download_failed"`) và chuyển về trạng thái `CONNECTED`.
-    - **Checksum không khớp:** Agent xóa file đã tải về, ghi log lỗi `UPDATE_CHECKSUM_MISMATCH`, thông báo server (`agent:update_status` với `status: "update_failed", reason: "checksum_mismatch"`), và quay lại trạng thái `CONNECTED`.
+1. **Update Trigger:** Receive new version information from server.
+2. **Update Preparation:**
+    - Switch to `UPDATING` state.
+    - Notify server (`agent:update_status` with `status: "update_started"`).
+    - Download update package. Notify server (`status: "update_downloaded"`).
+    - Verify checksum. If error, notify server (`status: "update_failed", reason: "checksum_mismatch"`), return to `CONNECTED`.
+    - Extract package. Notify server (`status: "update_extracted"`).
+    - Identify `CMSUpdater.exe` file.
+    - Launch `CMSUpdater.exe`. Notify server (`status: "updater_launched"`).
+3. **Old Agent Self-Termination:** Switch to `STOPPING` state.
+4. **Updater Process Operation (`CMSUpdater.exe`):**
+    - Wait for old agent to stop.
+    - Backup old agent.
+    - Deploy new agent. If error, rollback.
+    - Start new agent service. If error, rollback, old agent (if restored) reports error (`status: "update_failed", reason: "service_start_failed"`).
+    - **Handle Post-Update Crashes (Advanced Rollback):** "Watchdog" mechanism in Updater automatically rolls back if new agent crashes repeatedly.
+    - **Cleanup:** If successful, delete backup, temporary files. New agent reports success (`status: "update_success"`) upon startup.
+5. **Handle errors during update process:**
+    - **Unable to download update package:** Agent logs `UPDATE_DOWNLOAD_FAILED` error, retries according to retry mechanism (using `NetworkRetryMaxAttempts` and `NetworkRetryInitialDelaySec` from `CMSAgentSettings:AgentSettings` in `appsettings.json`). If completely fails after retry attempts, agent will notify error to server (e.g., `agent:update_status` with `status: "update_failed", reason: "download_failed"`) and return to `CONNECTED` state.
+    - **Checksum mismatch:** Agent deletes downloaded file, logs `UPDATE_CHECKSUM_MISMATCH` error, notifies server (`agent:update_status` with `status: "update_failed", reason: "checksum_mismatch"`), and returns to `CONNECTED` state.
 
-## VI. Chuẩn Giao Tiếp Chi Tiết Agent-Server
+## VI. Detailed Agent-Server Communication Protocol
 
-### A. Giao Tiếp HTTP (API Endpoints)
+### A. HTTP Communication (API Endpoints)
 
-- **URL Cơ Sở API:** Được định nghĩa trong `appsettings.json` (ví dụ: section `CMSAgentSettings:ServerUrl`), ví dụ: `https://your-server.com:3000/api/agent/`.
-- **Headers Chung (Cho các yêu cầu cần xác thực):**
-    - `X-Agent-Id`: `<agentId>` (Giá trị `agentId` của agent)
-    - `Authorization`: `Bearer <agent_token>` (Token nhận được sau khi xác thực)
-    - `Content-Type`: `application/json` (Đối với các request có body là JSON)
+- **API Base URL:** Defined in `appsettings.json` (e.g., section `CMSAgentSettings:ServerUrl`), example: `https://your-server.com:3000/api/agent/`.
+- **Common Headers (For authenticated requests):**
+    - `X-Agent-Id`: `<agentId>` (The agent's `agentId` value)
+    - `Authorization`: `Bearer <agent_token>` (Token received after authentication)
+    - `Content-Type`: `application/json` (For requests with JSON body)
 
-**1. Định danh Agent (POST `/identify`)**
+**1. Agent Identification (POST `/identify`)**
 
-- **Mục đích:** Đăng ký agent mới hoặc định danh một agent đã tồn tại với server.
+- **Purpose:** Register new agent or identify an existing agent with the server.
 - **Request Payload (JSON):**
     
     ```
     {
         "agentId": "AGENT-HOSTNAME-MACADDRESS",
         "positionInfo": {
-            "roomName": "Phòng Lab A",
+            "roomName": "Lab Room A",
             "posX": 10,
             "posY": 15
         },
@@ -199,13 +199,13 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     
-    - `agentId` (String, Bắt buộc): Device ID duy nhất của agent.
-    - `positionInfo` (Object, Bắt buộc):
-        - `roomName` (String, Bắt buộc): Tên phòng.
-        - `posX` (Number, Bắt buộc): Tọa độ X.
-        - `posY` (Number, Bắt buộc): Tọa độ Y.
-    - `forceRenewToken` (Boolean, Tùy chọn, Mặc định: `false`): Nếu `true`, yêu cầu server cấp token mới ngay cả khi agent đã có token hợp lệ.
-- **Response Payload (JSON) - Thành công (có token mới/gia hạn):**
+    - `agentId` (String, Required): Unique device ID of the agent.
+    - `positionInfo` (Object, Required):
+        - `roomName` (String, Required): Room name.
+        - `posX` (Number, Required): X coordinate.
+        - `posY` (Number, Required): Y coordinate.
+    - `forceRenewToken` (Boolean, Optional, Default: `false`): If `true`, requests the server to issue a new token even if the agent already has a valid token.
+- **Response Payload (JSON) - Success (new/renewed token):**
     
     ```
     {
@@ -216,7 +216,7 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     
-- **Response Payload (JSON) - Thành công (agent đã tồn tại, token cũ còn hiệu lực, `forceRenewToken` là `false`):**
+- **Response Payload (JSON) - Success (agent exists, old token valid, `forceRenewToken` is `false`):**
     
     ```
     {
@@ -225,7 +225,7 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     
-- **Response Payload (JSON) - Yêu cầu MFA:**
+- **Response Payload (JSON) - MFA Required:**
     
     ```
     {
@@ -235,17 +235,17 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     
-- **Response Payload (JSON) - Lỗi vị trí (HTTP 400):**
+- **Response Payload (JSON) - Position Error (HTTP 400):**
     
     ```
     {
         "status": "position_error",
-        "message": "Position (10,15) in Room 'Phòng Lab A' is already occupied or invalid."
+        "message": "Position (10,15) in Room 'Lab Room A' is already occupied or invalid."
     }
     
     ```
     
-- **Response Payload (JSON) - Lỗi khác (ví dụ: `agentId` trống - HTTP 400):**
+- **Response Payload (JSON) - Other Error (e.g., empty `agentId` - HTTP 400):**
     
     ```
     {
@@ -256,9 +256,9 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     ```
     
 
-**2. Xác thực MFA (POST `/verify-mfa`)**
+**2. MFA Authentication (POST `/verify-mfa`)**
 
-- **Mục đích:** Hoàn tất quá trình định danh bằng cách gửi mã MFA do người dùng cung cấp.
+- **Purpose:** Complete identification process by sending user-provided MFA code.
 - **Request Payload (JSON):**
     
     ```
@@ -269,7 +269,7 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     
-- **Response Payload (JSON) - Thành công:**
+- **Response Payload (JSON) - Success:**
     
     ```
     {
@@ -280,7 +280,7 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     
-- **Response Payload (JSON) - Thất bại (HTTP 401):**
+- **Response Payload (JSON) - Failure (HTTP 401):**
     
     ```
     {
@@ -291,9 +291,9 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     ```
     
 
-**3. Gửi Thông Tin Phần Cứng (POST `/hardware-info`)**
+**3. Send Hardware Information (POST `/hardware-info`)**
 
-- **Mục đích:** Cung cấp thông tin chi tiết về phần cứng của máy client cho server.
+- **Purpose:** Provide detailed information about client machine hardware to server.
 - **Request Payload (JSON):**
     
     ```
@@ -307,13 +307,13 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     
-    - `os_info` (String): Thông tin hệ điều hành.
-    - `cpu_info` (String): Thông tin CPU.
-    - `gpu_info` (String): Thông tin GPU.
-    - `total_ram` (Number): Tổng RAM (bytes).
-    - `total_disk_space` (Number, Bắt buộc): Tổng dung lượng ổ C: (bytes).
-- **Response - Thành công:** HTTP 204 No Content.
-- **Response Payload (JSON) - Lỗi (HTTP 400, ví dụ `total_disk_space` thiếu):**
+    - `os_info` (String): Operating system information.
+    - `cpu_info` (String): CPU information.
+    - `gpu_info` (String): GPU information.
+    - `total_ram` (Number): Total RAM (bytes).
+    - `total_disk_space` (Number, Required): Total C: drive capacity (bytes).
+- **Response - Success:** HTTP 204 No Content.
+- **Response Payload (JSON) - Error (HTTP 400, e.g., `total_disk_space` missing):**
     
     ```
     {
@@ -324,12 +324,12 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     ```
     
 
-**4. Kiểm Tra Cập Nhật (GET `/check-update`)**
+**4. Check For Updates (GET `/check-update`)**
 
-- **Mục đích:** Kiểm tra xem có phiên bản agent mới nào khả dụng trên server không.
+- **Purpose:** Check if a new agent version is available on the server.
 - **Query Parameters:**
-    - `current_version` (String): Phiên bản hiện tại của agent (ví dụ: "1.0.2", lấy từ `appsettings.json` hoặc assembly).
-- **Response Payload (JSON) - Có cập nhật:**
+    - `current_version` (String): Current agent version (e.g., "1.0.2", from `appsettings.json` or assembly).
+- **Response Payload (JSON) - Update Available:**
     
     ```
     {
@@ -338,16 +338,16 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
         "version": "1.1.0",
         "download_url": "/download/agent-packages/agent_v1.1.0.zip",
         "checksum_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-        "notes": "Các tính năng mới và sửa lỗi quan trọng."
+        "notes": "New features and important bug fixes."
     }
     
     ```
     
-- **Response - Không có cập nhật:** HTTP 204 No Content.
+- **Response - No Update:** HTTP 204 No Content.
 
-**5. Báo Cáo Lỗi (POST `/report-error`)**
+**5. Error Reporting (POST `/report-error`)**
 
-- **Mục đích:** Gửi thông tin về các lỗi phát sinh trong agent lên server.
+- **Purpose:** Send information about errors occurring in the agent to the server.
 - **Request Payload (JSON):**
     
     ```
@@ -366,7 +366,7 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     
-    - **`error_type` (String, Bắt buộc):** Phân loại lỗi. Các giá trị ví dụ:
+    - **`error_type` (String, Required):** Error classification. Example values:
         - `WEBSOCKET_CONNECTION_FAILED`
         - `WEBSOCKET_AUTH_FAILED`
         - `HTTP_REQUEST_FAILED`
@@ -387,7 +387,7 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
         - `UNHANDLED_EXCEPTION`
         - `OFFLINE_QUEUE_ERROR`
         - `LOG_UPLOAD_REQUESTED`
-- **Payload ví dụ cho `error_type: "LOG_UPLOAD_REQUESTED"`:**
+- **Example payload for `error_type: "LOG_UPLOAD_REQUESTED"`:**
     
     ```
     {
@@ -402,34 +402,34 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     
-- **Response - Thành công:** HTTP 204 No Content.
+- **Response - Success:** HTTP 204 No Content.
 
-**6. Tải Gói Cập Nhật Agent (GET `/download/agent-packages/:filename`)**
+**6. Download Agent Update Package (GET `/download/agent-packages/:filename`)**
 
-- **Mục đích:** Tải file gói cập nhật. Yêu cầu xác thực agent.
+- **Purpose:** Download update package file. Requires agent authentication.
 - **URL Parameters:**
-    - `:filename` (String): Tên file của gói cập nhật (ví dụ: `agent_v1.1.0.zip`).
-- **Response:** Dữ liệu file (File stream).
-- **Lỗi:** HTTP 404 Not Found nếu file không tồn tại, HTTP 401 Unauthorized nếu token không hợp lệ, HTTP 500 Internal Server Error nếu có lỗi khác.
+    - `:filename` (String): Update package filename (e.g., `agent_v1.1.0.zip`).
+- **Response:** File data (File stream).
+- **Error:** HTTP 404 Not Found if file doesn't exist, HTTP 401 Unauthorized if token is invalid, HTTP 500 Internal Server Error if other error occurs.
 
-### B. Giao Tiếp WebSocket (Socket.IO)
+### B. WebSocket Communication (Socket.IO)
 
-- **URL Kết Nối:** Từ `ServerUrl` trong `appsettings.json`.
-- **Xác thực:**
-    - Agent **BẮT BUỘC** gửi header `x-client-type: agent` trong quá trình handshake.
-    - Agent **BẮT BUỘC** gửi `agentId` và `token` trong `socket.handshake.headers` (cụ thể là `agent-id` và `Authorization: Bearer <token>`). Server middleware (`io.use`) sẽ trích xuất các thông tin này.
-- **Các Sự Kiện Server Gửi Cho Agent:**
-    - `agent:ws_auth_success`: Payload: `{ "status": "success", "message": "Authentication successful" }`. Ý nghĩa: Xác thực WebSocket thành công.
-    - `agent:ws_auth_failed`: Payload: `{ "status": "error", "message": "Authentication failed (Invalid ID or token)" }`. Ý nghĩa: Xác thực WebSocket thất bại.
-    - `command:execute`: Payload: `{ "commandId": "...", "command": "...", "commandType": "..." }`. Ý nghĩa: Yêu cầu agent thực thi lệnh.
-    - `agent:new_version_available`: Payload: `{ "new_stable_version": "...", "timestamp": "..." }`. Ý nghĩa: Thông báo có phiên bản agent mới.
-- **Các Sự Kiện Agent Gửi Lên Server:**
+- **Connection URL:** From `ServerUrl` in `appsettings.json`.
+- **Authentication:**
+    - Agent **MUST** send header `x-client-type: agent` during handshake.
+    - Agent **MUST** send `agentId` and `token` in `socket.handshake.headers` (specifically `agent-id` and `Authorization: Bearer <token>`). Server middleware (`io.use`) will extract this information.
+- **Server-to-Agent Events:**
+    - `agent:ws_auth_success`: Payload: `{ "status": "success", "message": "Authentication successful" }`. Meaning: WebSocket authentication successful.
+    - `agent:ws_auth_failed`: Payload: `{ "status": "error", "message": "Authentication failed (Invalid ID or token)" }`. Meaning: WebSocket authentication failed.
+    - `command:execute`: Payload: `{ "commandId": "...", "command": "...", "commandType": "..." }`. Meaning: Request agent to execute command.
+    - `agent:new_version_available`: Payload: `{ "new_stable_version": "...", "timestamp": "..." }`. Meaning: Notification of new agent version.
+- **Agent-to-Server Events:**
     - `agent:authenticate`: Payload: `{ "agentId": "...", "token": "..." }`.
-    - `agent:status_update`: Payload chi tiết ở mục C.
-    - `agent:command_result`: Payload ví dụ: `{ "commandId": "...", "success": true/false, "type": "...", "result": { ... } }`.
+    - `agent:status_update`: Payload detailed in section C.
+    - `agent:command_result`: Example payload: `{ "commandId": "...", "success": true/false, "type": "...", "result": { ... } }`.
     - `agent:update_status`: Payload: `{ "status": "...", "reason": "...", "new_version": "..." }`.
 
-### C. Thông Tin Trạng Thái (Stats) Gửi Lên Server (qua WebSocket `agent:status_update`)
+### C. Status Information (Stats) Sent to Server (via WebSocket `agent:status_update`)
 
 - **Payload (JSON):**
     
@@ -442,13 +442,13 @@ Luồng này mô tả quá trình từ khi người dùng thực thi file cài �
     
     ```
     
-- **Tần suất:** Theo `StatusReportIntervalSec` trong `appsettings.json`.
+- **Frequency:** According to `StatusReportIntervalSec` in `appsettings.json`.
 
-## VII. Cấu Hình Agent Chi Tiết
+## VII. Detailed Agent Configuration
 
-**1. Cấu Hình Ứng Dụng (Lưu trong `appsettings.json`)**
+**1. Application Configuration (Stored in `appsettings.json`)**
 
-File `appsettings.json` là file cấu hình chính. *Lưu ý: Từ phiên bản 7.3, file này thay thế hoàn toàn `agent_config.json` trước đây.*
+The `appsettings.json` file is the main configuration file. *Note: As of version 7.3, this file completely replaces the previous `agent_config.json`.*
 
 ```
 {
@@ -526,13 +526,13 @@ File `appsettings.json` là file cấu hình chính. *Lưu ý: Từ phiên bản
 
 ```
 
-**2. Cấu Hình Runtime (Lưu trong `runtime_config/runtime_config.json`)**
+**2. Runtime Configuration (Stored in `runtime_config/runtime_config.json`)**
 
 ```
 {
   "agentId": "AGENT-XYZ123-DEVICEID",
   "room_config": {
-    "roomName": "Phòng Họp A",
+    "roomName": "Meeting Room A",
     "posX": 10,
     "posY": 15
   },
@@ -541,7 +541,7 @@ File `appsettings.json` là file cấu hình chính. *Lưu ý: Từ phiên bản
 
 ```
 
-**3. Đường Dẫn Lưu Trữ**
+**3. Storage Paths**
 
 - `C:\\ProgramData\\CMSAgent`
     - `logs/`
@@ -550,106 +550,106 @@ File `appsettings.json` là file cấu hình chính. *Lưu ý: Từ phiên bản
         - `download/`
         - `extracted/`
         - `backup/`
-    - `error_reports/` (Sử dụng làm queue offline cho báo cáo lỗi)
-    - `offline_queue/` (Thư mục chung cho các queue offline khác: status_reports, command_results)
+    - `error_reports/` (Used as offline queue for error reports)
+    - `offline_queue/` (Common directory for other offline queues: status_reports, command_results)
 
-**4. Xác thực Cấu hình**
+**4. Configuration Validation**
 
-- Agent sử dụng .NET Options Pattern để tải và xác thực các section cấu hình từ `appsettings.json` (ví dụ: `CMSAgentSettings`). Các lớp Options tương ứng (ví dụ: `CmsAgentSettingsOptions.cs`) sử dụng Data Annotations để kiểm tra tính hợp lệ của dữ liệu.
-- **Ví dụ về .NET Options Pattern:** Trong `Program.cs` hoặc nơi khởi tạo service, cấu hình được binding:
+- Agent uses .NET Options Pattern to load and validate configuration sections from `appsettings.json` (e.g., `CMSAgentSettings`). Corresponding Options classes (e.g., `CmsAgentSettingsOptions.cs`) use Data Annotations to check data validity.
+- **Example of .NET Options Pattern:** In `Program.cs` or service initialization location, configuration is bound:
     
     ```
-    // Giả sử builder.Configuration đã nạp appsettings.json
+    // Assuming builder.Configuration has loaded appsettings.json
     services.Configure<CmsAgentSettingsOptions>(
         builder.Configuration.GetSection("CMSAgentSettings")
     );
-    // Sau đó, CmsAgentSettingsOptions có thể được inject và sử dụng.
-    // Các thuộc tính trong CmsAgentSettingsOptions có thể được trang trí bằng Data Annotations
-    // [Required], [Range(1, 3600)], [Url] để tự động xác thực khi options được tạo.
+    // Then, CmsAgentSettingsOptions can be injected and used.
+    // Properties in CmsAgentSettingsOptions can be decorated with Data Annotations
+    // [Required], [Range(1, 3600)], [Url] to automatically validate when options are created.
     
     ```
     
-- Đối với `runtime_config.json`, agent sẽ thực hiện kiểm tra thủ công sự tồn tại và định dạng cơ bản của các trường bắt buộc khi tải.
+- For `runtime_config.json`, agent will manually check the existence and basic format of required fields when loading.
 
-## VIII. Bảo Mật
+## VIII. Security
 
-**1. Mã Hóa Token (`agent_token_encrypted` trong `runtime_config.json`)**
+**1. Token Encryption (`agent_token_encrypted` in `runtime_config.json`)**
 
-- **Mã Hóa:** Khi lệnh `CMSAgent.exe configure` nhận được `agentToken` (dạng plain text) từ server, trước khi lưu vào `runtime_config.json`, token này sẽ được mã hóa. Sử dụng `System.Security.Cryptography.ProtectedData.Protect(Encoding.UTF8.GetBytes(plainToken), null, DataProtectionScope.LocalMachine)`. `userData` là `agentToken` chuyển sang `byte[]`. `optionalEntropy` có thể là `null`. `scope` là `DataProtectionScope.LocalMachine`. Kết quả `byte[]` đã mã hóa sẽ được chuyển đổi sang chuỗi Base64 để lưu vào file JSON.
-- **Giải Mã:** Khi `CMSAgent.exe` (chạy như Windows Service) khởi động, đọc chuỗi Base64 `agent_token_encrypted` từ `runtime_config.json`. Chuyển đổi Base64 trở lại `byte[]`. Sử dụng `System.Security.Cryptography.ProtectedData.Unprotect(encryptedBytes, null, DataProtectionScope.LocalMachine)`. Kết quả `byte[]` được giải mã sẽ được chuyển đổi trở lại thành chuỗi `agentToken` (UTF8).
-- **Quản lý khóa:** Khóa mã hóa được Windows quản lý tự động thông qua Data Protection API (DPAPI) và gắn với máy cục bộ khi dùng `DataProtectionScope.LocalMachine`.
+- **Encryption:** When the `CMSAgent.exe configure` command receives `agentToken` (plain text) from server, before saving to `runtime_config.json`, this token will be encrypted. Using `System.Security.Cryptography.ProtectedData.Protect(Encoding.UTF8.GetBytes(plainToken), null, DataProtectionScope.LocalMachine)`. `userData` is `agentToken` converted to `byte[]`. `optionalEntropy` can be `null`. `scope` is `DataProtectionScope.LocalMachine`. The resulting encrypted `byte[]` will be converted to Base64 string for storage in JSON file.
+- **Decryption:** When `CMSAgent.exe` (running as Windows Service) starts, read Base64 string `agent_token_encrypted` from `runtime_config.json`. Convert Base64 back to `byte[]`. Use `System.Security.Cryptography.ProtectedData.Unprotect(encryptedBytes, null, DataProtectionScope.LocalMachine)`. The decrypted `byte[]` result will be converted back to `agentToken` string (UTF8).
+- **Key management:** Encryption key is automatically managed by Windows through Data Protection API (DPAPI) and tied to the local machine when using `DataProtectionScope.LocalMachine`.
 
-**2. Bảo Mật Kết Nối**
+**2. Connection Security**
 
-- Bắt buộc HTTPS cho API và WSS cho WebSocket.
-- Cân nhắc certificate pinning.
+- Mandatory HTTPS for API and WSS for WebSocket.
+- Consider certificate pinning.
 
-**3. Quyền Truy Cập Thư Mục và Thiết Lập**
+**3. Directory Access Permissions and Setup**
 
-- **Thư mục cài đặt (`C:\\Program Files\\CMSAgent` hoặc tương đương):**
-    - Quyền Read & Execute cho tài khoản LocalSystem (tài khoản chạy service) và nhóm Authenticated Users.
-    - Quyền Modify cho Administrators và SYSTEM để cho phép cập nhật và gỡ cài đặt.
-    - Trong quá trình cập nhật, `CMSUpdater.exe` (nếu chạy với quyền LocalSystem hoặc được nâng quyền lên Administrator) sẽ có quyền ghi đè file.
-- **Thư mục dữ liệu (`C:\\ProgramData\\CMSAgent`):**
-    - Tài khoản LocalSystem cần quyền Full Control trên thư mục này và các thư mục con (`logs`, `runtime_config`, `updates`, `error_reports`, `offline_queue`).
-    - Nhóm Administrators nên có quyền Full Control để quản lý và xem xét.
-    - Người dùng thông thường (ví dụ: Authenticated Users) không nên có quyền ghi vào thư mục `runtime_config` để bảo vệ cấu hình và token. Quyền đọc log có thể được xem xét tùy theo chính sách.
-- **Cách thiết lập quyền (lệnh `icacls` đã kiểm chứng và hoàn chỉnh):**
-    - Cho thư mục dữ liệu chính:
+- **Installation directory (`C:\\Program Files\\CMSAgent` or equivalent):**
+    - Read & Execute permission for LocalSystem account (service running account) and Authenticated Users group.
+    - Modify permission for Administrators and SYSTEM to allow updates and uninstallation.
+    - During updates, `CMSUpdater.exe` (if running with LocalSystem privileges or elevated to Administrator) will have permission to overwrite files.
+- **Data directory (`C:\\ProgramData\\CMSAgent`):**
+    - LocalSystem account needs Full Control permission on this directory and subdirectories (`logs`, `runtime_config`, `updates`, `error_reports`, `offline_queue`).
+    - Administrators group should have Full Control permission for management and review.
+    - Regular users (e.g., Authenticated Users) should not have write permission to `runtime_config` directory to protect configuration and token. Log read permission can be considered depending on policy.
+- **How to set permissions (verified and complete `icacls` commands):**
+    - For main data directory:
         
         ```
         icacls "C:\ProgramData\CMSAgent" /grant "SYSTEM:(OI)(CI)F" /grant "Administrators:(OI)(CI)F" /inheritance:r /Q
         
         ```
         
-        *Giải thích: `(OI)` - Object Inherit, `(CI)` - Container Inherit, `F` - Full Control. `/inheritance:r` - Xóa bỏ các quyền kế thừa cũ trước khi áp dụng quyền mới. `/Q` - Quiet mode.*
+        *Explanation: `(OI)` - Object Inherit, `(CI)` - Container Inherit, `F` - Full Control. `/inheritance:r` - Remove inherited permissions before applying new ones. `/Q` - Quiet mode.*
         
-    - Cho thư mục cấu hình runtime (hạn chế quyền cho Administrators):
+    - For runtime configuration directory (restricted permissions for Administrators):
         
         ```
         icacls "C:\ProgramData\CMSAgent\runtime_config" /grant "SYSTEM:(OI)(CI)F" /grant "Administrators:(OI)(CI)RX" /inheritance:r /Q
         
         ```
         
-        *Giải thích: `RX` - Read & Execute.*
+        *Explanation: `RX` - Read & Execute.*
         
-    - *Lưu ý: Các lệnh này cần được thực thi với quyền Administrator trong quá trình cài đặt.*
+    - *Note: These commands need to be executed with Administrator privileges during installation.*
 
-**4. Giảm Thiểu Rủi Ro Với Tài Khoản LocalSystem**
+**4. Minimizing Risks With LocalSystem Account**
 
-- **Nguyên tắc Least Privilege:** Nghiên cứu khả năng sử dụng một tài khoản dịch vụ tùy chỉnh (Custom Service Account) với chỉ những quyền tối thiểu cần thiết. Điều này phức tạp hơn trong việc thiết lập quyền nhưng an toàn hơn.
-- **Xác thực và Phân quyền Lệnh Từ Xa:**
-    - Server nên xác thực mạnh mẽ các yêu cầu từ frontend trước khi gửi lệnh đến agent.
-    - Cân nhắc việc phân loại các lệnh theo mức độ nguy hiểm. Các lệnh nguy hiểm (ví dụ: ghi file, thay đổi cấu hình hệ thống) có thể yêu cầu xác thực bổ sung hoặc chỉ được phép từ các quản trị viên cấp cao.
-    - Agent có thể có một danh sách trắng (whitelist) các lệnh an toàn hoặc kiểm tra chữ ký số của các script/lệnh trước khi thực thi.
-- **Input Validation:** Agent phải xác thực kỹ lưỡng mọi dữ liệu nhận được từ server (đặc biệt là nội dung lệnh) để tránh các lỗ hổng như command injection.
+- **Principle of Least Privilege:** Research possibility of using a custom service account with only the minimum necessary privileges. This is more complex in permission setup but more secure.
+- **Remote Command Authentication and Authorization:**
+    - Server should strongly authenticate requests from frontend before sending commands to agent.
+    - Consider classifying commands by danger level. Dangerous commands (e.g., writing files, changing system configuration) may require additional authentication or be allowed only from senior administrators.
+    - Agent can have a whitelist of safe commands or verify digital signatures of scripts/commands before execution.
+- **Input Validation:** Agent must thoroughly validate all data received from server (especially command content) to avoid vulnerabilities like command injection.
 
-**5. Tên Mutex Đảm Bảo Duy Nhất**
+**5. Unique Mutex Name**
 
-- Để tránh xung đột với các ứng dụng khác, tên Mutex sẽ bao gồm một định danh duy nhất cho sản phẩm hoặc công ty.
-- **Định dạng:** `Global\\CMSAgentSingletonMutex_<YourCompanyOrProductGUID>`
-    - Ví dụ: `Global\\CMSAgentSingletonMutex_E17A2F8D-9B74-4A6A-8E0A-3F9F7B1B3C5D`
-    - GUID này sẽ được tạo một lần và cố định trong code của agent.
+- To avoid conflicts with other applications, Mutex name will include a unique identifier for the product or company.
+- **Format:** `Global\\CMSAgentSingletonMutex_<YourCompanyOrProductGUID>`
+    - Example: `Global\\CMSAgentSingletonMutex_E17A2F8D-9B74-4A6A-8E0A-3F9F7B1B3C5D`
+    - This GUID will be created once and fixed in the agent code.
 
-**6. Làm Mới Token Chủ Động**
+**6. Proactive Token Refresh**
 
-- **Nếu Server cung cấp thời gian hết hạn (Expiration Time):** Agent sẽ lưu trữ và lên lịch làm mới token trước khi hết hạn.
-- **Nếu Server không cung cấp thời gian hết hạn:** Agent sẽ thử làm mới token định kỳ (ví dụ: mỗi 24 giờ, được cấu hình trong `appsettings.json` qua `CMSAgentSettings:AgentSettings:TokenRefreshIntervalSec`) bằng cách gửi `POST /api/agent/identify` với `forceRenewToken: true`. Nếu thất bại, agent sẽ quay lại cơ chế làm mới khi gặp lỗi 401 từ WebSocket/HTTP.
+- **If Server provides expiration time:** Agent will store and schedule token refresh before expiration.
+- **If Server doesn't provide expiration time:** Agent will try to refresh token periodically (e.g., every 24 hours, configured in `appsettings.json` via `CMSAgentSettings:AgentSettings:TokenRefreshIntervalSec`) by sending `POST /api/agent/identify` with `forceRenewToken: true`. If this fails, agent will fall back to refresh mechanism when encountering 401 error from WebSocket/HTTP.
 
-## IX. Thông Tin về Logging
+## IX. Logging Information
 
-**1. Vị Trí File Log:**
+**1. Log File Locations:**
 
-- **Agent Service:** `C:\\ProgramData\\CMSAgent\\logs\\agent_YYYYMMDD.log`. Số ngày giữ lại được cấu hình trong `appsettings.json` (ví dụ: `Serilog:WriteTo:File:Args:retainedFileCountLimit`).
+- **Agent Service:** `C:\\ProgramData\\CMSAgent\\logs\\agent_YYYYMMDD.log`. Number of days retained is configured in `appsettings.json` (e.g., `Serilog:WriteTo:File:Args:retainedFileCountLimit`).
 - **Updater:** `C:\\ProgramData\\CMSAgent\\logs\\updater_YYYYMMDD_HHMMSS.log`.
-- **Tiến trình cấu hình:** Ghi ra console và file `configure_YYYYMMDD_HHMMSS.log`.
+- **Configuration process:** Writes to console and `configure_YYYYMMDD_HHMMSS.log` file.
 
-**2. Cấu Hình Mức Độ Log (qua `appsettings.json`)**
-Cấu hình Serilog chi tiết (bao gồm `MinimumLevel`, `Override`, `WriteTo`, `Enrich`) được đặt trong section `"Serilog"` của `appsettings.json` (xem mục VII.1).
+**2. Log Level Configuration (via `appsettings.json`)**
+Detailed Serilog configuration (including `MinimumLevel`, `Override`, `WriteTo`, `Enrich`) is set in the `"Serilog"` section of `appsettings.json` (see section VII.1).
 
-**3. Nội Dung Log Mẫu và Cách Đọc**
-Mỗi dòng log bắt buộc bao gồm: Timestamp, Level, SourceContext (Namespace của lớp ghi log), Message, và Exception (nếu có).
-Ví dụ:
+**3. Sample Log Content and How to Read**
+Each log line must include: Timestamp, Level, SourceContext (Namespace of logging class), Message, and Exception (if any).
+Example:
 
 ```
 2025-05-12 22:15:01.123 +07:00 [INF] [CMSAgent.Core.AgentService] Agent service starting... State: INITIALIZING
@@ -662,17 +662,17 @@ Ví dụ:
 
 ```
 
-Khi gỡ lỗi, tìm các log `ERROR` hoặc `FATAL`. Xem xét log `WARN`, `INFO`, `DEBUG` xung quanh để hiểu ngữ cảnh.
+When debugging, look for `ERROR` or `FATAL` logs. Consider surrounding `WARN`, `INFO`, `DEBUG` logs to understand context.
 
 **4. Windows Event Log**
-Agent service sẽ ghi các sự kiện quan trọng (khởi động thành công, dừng, lỗi nghiêm trọng không thể ghi vào file log) vào Windows Event Log (thường là "Application" log) với một "Source" (Nguồn sự kiện) tùy chỉnh, ví dụ: "CMSAgentService", theo cấu hình trong `appsettings.json`. Việc đăng ký Event Source sẽ được thực hiện trong quá trình cài đặt agent (với quyền admin).
+Agent service will record important events (successful startup, shutdown, critical errors that can't be written to log file) to Windows Event Log (typically "Application" log) with a custom "Source" (Event source), e.g., "CMSAgentService", as configured in `appsettings.json`. Event Source registration will be performed during agent installation (with admin rights).
 
-**5. Chức năng nâng cao: Thu Thập Log Từ Xa:**
+**5. Advanced feature: Remote Log Collection:**
 
-- **Cơ chế:** Server có thể yêu cầu agent gửi các file log gần đây hoặc một phần log cụ thể thông qua một lệnh đặc biệt qua WebSocket (`commandType: "system_get_logs"`) hoặc một API riêng (`POST /api/agent/upload-log`).
-- **An toàn:** Việc này sẽ được thực hiện một cách an toàn, có xác thực và giới hạn để tránh lạm dụng. Agent chỉ gửi log khi nhận được yêu cầu hợp lệ từ server đã xác thực.
-- **Nén:** Log sẽ được nén (ZIP) trước khi gửi để giảm băng thông.
-- **Payload (ví dụ khi dùng `POST /api/agent/report-error`):**
+- **Mechanism:** Server can request agent to send recent log files or specific log sections through a special command via WebSocket (`commandType: "system_get_logs"`) or a dedicated API (`POST /api/agent/upload-log`).
+- **Safety:** This will be done securely, with authentication and limitations to prevent abuse. Agent only sends logs when receiving a valid request from authenticated server.
+- **Compression:** Logs will be compressed (ZIP) before sending to reduce bandwidth.
+- **Payload (example when using `POST /api/agent/report-error`):**
     
     ```
     {
@@ -687,97 +687,95 @@ Agent service sẽ ghi các sự kiện quan trọng (khởi động thành côn
     
     ```
     
-    Hoặc, nếu sử dụng một endpoint riêng như `POST /api/agent/upload-log`, request body có thể là `multipart/form-data` chứa file log đã nén.
+    Or, if using a dedicated endpoint like `POST /api/agent/upload-log`, request body could be `multipart/form-data` containing compressed log file.
     
 
-## X. Xử Lý Lỗi và Khắc Phục Sự Cố
+## X. Error Handling and Troubleshooting
 
-**1. Mã Trạng Thái HTTP Phổ Biến và Cách Xử Lý của Agent:**
+**1. Common HTTP Status Codes and Agent Handling:**
 
-- **200 OK:** Yêu cầu thành công. Tiếp tục xử lý response.
-- **204 No Content:** Yêu cầu thành công, không có nội dung trả về. Agent coi là thành công.
-- **400 Bad Request:** Yêu cầu không hợp lệ từ phía agent (thiếu trường, sai định dạng). Agent xử lý: Ghi log chi tiết request và response. Không nên thử lại yêu cầu y hệt. Thông báo cho người dùng (nếu trong quá trình configure) hoặc báo lỗi lên server (nếu trong quá trình hoạt động).
-- **401 Unauthorized:** Lỗi xác thực (token không hợp lệ/hết hạn). Agent xử lý: Nếu đang configure và lỗi MFA: Cho người dùng nhập lại. Nếu đang hoạt động: Ghi log. Agent thử làm mới token bằng cách gọi lại POST `/identify` (không `forceRenewToken`). Nếu vẫn thất bại, ngắt kết nối WebSocket, và thử lại toàn bộ quá trình kết nối/xác thực sau một khoảng thời gian tăng dần (exponential backoff).
-- **403 Forbidden:** Đã xác thực nhưng không có quyền. Ghi log, báo lỗi lên server.
-- **404 Not Found:** Endpoint không tồn tại hoặc tài nguyên không tìm thấy (ví dụ: tải file cập nhật không có). Ghi log.
-- **409 Conflict:** Xung đột tài nguyên (ví dụ: cố gắng đăng ký vị trí đã có người dùng). Agent xử lý (trong `configure`): Thông báo cho người dùng chọn vị trí khác.
-- **429 Too Many Requests:** Server báo agent gửi quá nhiều yêu cầu. Agent xử lý: Đọc header `Retry-After` (nếu có) và chờ. Nếu không, sử dụng cơ chế exponential backoff trước khi thử lại.
-- **500 Internal Server Error, 502 Bad Gateway, 503 Service Unavailable, 504 Gateway Timeout:** Lỗi từ phía server hoặc mạng. Agent xử lý: Ghi log. Thử lại yêu cầu sau một khoảng thời gian tăng dần (exponential backoff). Giới hạn số lần thử lại cho một yêu cầu cụ thể (cấu hình trong `appsettings.json`).
+- **200 OK:** Request successful. Continue processing response.
+- **204 No Content:** Request successful, no content returned. Agent considers it success.
+- **400 Bad Request:** Invalid request from agent (missing field, wrong format). Agent handling: Log detailed request and response. Should not retry identical request. Notify user (if during configure) or report error to server (if during operation).
+- **401 Unauthorized:** Authentication error (invalid/expired token). Agent handling: If configuring and MFA error: Let user retry input. If operating: Log. Agent tries to refresh token by calling POST `/identify` again (without `forceRenewToken`). If still fails, disconnect WebSocket, and retry entire connection/authentication process after increasing time interval (exponential backoff).
+- **403 Forbidden:** Authenticated but no permission. Log, report error to server.
+- **404 Not Found:** Endpoint doesn't exist or resource not found (e.g., update file not available). Log.
+- **409 Conflict:** Resource conflict (e.g., trying to register position already in use). Agent handling (in `configure`): Notify user to choose different position.
+- **429 Too Many Requests:** Server reports agent sending too many requests. Agent handling: Read `Retry-After` header (if present) and wait. If not, use exponential backoff mechanism before retrying.
+- **500 Internal Server Error, 502 Bad Gateway, 503 Service Unavailable, 504 Gateway Timeout:** Error from server or network. Agent handling: Log. Retry request after increasing time interval (exponential backoff). Limit number of retries for a specific request (configured in `appsettings.json`).
 
-**2. Xử Lý Lỗi Nghiêm Trọng của Agent:**
+**2. Agent Critical Error Handling:**
 
-```
-| Lỗi                                       | Hành động của Agent                                                                                                | Ghi log/Event Log (Mức độ)                                       |
-| :---------------------------------------- | :------------------------------------------------------------------------------------------------------------------ | :--------------------------------------------------------------- |
-| Mất Kết Nối Mạng Kéo Dài                  | Chuyển sang `DISCONNECTED`, lưu queue offline, giảm tần suất thử kết nối lại sau 1 giờ.                               | `DISCONNECTED` (Information), lỗi kết nối cụ thể (Warning/Error) |
-| File Cấu Hình (`appsettings.json`) Hỏng/Không hợp lệ | Ghi lỗi vào Event Log. Agent không khởi động được hoặc thoát. Service không tự động khởi động lại liên tục. | `CONFIG_LOAD_FAILED` hoặc `CONFIG_VALIDATION_FAILED` (Fatal)   |
-| File `runtime_config.json` Hỏng/Thiếu    | Ghi lỗi vào Event Log. Agent không thể xác thực, chuyển sang `ERROR` hoặc thoát.                                     | `CONFIG_LOAD_FAILED` (Fatal)                                   |
-| Không Thể Ghi Log (vào file/Event Log)    | Thử ghi lỗi vào kênh log còn lại. Nếu tất cả thất bại, agent dừng an toàn.                                           | Lỗi ghi log (Error/Fatal vào kênh còn lại)                     |
-| Lỗi Không Mong Muốn (Unhandled Exception) | Bắt lỗi, ghi chi tiết stack trace vào Event Log. Cố gắng báo cáo lỗi `UNHANDLED_EXCEPTION` lên server. Dừng an toàn. | `UNHANDLED_EXCEPTION` (Fatal)                                  |
+| Error                                      | Agent Action                                                                                                      | Log/Event Log (Level)                                          |
+| :----------------------------------------- | :---------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------- |
+| Prolonged Network Disconnection            | Switch to `DISCONNECTED`, save offline queue, reduce reconnection frequency after 1 hour.                          | `DISCONNECTED` (Information), specific connection errors (Warning/Error) |
+| Configuration File (`appsettings.json`) Corrupted/Invalid | Log error to Event Log. Agent cannot start or exits. Service does not continuously auto-restart.    | `CONFIG_LOAD_FAILED` or `CONFIG_VALIDATION_FAILED` (Fatal)    |
+| `runtime_config.json` File Corrupted/Missing | Log error to Event Log. Agent cannot authenticate, switches to `ERROR` or exits.                                 | `CONFIG_LOAD_FAILED` (Fatal)                                  |
+| Cannot Write Log (to file/Event Log)       | Try to log error to remaining log channel. If all fail, agent stops safely.                                        | Logging error (Error/Fatal to remaining channel)              |
+| Unexpected Error (Unhandled Exception)    | Catch error, log detailed stack trace to Event Log. Try to report `UNHANDLED_EXCEPTION` error to server. Stop safely. | `UNHANDLED_EXCEPTION` (Fatal)                                |
 
-```
 
-**3. Hướng Dẫn Khắc Phục Sự Cố Thường Gặp:**
+**3. Common Troubleshooting Guide:**
 
-- **Sự cố 1: Agent Service không khởi động / dừng ngay.**
-    - Kiểm tra: Windows Event Viewer (Application, System logs) Tìm lỗi liên quan đến "CMSAgentService". File Log Agent: `C:\\ProgramData\\CMSAgent\\logs\\`. Tìm `ERROR` hoặc `FATAL`. Quyền Tài Khoản Service: Đảm bảo LocalSystem có đủ quyền. File Cấu Hình: Kiểm tra sự tồn tại và tính hợp lệ của `appsettings.json` và `runtime_config/runtime_config.json`. .NET Runtime: Đảm bảo phiên bản yêu cầu đã được cài đặt. Dependencies: Đảm bảo DLLs cần thiết có mặt. Mutex: Kiểm tra Task Manager xem có `CMSAgent.exe` nào khác đang chạy không.
-- **Sự cố 2: Agent Service đang chạy nhưng không thấy kết nối/dữ liệu trên Server.**
-    - Kiểm tra: File Log Agent: Lỗi kết nối, WebSocket, HTTP, xác thực. `ServerUrl` trong `appsettings.json`: URL chính xác, server có thể truy cập. Tường lửa: Trên agent và server. `agent_token`: Có thể hết hạn/không hợp lệ. Log nên có HTTP 401 hoặc `agent:ws_auth_failed`. Trạng thái Server: Đảm bảo server backend và Socket.IO đang hoạt động.
-- **Sự cố 3: Lỗi trong quá trình `CMSAgent.exe configure`.**
-    - Kiểm tra: Chạy với quyền Administrator. Thông báo lỗi trên CLI: Đọc kỹ. Kết nối đến Server: Đảm bảo máy có thể kết nối đến `ServerUrl` (trong `appsettings.json`). Thông tin nhập: Đảm bảo thông tin phòng, tọa độ, mã MFA được nhập chính xác.
-- **Sự cố 4: Quá trình tự cập nhật thất bại.**
-    - Kiểm tra: File Log Agent: Log của UpdateHandler. File Log Updater: Log của `CMSUpdater.exe` trong `C:\\ProgramData\\CMSAgent\\logs\\`. Dung lượng đĩa: Đảm bảo đủ dung lượng trống. Quyền ghi: LocalSystem cần quyền ghi vào thư mục cài đặt. File bị khóa: Một file của agent có thể đang bị sử dụng.
-- **Sự cố 5: Lệnh gửi từ Server không được Agent thực thi hoặc báo lỗi.**
-    - Kiểm tra: File Log Agent: Log liên quan đến CommandExecutor hoặc CommandHandler cụ thể. Kết nối WebSocket: Đảm bảo agent vẫn đang kết nối. Nội dung lệnh: Lệnh có thể sai cú pháp. Quyền thực thi: Lệnh được thực thi với quyền của LocalSystem.
-- **Sự cố 6: Không thu thập được thông tin phần cứng.**
-    - Kiểm tra: Quyền truy cập WMI: Đảm bảo tài khoản LocalSystem có quyền truy cập WMI. Dịch vụ WMI: Mở `services.msc`, kiểm tra dịch vụ "Windows Management Instrumentation" đang chạy. Thử khởi động lại. Log Agent: Tìm lỗi liên quan đến SystemMonitor hoặc truy cập WMI.
-- **Sự cố 7: Agent tiêu tốn quá nhiều CPU/RAM.**
-    - Kiểm tra: File Log Agent (mức Debug/Verbose): Xác định module hoặc hoạt động nào đang gây ra. Performance Profiler: Sử dụng công cụ profiler của .NET để phân tích sâu hơn. Cấu hình `ResourceLimits` trong `appsettings.json`.
+- **Issue 1: Agent Service doesn't start / stops immediately.**
+    - Check: Windows Event Viewer (Application, System logs) Look for errors related to "CMSAgentService". Agent Log File: `C:\\ProgramData\\CMSAgent\\logs\\`. Look for `ERROR` or `FATAL`. Service Account Permissions: Ensure LocalSystem has sufficient permissions. Configuration Files: Check existence and validity of `appsettings.json` and `runtime_config/runtime_config.json`. .NET Runtime: Ensure required version is installed. Dependencies: Ensure necessary DLLs are present. Mutex: Check Task Manager if another `CMSAgent.exe` is running.
+- **Issue 2: Agent Service is running but no connection/data seen on Server.**
+    - Check: Agent Log File: Connection, WebSocket, HTTP, authentication errors. `ServerUrl` in `appsettings.json`: Correct URL, server accessible. Firewall: On agent and server. `agent_token`: May be expired/invalid. Log should show HTTP 401 or `agent:ws_auth_failed`. Server Status: Ensure backend server and Socket.IO are operational.
+- **Issue 3: Error during `CMSAgent.exe configure`.**
+    - Check: Run with Administrator privileges. CLI Error Message: Read carefully. Connection to Server: Ensure machine can connect to `ServerUrl` (in `appsettings.json`). Input Information: Ensure room, coordinates, MFA code are entered correctly.
+- **Issue 4: Self-update process fails.**
+    - Check: Agent Log File: UpdateHandler logs. Updater Log File: `CMSUpdater.exe` logs in `C:\\ProgramData\\CMSAgent\\logs\\`. Disk Space: Ensure sufficient free space. Write Permissions: LocalSystem needs write permission to installation directory. Locked Files: An agent file might be in use.
+- **Issue 5: Command sent from Server not executed by Agent or reports error.**
+    - Check: Agent Log File: Logs related to CommandExecutor or specific CommandHandler. WebSocket Connection: Ensure agent is still connected. Command Content: Command might have wrong syntax. Execution Permission: Command is executed with LocalSystem privileges.
+- **Issue 6: Cannot collect hardware information.**
+    - Check: WMI Access Permission: Ensure LocalSystem account has WMI access. WMI Service: Open `services.msc`, check "Windows Management Instrumentation" service is running. Try restarting. Agent Log: Look for errors related to SystemMonitor or WMI access.
+- **Issue 7: Agent consumes too much CPU/RAM.**
+    - Check: Agent Log File (Debug/Verbose level): Identify which module or activity is causing it. Performance Profiler: Use .NET profiler tools for deeper analysis. `ResourceLimits` configuration in `appsettings.json`.
 
-## XI. Phụ Lục: Cấu Trúc Tham Số Dòng Lệnh và Ví Dụ
+## XI. Appendix: Command Line Parameter Structure and Examples
 
 ### A. CMSAgent.exe
 
-- **`configure`**: Cấu hình agent lần đầu hoặc cấu hình lại.
-    - Tham số: Không. Luôn tương tác CLI.
-    - Hoạt động: Yêu cầu nhập thông tin phòng, xác thực server (MFA nếu cần), lưu cấu hình runtime.
-    - Quyền: Administrator.
-    - Ví dụ sử dụng: `"C:\\Program Files\\CMSAgent\\CMSAgent.exe" configure`
-    - Mã lỗi: 0 (Thành công), 1 (Lỗi chung), 2 (Thiếu quyền), 3 (Hủy), 4 (Lỗi kết nối/xác thực server), 5 (Lỗi lưu config runtime).
-- **`uninstall`**: Gỡ bỏ agent.
-    - Tham số tùy chọn: `-remove-data` (Xóa thư mục dữ liệu của agent).
-    - Hoạt động: Dừng service, gỡ đăng ký, xóa file.
-    - Quyền: Administrator.
-    - Ví dụ: `"C:\\Program Files\\CMSAgent\\CMSAgent.exe" uninstall --remove-data`
-    - *Giải thích:* Gỡ cài đặt agent và xóa toàn bộ thư mục dữ liệu của agent tại `C:\\ProgramData\\CMSAgent`.
-    - Mã lỗi: 0 (Thành công), 1 (Lỗi chung), 2 (Thiếu quyền), 6 (Lỗi dừng/gỡ service).
-- **`start`**: Khởi động Windows Service của agent.
-    - Quyền: Administrator.
-    - Ví dụ sử dụng: `"C:\\Program Files\\CMSAgent\\CMSAgent.exe" start`
-    - Mã lỗi: 0 (Thành công/Yêu cầu gửi SCM), 1 (Lỗi chung), 2 (Thiếu quyền), 7 (Service không cài đặt/lỗi khởi động).
-- **`stop`**: Dừng Windows Service của agent.
-    - Quyền: Administrator.
-    - Ví dụ sử dụng: `"C:\\Program Files\\CMSAgent\\CMSAgent.exe" stop`
-    - Mã lỗi: 0 (Thành công/Yêu cầu gửi SCM), 1 (Lỗi chung), 2 (Thiếu quyền), 8 (Service không cài đặt/lỗi dừng).
-- **`debug`**: Chạy agent trong console hiện tại.
-    - Ví dụ: `"C:\\Program Files\\CMSAgent\\CMSAgent.exe" debug`
-    - *Giải thích:* Chạy agent ở chế độ console thay vì Windows Service. Log sẽ được hiển thị trực tiếp trên console, hữu ích cho việc gỡ lỗi và theo dõi hoạt động thời gian thực.
+- **`configure`**: Configure agent initially or reconfigure.
+    - Parameters: None. Always CLI interactive.
+    - Operation: Request room information, server authentication (MFA if needed), save runtime configuration.
+    - Permissions: Administrator.
+    - Usage example: `"C:\\Program Files\\CMSAgent\\CMSAgent.exe" configure`
+    - Error codes: 0 (Success), 1 (General error), 2 (Insufficient permissions), 3 (Canceled), 4 (Connection/server authentication error), 5 (Runtime config save error).
+- **`uninstall`**: Remove agent.
+    - Optional parameter: `-remove-data` (Delete agent data directory).
+    - Operation: Stop service, unregister, delete files.
+    - Permissions: Administrator.
+    - Example: `"C:\\Program Files\\CMSAgent\\CMSAgent.exe" uninstall --remove-data`
+    - *Explanation:* Uninstall agent and delete entire agent data directory at `C:\\ProgramData\\CMSAgent`.
+    - Error codes: 0 (Success), 1 (General error), 2 (Insufficient permissions), 6 (Service stop/unregister error).
+- **`start`**: Start agent Windows Service.
+    - Permissions: Administrator.
+    - Usage example: `"C:\\Program Files\\CMSAgent\\CMSAgent.exe" start`
+    - Error codes: 0 (Success/Request sent to SCM), 1 (General error), 2 (Insufficient permissions), 7 (Service not installed/start error).
+- **`stop`**: Stop agent Windows Service.
+    - Permissions: Administrator.
+    - Usage example: `"C:\\Program Files\\CMSAgent\\CMSAgent.exe" stop`
+    - Error codes: 0 (Success/Request sent to SCM), 1 (General error), 2 (Insufficient permissions), 8 (Service not installed/stop error).
+- **`debug`**: Run agent in current console.
+    - Example: `"C:\\Program Files\\CMSAgent\\CMSAgent.exe" debug`
+    - *Explanation:* Run agent in console mode instead of Windows Service. Logs will be displayed directly on console, useful for debugging and real-time activity monitoring.
 
 ### B. CMSUpdater.exe
 
-- **Tham số bắt buộc:**
-    - `pid <process_id>`: PID của tiến trình CMSAgent.exe cũ cần dừng.
-    - `new-agent-path "<đường_dẫn_thư_mục_agent_mới>"`: Đường dẫn đến thư mục chứa file agent mới đã giải nén.
-    - `current-agent-install-dir "<đường_dẫn_cài_đặt_agent_cũ>"`: Đường dẫn thư mục cài đặt hiện tại.
-    - `updater-log-dir "<đường_dẫn_thư_mục_logs>"`: Nơi ghi file log của updater.
-    - `current-agent-version "<phiên_bản_agent_cũ>"`: Phiên bản agent hiện tại (dùng cho tên backup).
-- **Mã lỗi (Exit Codes) có thể có:**
-    - 0: Cập nhật thành công.
-    - 10: Lỗi: Không thể dừng agent cũ.
-    - 11: Lỗi: Sao lưu agent cũ thất bại.
-    - 12: Lỗi: Triển khai agent mới thất bại.
-    - 13: Lỗi: Khởi động service agent mới thất bại.
-    - 14: Lỗi: Rollback thất bại.
-    - 15: Lỗi tham số dòng lệnh.
-    - 16: Lỗi: Timeout chờ agent cũ dừng.
-    - 99: Lỗi chung không xác định của Updater.
+- **Required parameters:**
+    - `pid <process_id>`: PID of old CMSAgent.exe process to stop.
+    - `new-agent-path "<new_agent_directory_path>"`: Path to directory containing extracted new agent files.
+    - `current-agent-install-dir "<current_agent_installation_path>"`: Current installation directory path.
+    - `updater-log-dir "<logs_directory_path>"`: Where to write updater log files.
+    - `current-agent-version "<old_agent_version>"`: Current agent version (used for backup name).
+- **Possible Error Codes (Exit Codes):**
+    - 0: Update successful.
+    - 10: Error: Cannot stop old agent.
+    - 11: Error: Old agent backup failed.
+    - 12: Error: New agent deployment failed.
+    - 13: Error: New agent service start failed.
+    - 14: Error: Rollback failed.
+    - 15: Command line parameter error.
+    - 16: Error: Timeout waiting for old agent to stop.
+    - 99: Updater general undefined error.

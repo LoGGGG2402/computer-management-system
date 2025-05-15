@@ -19,19 +19,19 @@ using SocketIOClient;
 namespace CMSAgent.Communication
 {
     /// <summary>
-    /// Quản lý kết nối WebSocket (Socket.IO) với server.
+    /// Manages WebSocket (Socket.IO) connection with the server.
     /// </summary>
     /// <remarks>
-    /// Khởi tạo một instance mới của WebSocketConnector.
+    /// Initializes a new instance of WebSocketConnector.
     /// </remarks>
-    /// <param name="logger">Logger để ghi nhật ký.</param>
-    /// <param name="configLoader">ConfigLoader để tải cấu hình.</param>
-    /// <param name="tokenProtector">Protector để mã hóa/giải mã token.</param>
-    /// <param name="stateManager">StateManager để quản lý trạng thái agent.</param>
-    /// <param name="options">Cấu hình WebSocket.</param>
-    /// <param name="commandExecutor">CommandExecutor để thực thi lệnh.</param>
-    /// <param name="updateHandler">UpdateHandler để xử lý cập nhật.</param>
-    /// <param name="httpClient">HttpClient để gửi request HTTP.</param>
+    /// <param name="logger">Logger for logging.</param>
+    /// <param name="configLoader">ConfigLoader to load configuration.</param>
+    /// <param name="tokenProtector">Protector to encrypt/decrypt token.</param>
+    /// <param name="stateManager">StateManager to manage agent state.</param>
+    /// <param name="options">WebSocket configuration.</param>
+    /// <param name="commandExecutor">CommandExecutor to execute commands.</param>
+    /// <param name="updateHandler">UpdateHandler to process updates.</param>
+    /// <param name="httpClient">HttpClient to send HTTP requests.</param>
     public class WebSocketConnector(
         ILogger<WebSocketConnector> logger,
         ConfigLoader configLoader,
@@ -57,25 +57,25 @@ namespace CMSAgent.Communication
         private bool _disposed = false;
 
         /// <summary>
-        /// Sự kiện khi nhận được thông điệp từ WebSocket.
+        /// Event when a message is received from WebSocket.
         /// </summary>
         public event EventHandler<string> MessageReceived = delegate { };
 
         /// <summary>
-        /// Sự kiện khi kết nối WebSocket bị ngắt.
+        /// Event when WebSocket connection is closed.
         /// </summary>
         public event EventHandler ConnectionClosed = delegate { };
 
         /// <summary>
-        /// Kiểm tra xem WebSocket có đang kết nối không.
+        /// Checks if WebSocket is connected.
         /// </summary>
         public bool IsConnected => _socket?.Connected ?? false;
 
         /// <summary>
-        /// Kết nối đến server qua WebSocket và xác thực.
+        /// Connects to the server via WebSocket and authenticates.
         /// </summary>
-        /// <param name="agentToken">Token xác thực của agent.</param>
-        /// <returns>True nếu kết nối và xác thực thành công, False nếu thất bại.</returns>
+        /// <param name="agentToken">Agent authentication token.</param>
+        /// <returns>True if connection and authentication are successful, False if failed.</returns>
         public async Task<bool> ConnectAsync(string agentToken)
         {
             try
@@ -84,7 +84,7 @@ namespace CMSAgent.Communication
                 
                 if (IsConnected)
                 {
-                    _logger.LogDebug("WebSocket đã được kết nối, bỏ qua yêu cầu kết nối mới");
+                    _logger.LogDebug("WebSocket is already connected, skipping new connection request");
                     return true;
                 }
 
@@ -93,16 +93,16 @@ namespace CMSAgent.Communication
                 
                 if (string.IsNullOrEmpty(serverUrl) || string.IsNullOrEmpty(agentId))
                 {
-                    _logger.LogError("Không thể kết nối WebSocket: Thiếu serverUrl hoặc agentId");
+                    _logger.LogError("Cannot connect WebSocket: Missing serverUrl or agentId");
                     return false;
                 }
 
-                _logger.LogInformation("Đang kết nối WebSocket đến {ServerUrl}", serverUrl);
+                _logger.LogInformation("Connecting WebSocket to {ServerUrl}", serverUrl);
                 
                 _socket = new SocketIOClient.SocketIO(serverUrl, new SocketIOOptions
                 {
                     Path = "/socket.io",
-                    Reconnection = false, // Chúng ta sẽ tự quản lý việc kết nối lại
+                    Reconnection = false, // We will manage reconnection ourselves
                     ExtraHeaders = new Dictionary<string, string>
                     {
                         { HttpHeaders.AgentIdHeader, agentId },
@@ -111,22 +111,22 @@ namespace CMSAgent.Communication
                     }
                 });
 
-                // Đăng ký các sự kiện
+                // Register events
                 RegisterSocketEvents();
                 
-                // Kết nối
+                // Connect
                 await _socket.ConnectAsync();
                 
                 if (!(_socket?.Connected ?? false))
                 {
-                    _logger.LogError("Không thể kết nối WebSocket tới {ServerUrl}", serverUrl);
+                    _logger.LogError("Cannot connect WebSocket to {ServerUrl}", serverUrl);
                     return false;
                 }
 
-                _logger.LogInformation("Đã kết nối WebSocket tới {ServerUrl}, đang chờ xác thực", serverUrl);
+                _logger.LogInformation("WebSocket connected to {ServerUrl}, waiting for authentication", serverUrl);
                 
-                // Socket.IO sẽ gửi sự kiện auth success hoặc failure
-                // Chúng ta đợi ít nhất 5 giây để biết kết quả xác thực
+                // Socket.IO will send auth success or failure event
+                // We wait at least 5 seconds to know the authentication result
                 bool authenticated = await Task.Run(async () =>
                 {
                     int attempts = 0;
@@ -151,14 +151,14 @@ namespace CMSAgent.Communication
 
                 if (authenticated)
                 {
-                    _logger.LogInformation("WebSocket đã được xác thực thành công");
-                    // Reset đếm số lần kết nối lại
+                    _logger.LogInformation("WebSocket authenticated successfully");
+                    // Reset reconnect attempts counter
                     _reconnectAttempts = 0;
                     return true;
                 }
                 else
                 {
-                    _logger.LogError("Xác thực WebSocket thất bại");
+                    _logger.LogError("WebSocket authentication failed");
                     _stateManager.SetState(AgentState.AUTHENTICATION_FAILED);
                     await DisconnectAsync();
                     return false;
@@ -166,7 +166,7 @@ namespace CMSAgent.Communication
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi kết nối WebSocket");
+                _logger.LogError(ex, "Error connecting WebSocket");
                 return false;
             }
             finally
@@ -176,9 +176,9 @@ namespace CMSAgent.Communication
         }
 
         /// <summary>
-        /// Đóng kết nối WebSocket.
+        /// Closes the WebSocket connection.
         /// </summary>
-        /// <returns>Task đại diện cho việc đóng kết nối.</returns>
+        /// <returns>Task representing the connection closure.</returns>
         public async Task DisconnectAsync()
         {
             try
@@ -189,7 +189,7 @@ namespace CMSAgent.Communication
                 {
                     if (_socket.Connected)
                     {
-                        _logger.LogInformation("Đang đóng kết nối WebSocket");
+                        _logger.LogInformation("Closing WebSocket connection");
                         await _socket.DisconnectAsync();
                     }
 
@@ -204,11 +204,11 @@ namespace CMSAgent.Communication
                     _stateManager.SetState(AgentState.DISCONNECTED);
                 }
                 
-                _logger.LogInformation("Đã đóng kết nối WebSocket");
+                _logger.LogInformation("WebSocket connection closed");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi đóng kết nối WebSocket");
+                _logger.LogError(ex, "Error closing WebSocket connection");
             }
             finally
             {
@@ -217,87 +217,87 @@ namespace CMSAgent.Communication
         }
 
         /// <summary>
-        /// Gửi cập nhật trạng thái tài nguyên lên server.
+        /// Sends resource status update to the server.
         /// </summary>
-        /// <param name="payload">Dữ liệu trạng thái tài nguyên.</param>
-        /// <returns>Task đại diện cho việc gửi dữ liệu.</returns>
+        /// <param name="payload">Resource status data.</param>
+        /// <returns>Task representing the data sending process.</returns>
         public async Task SendStatusUpdateAsync(StatusUpdatePayload payload)
         {
             if (!IsConnected)
             {
-                _logger.LogWarning("Không thể gửi cập nhật trạng thái: WebSocket không được kết nối");
+                _logger.LogWarning("Cannot send status update: WebSocket is not connected");
                 return;
             }
 
             if (_socket == null)
             {
-                _logger.LogWarning("Không thể gửi cập nhật trạng thái: WebSocket là null");
+                _logger.LogWarning("Cannot send status update: WebSocket is null");
                 return;
             }
 
             try
             {
                 await _socket.EmitAsync(WebSocketEvents.AgentStatusUpdate, payload);
-                _logger.LogDebug("Đã gửi cập nhật trạng thái: CPU {CpuUsage:F1}%, RAM {RamUsage:F1}%, Disk {DiskUsage:F1}%",
+                _logger.LogDebug("Sent status update: CPU {CpuUsage:F1}%, RAM {RamUsage:F1}%, Disk {DiskUsage:F1}%",
                     payload.cpuUsage, payload.ramUsage, payload.diskUsage);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi gửi cập nhật trạng thái");
+                _logger.LogError(ex, "Error when sending status update");
             }
         }
 
         /// <summary>
-        /// Gửi kết quả lệnh đến server.
+        /// Sends command result to the server.
         /// </summary>
-        /// <param name="payload">Payload chứa kết quả lệnh.</param>
-        /// <returns>Task với kết quả gửi: true nếu thành công, false nếu thất bại.</returns>
+        /// <param name="payload">Payload containing command result.</param>
+        /// <returns>Task with sending result: true if successful, false if failed.</returns>
         public async Task<bool> SendCommandResultAsync(CommandResultPayload payload)
         {
             if (!IsConnected)
             {
-                _logger.LogWarning("Không thể gửi kết quả lệnh: WebSocket không được kết nối");
+                _logger.LogWarning("Cannot send command result: WebSocket is not connected");
                 return false;
             }
 
             if (_socket == null)
             {
-                _logger.LogWarning("Không thể gửi kết quả lệnh: WebSocket là null");
+                _logger.LogWarning("Cannot send command result: WebSocket is null");
                 return false;
             }
 
             try
             {
                 await _socket.EmitAsync(WebSocketEvents.AgentCommandResult, payload);
-                _logger.LogDebug("Đã gửi kết quả lệnh {CommandId}, trạng thái: {Success}",
-                    payload.commandId, payload.success ? "Thành công" : "Thất bại");
+                _logger.LogDebug("Sent command result {CommandId}, status: {Success}",
+                    payload.commandId, payload.success ? "Success" : "Failed");
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi gửi kết quả lệnh {CommandId}", payload.commandId);
+                _logger.LogError(ex, "Error when sending command result {CommandId}", payload.commandId);
                 return false;
             }
         }
 
         /// <summary>
-        /// Đăng ký các sự kiện WebSocket.
+        /// Registers WebSocket events.
         /// </summary>
         private void RegisterSocketEvents()
         {
             if (_socket == null)
                 return;
 
-            // Sự kiện khi kết nối WebSocket thành công
+            // Event when WebSocket connection is successful
             _socket.OnConnected += (sender, e) =>
             {
-                _logger.LogInformation("WebSocket kết nối thành công, đang chờ xác thực");
+                _logger.LogInformation("WebSocket connected successfully, waiting for authentication");
             };
 
-            // Sự kiện khi kết nối WebSocket bị ngắt
+            // Event when WebSocket connection is disconnected
             _socket.OnDisconnected += (sender, e) =>
             {
-                _logger.LogWarning("WebSocket bị ngắt kết nối: {Reason}", e);
+                _logger.LogWarning("WebSocket disconnected: {Reason}", e);
                 
                 if (_stateManager.CurrentState == AgentState.CONNECTED)
                 {
@@ -306,27 +306,27 @@ namespace CMSAgent.Communication
                 
                 ConnectionClosed?.Invoke(this, EventArgs.Empty);
                 
-                // Bắt đầu kết nối lại
+                // Start reconnection
                 StartReconnectTimer();
             };
 
-            // Sự kiện khi có lỗi WebSocket
+            // Event when there is a WebSocket error
             _socket.OnError += (sender, e) =>
             {
-                _logger.LogError("Lỗi WebSocket: {Error}", e);
+                _logger.LogError("WebSocket error: {Error}", e);
             };
 
-            // Sự kiện khi xác thực WebSocket thành công
+            // Event when WebSocket authentication is successful
             _socket.On(WebSocketEvents.AgentWsAuthSuccess, response =>
             {
-                _logger.LogInformation("WebSocket đã được xác thực thành công");
+                _logger.LogInformation("WebSocket authenticated successfully");
                 _stateManager.SetState(AgentState.CONNECTED);
             });
 
-            // Sự kiện khi xác thực WebSocket thất bại
+            // Event when WebSocket authentication fails
             _socket.On(WebSocketEvents.AgentWsAuthFailed, response =>
             {
-                string reason = "Không rõ nguyên nhân";
+                string reason = "Unknown reason";
                 try
                 {
                     var responseValues = response.GetValue<object[]>();
@@ -337,14 +337,14 @@ namespace CMSAgent.Communication
                 }
                 catch { }
 
-                _logger.LogError("Xác thực WebSocket thất bại: {Reason}", reason);
+                _logger.LogError("WebSocket authentication failed: {Reason}", reason);
                 _stateManager.SetState(AgentState.AUTHENTICATION_FAILED);
                 
-                // Đóng kết nối
+                // Close connection
                 _ = DisconnectAsync();
             });
 
-            // Sự kiện khi nhận được lệnh cần thực thi
+            // Event when received a command to execute
             _socket.On(WebSocketEvents.CommandExecute, async response =>
             {
                 try
@@ -352,21 +352,21 @@ namespace CMSAgent.Communication
                     var command = response.GetValue<CommandPayload>();
                     if (command == null)
                     {
-                        _logger.LogError("Nhận được lệnh null từ server");
+                        _logger.LogError("Received null command from server");
                         return;
                     }
 
-                    _logger.LogInformation("Nhận được lệnh {CommandType} từ server: {CommandId}", command.commandType, command.commandId);
+                    _logger.LogInformation("Received {CommandType} command from server: {CommandId}", command.commandType, command.commandId);
 
-                    MessageReceived?.Invoke(this, $"Nhận được lệnh {command.commandType} từ server: {command.commandId}");
+                    MessageReceived?.Invoke(this, $"Received {command.commandType} command from server: {command.commandId}");
 
-                    // Thêm lệnh vào hàng đợi
+                    // Add command to queue
                     bool enqueued = _commandExecutor.TryEnqueueCommand(command);
                     if (!enqueued)
                     {
-                        _logger.LogError("Không thể thêm lệnh vào hàng đợi: Hàng đợi đã đầy");
+                        _logger.LogError("Cannot add command to queue: Queue is full");
                         
-                        // Gửi kết quả lỗi về server
+                        // Send error result back to server
                         var result = new CommandResultPayload
                         {
                             commandId = command.commandId,
@@ -376,7 +376,7 @@ namespace CMSAgent.Communication
                             {
                                 stdout = string.Empty,
                                 stderr = string.Empty,
-                                errorMessage = "Không thể xử lý lệnh: Hàng đợi đã đầy",
+                                errorMessage = "Cannot process command: Queue is full",
                                 errorCode = string.Empty
                             }
                         };
@@ -386,32 +386,32 @@ namespace CMSAgent.Communication
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Lỗi khi xử lý lệnh từ server");
+                    _logger.LogError(ex, "Error when processing command from server");
                 }
             });
 
-            // Sự kiện khi có phiên bản agent mới
+            // Event when there is a new agent version
             _socket.On(WebSocketEvents.AgentNewVersionAvailable, async response =>
             {
                 try
                 {
                     var updateInfo = response.GetValue<UpdateCheckResponse>();
-                    _logger.LogInformation("Phát hiện phiên bản agent mới: {NewVersion}", updateInfo.version);
+                    _logger.LogInformation("Detected new agent version: {NewVersion}", updateInfo.version);
                     
-                    MessageReceived?.Invoke(this, $"Phát hiện phiên bản agent mới: {updateInfo.version}");
+                    MessageReceived?.Invoke(this, $"Detected new agent version: {updateInfo.version}");
                     
-                    // Gửi đến UpdateHandler để xử lý
+                    // Send to UpdateHandler for processing
                     await _updateHandler.ProcessUpdateAsync(updateInfo);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Lỗi khi xử lý thông tin cập nhật từ server");
+                    _logger.LogError(ex, "Error when processing update information from server");
                 }
             });
         }
 
         /// <summary>
-        /// Bắt đầu timer để kết nối lại.
+        /// Starts timer for reconnection.
         /// </summary>
         private void StartReconnectTimer()
         {
@@ -422,10 +422,10 @@ namespace CMSAgent.Communication
 
                 _isReconnecting = true;
 
-                // Tính toán thời gian chờ kết nối lại
+                // Calculate reconnection wait time
                 int delay = CalculateReconnectDelay();
                 
-                _logger.LogInformation("Sẽ thử kết nối lại sau {Delay} giây (lần thử {Attempt})",
+                _logger.LogInformation("Will try reconnecting after {Delay} seconds (attempt {Attempt})",
                     delay, _reconnectAttempts + 1);
 
                 StopReconnectTimer();
@@ -435,7 +435,7 @@ namespace CMSAgent.Communication
         }
 
         /// <summary>
-        /// Dừng timer kết nối lại.
+        /// Stops reconnection timer.
         /// </summary>
         private void StopReconnectTimer()
         {
@@ -447,7 +447,7 @@ namespace CMSAgent.Communication
         }
 
         /// <summary>
-        /// Callback khi timer kết nối lại kích hoạt.
+        /// Callback when reconnection timer activates.
         /// </summary>
         private async void ReconnectTimerCallback(object? state)
         {
@@ -455,23 +455,23 @@ namespace CMSAgent.Communication
             {
                 _reconnectAttempts++;
                 
-                _logger.LogInformation("Đang thử kết nối lại lần thứ {Attempt}", _reconnectAttempts);
+                _logger.LogInformation("Trying to reconnect attempt {Attempt}", _reconnectAttempts);
                 
-                // Nếu số lần thử vượt quá giới hạn thì dừng
+                // If the number of attempts exceeds the limit, stop
                 if (_settings.ReconnectAttemptsMax.HasValue && _reconnectAttempts > _settings.ReconnectAttemptsMax.Value)
                 {
-                    _logger.LogError("Đã vượt quá số lần thử kết nối lại tối đa ({MaxAttempts})",
+                    _logger.LogError("Exceeded maximum reconnection attempts ({MaxAttempts})",
                         _settings.ReconnectAttemptsMax.Value);
                     
                     _isReconnecting = false;
                     return;
                 }
 
-                // Lấy token từ cấu hình và giải mã
+                // Get token from configuration and decrypt
                 string encryptedToken = _configLoader.GetEncryptedAgentToken();
                 if (string.IsNullOrEmpty(encryptedToken))
                 {
-                    _logger.LogError("Không thể kết nối lại: Thiếu token xác thực");
+                    _logger.LogError("Cannot reconnect: Missing authentication token");
                     StartReconnectTimer();
                     return;
                 }
@@ -483,39 +483,39 @@ namespace CMSAgent.Communication
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Không thể xử lý hàng đợi offline: không thể giải mã token");
+                    _logger.LogError(ex, "Cannot process offline queue: unable to decrypt token");
                     StartReconnectTimer();
                     return;
                 }
 
-                // Thử kết nối lại
+                // Try to reconnect
                 bool connected = await ConnectAsync(token);
                 
                 if (connected)
                 {
-                    _logger.LogInformation("Kết nối lại WebSocket thành công");
+                    _logger.LogInformation("WebSocket reconnection successful");
                     _isReconnecting = false;
                     _reconnectAttempts = 0;
                 }
                 else
                 {
-                    _logger.LogWarning("Kết nối lại WebSocket thất bại, sẽ thử lại sau");
+                    _logger.LogWarning("WebSocket reconnection failed, will try again later");
                     StartReconnectTimer();
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thử kết nối lại WebSocket");
+                _logger.LogError(ex, "Error when trying to reconnect WebSocket");
                 StartReconnectTimer();
             }
         }
 
         /// <summary>
-        /// Tính toán thời gian chờ kết nối lại dựa trên số lần thử.
+        /// Calculates reconnection delay time based on number of attempts.
         /// </summary>
         private int CalculateReconnectDelay()
         {
-            // Tăng thời gian chờ theo cấp số nhân, nhưng có giới hạn tối đa
+            // Increase wait time exponentially, but with a maximum limit
             int delay = (int)Math.Min(
                 _settings.ReconnectDelayMaxSec,
                 _settings.ReconnectDelayInitialSec * Math.Pow(1.5, _reconnectAttempts)
@@ -525,7 +525,7 @@ namespace CMSAgent.Communication
         }
 
         /// <summary>
-        /// Giải phóng tài nguyên.
+        /// Releases resources.
         /// </summary>
         public void Dispose()
         {
@@ -534,7 +534,7 @@ namespace CMSAgent.Communication
         }
 
         /// <summary>
-        /// Giải phóng tài nguyên.
+        /// Releases resources.
         /// </summary>
         protected virtual void Dispose(bool disposing)
         {

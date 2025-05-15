@@ -3,24 +3,24 @@ using System.ComponentModel.DataAnnotations;
 namespace CMSAgent.Common.DTOs
 {
     /// <summary>
-    /// Thông tin vị trí của agent trong phòng.
+    /// Agent's position information in the room.
     /// </summary>
     public class PositionInfo
     {
         /// <summary>
-        /// Tên phòng (vị trí) của agent.
+        /// Room name (location) of the agent.
         /// </summary>
         [Required]
         public required string roomName { get; set; }
 
         /// <summary>
-        /// Tọa độ X của agent trong phòng.
+        /// X coordinate of the agent in the room.
         /// </summary>
         [Required]
         public int posX { get; set; }
 
         /// <summary>
-        /// Tọa độ Y của agent trong phòng.
+        /// Y coordinate of the agent in the room.
         /// </summary>
         [Required]
         public int posY { get; set; }

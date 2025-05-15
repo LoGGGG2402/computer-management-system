@@ -4,53 +4,53 @@ using CMSAgent.Common.Enums;
 namespace CMSAgent.Common.DTOs
 {
     /// <summary>
-    /// Thông tin lệnh được gửi từ server đến agent.
+    /// Command information sent from server to agent.
     /// </summary>
     public class CommandPayload
     {
         /// <summary>
-        /// ID duy nhất của lệnh.
+        /// Unique command ID.
         /// </summary>
         public required string commandId { get; set; }
 
         /// <summary>
-        /// Nội dung lệnh cần thực thi.
+        /// Command content to execute.
         /// </summary>
         public required string command { get; set; }
 
         /// <summary>
-        /// Loại lệnh (console, system_action, get_logs).
+        /// Command type (console, system_action, get_logs).
         /// </summary>
         public CommandType commandType { get; set; }
 
         /// <summary>
-        /// Các tham số bổ sung cho lệnh (tùy chọn).
+        /// Additional parameters for the command (optional).
         /// </summary>
         public required Dictionary<string, object> parameters { get; set; } = new();
     }
 
     /// <summary>
-    /// Payload kết quả thực thi lệnh gửi từ agent lên server.
+    /// Command execution result payload sent from agent to server.
     /// </summary>
     public class CommandResultPayload
     {
         /// <summary>
-        /// ID của lệnh đã thực thi.
+        /// ID of the executed command.
         /// </summary>
         public required string commandId { get; set; }
 
         /// <summary>
-        /// Trạng thái thực thi lệnh: true nếu thành công, false nếu thất bại.
+        /// Command execution status: true if successful, false if failed.
         /// </summary>
         public bool success { get; set; }
 
         /// <summary>
-        /// Loại lệnh đã thực thi.
+        /// Type of executed command.
         /// </summary>
         public CommandType type { get; set; }
 
         /// <summary>
-        /// Dữ liệu kết quả thực thi.
+        /// Execution result data.
         /// </summary>
         public required CommandResultData result { get; set; } = new()
         {
@@ -62,33 +62,33 @@ namespace CMSAgent.Common.DTOs
     }
 
     /// <summary>
-    /// Dữ liệu kết quả của việc thực thi lệnh.
+    /// Command execution result data.
     /// </summary>
     public class CommandResultData
     {
         /// <summary>
-        /// Đầu ra tiêu chuẩn của lệnh.
+        /// Standard output of the command.
         /// </summary>
         public required string stdout { get; set; } = string.Empty;
 
         /// <summary>
-        /// Đầu ra lỗi tiêu chuẩn của lệnh.
+        /// Standard error output of the command.
         /// </summary>
         public required string stderr { get; set; } = string.Empty;
 
         /// <summary>
-        /// Mã thoát của lệnh (nếu có).
+        /// Command exit code (if any).
         /// </summary>
         public int? exitCode { get; set; }
 
         /// <summary>
-        /// Thông báo lỗi (nếu có).
+        /// Error message (if any).
         /// </summary>
         public required string errorMessage { get; set; } = string.Empty;
 
         /// <summary>
-        /// Mã lỗi (nếu có).
+        /// Error code (if any).
         /// </summary>
         public required string errorCode { get; set; } = string.Empty;
     }
-} 
+}

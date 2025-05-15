@@ -7,23 +7,23 @@ using Microsoft.Extensions.Logging;
 namespace CMSAgent.Commands
 {
     /// <summary>
-    /// Factory tạo ra các command handler phù hợp với từng loại command.
+    /// Factory to create command handlers appropriate for each command type.
     /// </summary>
-    /// <param name="serviceProvider">Service provider để resolve các handler.</param>
-    /// <param name="logger">Logger để ghi nhật ký.</param>
+    /// <param name="serviceProvider">Service provider to resolve handlers.</param>
+    /// <param name="logger">Logger to log events.</param>
     public class CommandHandlerFactory(IServiceProvider serviceProvider, ILogger<CommandHandlerFactory> logger)
     {
         private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         private readonly ILogger<CommandHandlerFactory> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         /// <summary>
-        /// Tạo và trả về handler phù hợp với loại command.
+        /// Create and return a handler appropriate for the command type.
         /// </summary>
-        /// <param name="commandType">Loại command cần xử lý.</param>
-        /// <returns>Command handler phù hợp để xử lý command.</returns>
+        /// <param name="commandType">Command type to handle.</param>
+        /// <returns>Command handler appropriate for handling the command.</returns>
         public ICommandHandler GetHandler(CommandType commandType)
         {
-            _logger.LogDebug("Đang tạo handler cho command type: {CommandType}", commandType);
+            _logger.LogDebug("Creating handler for command type: {CommandType}", commandType);
 
             try
             {
@@ -31,12 +31,12 @@ namespace CMSAgent.Commands
                 {
                     CommandType.CONSOLE => _serviceProvider.GetRequiredService<Handlers.ConsoleCommandHandler>(),
                     CommandType.SYSTEM_ACTION => _serviceProvider.GetRequiredService<Handlers.SystemActionCommandHandler>(),
-                    _ => throw new ArgumentException($"Không hỗ trợ loại command: {commandType}", nameof(commandType))
+                    _ => throw new ArgumentException($"Unsupported command type: {commandType}", nameof(commandType))
                 };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi tạo handler cho command type {CommandType}", commandType);
+                _logger.LogError(ex, "Error creating handler for command type {CommandType}", commandType);
                 throw;
             }
         }

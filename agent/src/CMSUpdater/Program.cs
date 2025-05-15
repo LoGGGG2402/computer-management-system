@@ -11,69 +11,69 @@ using CMSAgent.Common.Logging;
 using System.Text.Json;
 
 /// <summary>
-/// Lớp Program chính của CMSUpdater
+/// Main Program class for CMSUpdater
 /// </summary>
 [SupportedOSPlatform("windows")]
 public class Program
 {
     /// <summary>
-    /// Logger tĩnh cho Updater
+    /// Static logger for Updater
     /// </summary>
     private static Microsoft.Extensions.Logging.ILogger _logger = NullLogger.Instance;
     
     /// <summary>
-    /// Cấu hình ứng dụng
+    /// Application configuration
     /// </summary>
     private static IConfiguration _configuration = null!;
 
     /// <summary>
-    /// Đường dẫn đến file update_info.json
+    /// Path to update_info.json file
     /// </summary>
     private static readonly string UpdateInfoPath = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory, 
         "update_info.json");
 
     /// <summary>
-    /// Điểm vào chính của ứng dụng
+    /// Application entry point
     /// </summary>
-    /// <param name="args">Tham số dòng lệnh</param>
-    /// <returns>Mã trạng thái (exit code)</returns>
+    /// <param name="args">Command line arguments</param>
+    /// <returns>Exit code</returns>
     public static async Task<int> Main(string[] args)
     {
         try
         {
-            // Đọc cấu hình từ appsettings.json
+            // Read configuration from appsettings.json
             _configuration = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
                 .Build();
             
-            // Cập nhật thông tin version từ assembly
+            // Update version information from assembly
             var assembly = Assembly.GetExecutingAssembly();
             
-            // Thêm thông tin từ assembly vào configuration
+            // Add assembly information to configuration
             var configDictionary = new Dictionary<string, string?>
             {
                 { "Application:Name", assembly.GetName().Name },
                 { "Application:Version", assembly.GetName().Version?.ToString() }
             };
 
-            // Kết hợp cấu hình hiện tại với thông tin từ assembly
+            // Combine current configuration with assembly information
             _configuration = new ConfigurationBuilder()
                 .AddConfiguration(_configuration)
                 .AddInMemoryCollection(configDictionary)
                 .Build();
             
-            // Cấu hình logging sử dụng LoggingSetup
+            // Configure logging using LoggingSetup
             _logger = LoggingSetup.CreateLogger(_configuration);
             
-            // Phân tích tham số dòng lệnh
+            // Parse command line arguments
             var (isValid, agentProcessIdToWait, newAgentPath, currentAgentInstallDir, updaterLogDir, currentAgentVersion) = ParseArguments(args);
             
-            // Nếu tham số dòng lệnh không đủ, thử đọc từ file update_info.json
+            // If command line arguments are insufficient, try reading from update_info.json
             if (!isValid && File.Exists(UpdateInfoPath))
             {
-                _logger.LogInformation("Đọc thông tin cập nhật từ file {UpdateInfoPath}", UpdateInfoPath);
+                _logger.LogInformation("Reading update information from file {UpdateInfoPath}", UpdateInfoPath);
                 
                 try 
                 {
@@ -82,19 +82,19 @@ public class Program
                     
                     if (updateInfo != null)
                     {
-                        // Lấy thông tin từ file update_info.json
+                        // Retrieve information from update_info.json
                         if (updateInfo.TryGetValue("package_path", out var packagePath) &&
                             updateInfo.TryGetValue("install_directory", out var installDir) &&
                             updateInfo.TryGetValue("new_version", out var newVersion))
                         {
-                            // PID hiện tại có thể không được lưu trong file, lấy pid từ tham số dòng lệnh
+                            // Current PID may not be stored in the file, retrieve PID from command line arguments
                             int pid = 0;
                             if (args.Length > 1 && args[0].Contains("pid") && int.TryParse(args[1], out pid))
                             {
                                 agentProcessIdToWait = pid;
                             }
                             
-                            // Sử dụng thông tin từ file update_info.json
+                            // Use information from update_info.json
                             newAgentPath = packagePath;
                             currentAgentInstallDir = installDir;
                             currentAgentVersion = newVersion;
@@ -104,7 +104,7 @@ public class Program
                                      !string.IsNullOrEmpty(currentAgentInstallDir) && 
                                      !string.IsNullOrEmpty(currentAgentVersion);
                             
-                            _logger.LogInformation("Đã đọc thông tin từ file update_info.json: " +
+                            _logger.LogInformation("Read information from update_info.json: " +
                                 "PID={PID}, NewPath={NewPath}, InstallDir={InstallDir}, Version={Version}",
                                 agentProcessIdToWait, newAgentPath, currentAgentInstallDir, currentAgentVersion);
                         }
@@ -112,27 +112,27 @@ public class Program
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Lỗi khi đọc file update_info.json");
+                    _logger.LogError(ex, "Error reading update_info.json file");
                 }
             }
             
             if (!isValid)
             {
-                _logger.LogError("Tham số không hợp lệ cho CMSUpdater.");
+                _logger.LogError("Invalid arguments for CMSUpdater.");
                 PrintUsage();
                 return (int)UpdaterExitCodes.InvalidArguments;
             }
             
-            _logger.LogInformation("CMSUpdater đã khởi động với PID: {PID}, NewPath: {NewPath}, CurrentDir: {CurrentDir}, LogDir: {LogDir}, CurrentVersion: {Version}", 
+            _logger.LogInformation("CMSUpdater started with PID: {PID}, NewPath: {NewPath}, CurrentDir: {CurrentDir}, LogDir: {LogDir}, CurrentVersion: {Version}", 
                 agentProcessIdToWait, newAgentPath, currentAgentInstallDir, updaterLogDir, currentAgentVersion);
             
-            // Đọc các cấu hình từ appsettings.json 
+            // Read settings from appsettings.json 
             int retryAttempts = _configuration.GetValue<int>("Updater:RetryAttempts", 3);
             int retryDelayMs = _configuration.GetValue<int>("Updater:RetryDelayMilliseconds", 1000);
             int processTimeoutSec = _configuration.GetValue<int>("Updater:WaitForProcessTimeoutSeconds", 30);
             var filesToExclude = _configuration.GetSection("Updater:FilesToExcludeFromUpdate").Get<string[]>() ?? Array.Empty<string>();
             
-            _logger.LogInformation("Cấu hình từ appsettings.json: RetryAttempts={Attempts}, RetryDelay={Delay}ms, ProcessTimeout={Timeout}s, FilesToExclude={ExcludeCount} mục", 
+            _logger.LogInformation("Configuration from appsettings.json: RetryAttempts={Attempts}, RetryDelay={Delay}ms, ProcessTimeout={Timeout}s, FilesToExclude={ExcludeCount} items", 
                 retryAttempts, retryDelayMs, processTimeoutSec, filesToExclude.Length);
             
             var serviceHelper = new ServiceHelper(_logger);
@@ -152,7 +152,7 @@ public class Program
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Lỗi không xử lý được trong CMSUpdater");
+            _logger.LogError(ex, "Unhandled error in CMSUpdater");
             return (int)UpdaterExitCodes.GeneralError;
         }
         finally
@@ -162,10 +162,10 @@ public class Program
     }
     
     /// <summary>
-    /// Phân tích tham số dòng lệnh
+    /// Parse command line arguments
     /// </summary>
-    /// <param name="args">Mảng tham số dòng lệnh</param>
-    /// <returns>Tuple chứa tính hợp lệ và các giá trị tham số</returns>
+    /// <param name="args">Command line arguments array</param>
+    /// <returns>Tuple containing validity and argument values</returns>
     private static (bool isValid, int agentProcessIdToWait, string newAgentPath, string currentAgentInstallDir, string updaterLogDir, string currentAgentVersion) ParseArguments(string[] args)
     {
         if (args.Length < 5)
@@ -224,22 +224,22 @@ public class Program
             }
         }
         
-        // Kiểm tra xem tất cả tham số bắt buộc đã có hay chưa
+        // Check if all required arguments are present
         if (!hasPid || !hasNewAgentPath || !hasCurrentInstallDir || !hasUpdaterLogDir || !hasCurrentVersion)
         {
             return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty);
         }
         
-        // Kiểm tra tính hợp lệ của đường dẫn
+        // Validate paths
         if (!Directory.Exists(newAgentPath))
         {
-            _logger.LogError($"Lỗi: Thư mục agent mới không tồn tại: {newAgentPath}");
+            _logger.LogError($"Error: New agent directory does not exist: {newAgentPath}");
             return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty);
         }
         
         if (!Directory.Exists(currentAgentInstallDir))
         {
-            _logger.LogError($"Lỗi: Thư mục cài đặt hiện tại không tồn tại: {currentAgentInstallDir}");
+            _logger.LogError($"Error: Current installation directory does not exist: {currentAgentInstallDir}");
             return (false, 0, string.Empty, string.Empty, string.Empty, string.Empty);
         }
         
@@ -247,20 +247,20 @@ public class Program
     }
     
     /// <summary>
-    /// In thông tin sử dụng ra console
+    /// Print usage information to console
     /// </summary>
     private static void PrintUsage()
     {
-        Console.WriteLine("Cách sử dụng: CMSUpdater.exe [tham số]");
-        Console.WriteLine("Các tham số bắt buộc:");
-        Console.WriteLine("  --pid <process_id>                        PID của tiến trình CMSAgent.exe cũ cần dừng");
-        Console.WriteLine("  --new-agent-path \"<đường_dẫn>\"            Đường dẫn đến thư mục chứa file agent mới đã giải nén");
-        Console.WriteLine("  --current-agent-install-dir \"<đường_dẫn>\" Đường dẫn thư mục cài đặt hiện tại");
-        Console.WriteLine("  --updater-log-dir \"<đường_dẫn>\"           Nơi ghi file log của updater");
-        Console.WriteLine("  --current-agent-version \"<phiên_bản>\"     Phiên bản agent hiện tại (dùng cho tên backup)");
+        Console.WriteLine("Usage: CMSUpdater.exe [parameters]");
+        Console.WriteLine("Required parameters:");
+        Console.WriteLine("  --pid <process_id>                    PID of old CMSAgent.exe process to stop");
+        Console.WriteLine("  --new-agent-path \"<path>\"            Path to extracted new agent files");
+        Console.WriteLine("  --current-agent-install-dir \"<path>\" Current installation directory path");
+        Console.WriteLine("  --updater-log-dir \"<path>\"           Updater log directory");
+        Console.WriteLine("  --current-agent-version \"<version>\"  Current agent version (used for backup name)");
         Console.WriteLine();
-        Console.WriteLine("Lưu ý: Có thể sử dụng file update_info.json trong thư mục CMSUpdater thay cho tham số dòng lệnh");
-        Console.WriteLine("Ví dụ:");
+        Console.WriteLine("Note: You can use update_info.json in the CMSUpdater directory instead of command line parameters");
+        Console.WriteLine("Example:");
         Console.WriteLine("  CMSUpdater.exe --pid 1234 --new-agent-path \"C:\\ProgramData\\CMSAgent\\updates\\extracted\\v1.1.0\" --current-agent-install-dir \"C:\\Program Files\\CMSAgent\" --updater-log-dir \"C:\\ProgramData\\CMSAgent\\logs\" --current-agent-version \"1.0.2\"");
     }
-} 
+}

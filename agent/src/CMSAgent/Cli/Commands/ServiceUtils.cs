@@ -19,9 +19,9 @@ namespace CMSAgent.Cli.Commands
         private const string ScExe = "sc.exe";
 
         /// <summary>
-        /// Khởi tạo một instance mới của ServiceUtils.
+        /// Initializes a new instance of ServiceUtils.
         /// </summary>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
+        /// <param name="logger">Logger for logging events.</param>
         public ServiceUtils(ILogger<ServiceUtils> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -383,4 +383,4 @@ namespace CMSAgent.Cli.Commands
             }
         }
     }
-} 
+}

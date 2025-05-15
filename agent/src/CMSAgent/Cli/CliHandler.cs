@@ -9,12 +9,12 @@ using Microsoft.Extensions.Logging;
 namespace CMSAgent.Cli
 {
     /// <summary>
-    /// Xử lý và điều phối các lệnh CLI của ứng dụng.
+    /// Handles and orchestrates the CLI commands of the application.
     /// </summary>
     public class CliHandler
     {
         /// <summary>
-        /// Cờ xác định một lệnh CLI đã được thực thi.
+        /// Flag indicating whether a CLI command has been executed.
         /// </summary>
         public bool IsCliCommandExecuted { get; private set; } = false;
 
@@ -23,27 +23,27 @@ namespace CMSAgent.Cli
         private readonly IServiceProvider _serviceProvider;
 
         /// <summary>
-        /// Khởi tạo một instance mới của CliHandler.
+        /// Initializes a new instance of CliHandler.
         /// </summary>
-        /// <param name="serviceProvider">Service provider để resolve các lớp xử lý lệnh.</param>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
+        /// <param name="serviceProvider">Service provider to resolve command handler classes.</param>
+        /// <param name="logger">Logger for logging events.</param>
         public CliHandler(IServiceProvider serviceProvider, ILogger<CliHandler> logger)
         {
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
-            // Tạo root command
-            _rootCommand = new RootCommand("CMSAgent - Hệ thống quản lý máy tính");
+            // Create root command
+            _rootCommand = new RootCommand("CMSAgent - Computer Management System");
             
-            // Đăng ký các lệnh con
+            // Register subcommands
             RegisterCommands();
         }
 
         /// <summary>
-        /// Xử lý lệnh từ command line.
+        /// Handles commands from the command line.
         /// </summary>
-        /// <param name="args">Các tham số từ command line.</param>
-        /// <returns>Mã lỗi của lệnh.</returns>
+        /// <param name="args">Command line arguments.</param>
+        /// <returns>Command error code.</returns>
         public async Task<int> HandleAsync(string[] args)
         {
             try
@@ -52,18 +52,18 @@ namespace CMSAgent.Cli
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi không xử lý được khi thực thi lệnh CLI");
+                _logger.LogError(ex, "Unhandled error occurred while executing CLI command");
                 return -1;
             }
         }
 
         /// <summary>
-        /// Đăng ký các lệnh con vào root command.
+        /// Registers subcommands to the root command.
         /// </summary>
         private void RegisterCommands()
         {
-            // Lệnh configure
-            var configureCmd = new Command("configure", "Cấu hình ban đầu cho agent (tương tác)");
+            // Configure command
+            var configureCmd = new Command("configure", "Initial configuration for the agent (interactive)");
             configureCmd.SetHandler(async (InvocationContext context) => 
             {
                 IsCliCommandExecuted = true;
@@ -72,8 +72,8 @@ namespace CMSAgent.Cli
             });
             _rootCommand.AddCommand(configureCmd);
 
-            // Lệnh start
-            var startCmd = new Command("start", "Khởi động CMSAgent Windows service");
+            // Start command
+            var startCmd = new Command("start", "Start the CMSAgent Windows service");
             startCmd.SetHandler(async (InvocationContext context) => 
             {
                 IsCliCommandExecuted = true;
@@ -82,8 +82,8 @@ namespace CMSAgent.Cli
             });
             _rootCommand.AddCommand(startCmd);
 
-            // Lệnh stop
-            var stopCmd = new Command("stop", "Dừng CMSAgent Windows service");
+            // Stop command
+            var stopCmd = new Command("stop", "Stop the CMSAgent Windows service");
             stopCmd.SetHandler(async (InvocationContext context) => 
             {
                 IsCliCommandExecuted = true;
@@ -92,11 +92,11 @@ namespace CMSAgent.Cli
             });
             _rootCommand.AddCommand(stopCmd);
 
-            // Lệnh uninstall
-            var uninstallCmd = new Command("uninstall", "Gỡ bỏ CMSAgent Windows service");
+            // Uninstall command
+            var uninstallCmd = new Command("uninstall", "Uninstall the CMSAgent Windows service");
             var removeDataOption = new Option<bool>(
                 aliases: new[] { "--remove-data", "-r" },
-                description: "Xóa toàn bộ dữ liệu của agent từ ProgramData"
+                description: "Remove all agent data from ProgramData"
             );
             uninstallCmd.AddOption(removeDataOption);
             uninstallCmd.SetHandler(async (bool removeData) => 
@@ -107,12 +107,12 @@ namespace CMSAgent.Cli
             }, removeDataOption);
             _rootCommand.AddCommand(uninstallCmd);
 
-            // Lệnh debug
-            var debugCmd = new Command("debug", "Chạy agent ở chế độ console application");
+            // Debug command
+            var debugCmd = new Command("debug", "Run the agent in console application mode");
             debugCmd.SetHandler((InvocationContext context) => 
             {
-                // Lưu ý: IsCliCommandExecuted KHÔNG được set true cho lệnh debug
-                // Vì lệnh debug sẽ tiếp tục thực thi như bình thường thay vì thoát
+                // Note: IsCliCommandExecuted should NOT be set to true for the debug command
+                // because the debug command will continue execution as normal instead of exiting
                 var cmd = _serviceProvider.GetRequiredService<DebugCommand>();
                 context.ExitCode = cmd.Execute();
             });

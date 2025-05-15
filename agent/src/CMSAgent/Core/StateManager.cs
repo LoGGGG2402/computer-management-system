@@ -6,9 +6,9 @@ using System.Threading;
 namespace CMSAgent.Core
 {
     /// <summary>
-    /// Quản lý trạng thái hiện tại của agent và thông báo khi có sự thay đổi trạng thái.
+    /// Manages the current state of the agent and notifies when there are state changes.
     /// </summary>
-    /// <param name="logger">Logger để ghi nhật ký.</param>
+    /// <param name="logger">Logger for logging.</param>
     public class StateManager(ILogger<StateManager> logger)
     {
         private readonly Lock _lock = new();
@@ -16,12 +16,12 @@ namespace CMSAgent.Core
         private readonly ILogger<StateManager> _logger = logger;
 
         /// <summary>
-        /// Sự kiện được kích hoạt khi trạng thái agent thay đổi.
+        /// Event triggered when the agent state changes.
         /// </summary>
         public event Action<AgentState, AgentState> StateChanged = delegate { };
 
         /// <summary>
-        /// Lấy trạng thái hiện tại của agent.
+        /// Gets the current state of the agent.
         /// </summary>
         public AgentState CurrentState
         {
@@ -35,9 +35,9 @@ namespace CMSAgent.Core
         }
 
         /// <summary>
-        /// Thiết lập trạng thái mới cho agent.
+        /// Sets a new state for the agent.
         /// </summary>
-        /// <param name="newState">Trạng thái mới.</param>
+        /// <param name="newState">The new state.</param>
         public void SetState(AgentState newState)
         {
             AgentState oldState;
@@ -55,7 +55,7 @@ namespace CMSAgent.Core
             
             _logger.LogInformation("Agent state changed from {OldState} to {NewState}", oldState, newState);
             
-            // Thông báo cho các subscriber về sự thay đổi trạng thái
+            // Notify subscribers about the state change
             StateChanged?.Invoke(oldState, newState);
         }
     }

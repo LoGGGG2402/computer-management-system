@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace CMSAgent.Core
 {
     /// <summary>
-    /// Lớp hỗ trợ đảm bảo chỉ có một phiên bản của ứng dụng được chạy tại một thời điểm.
+    /// Class that ensures only one instance of the application is running at a time.
     /// </summary>
     public class SingletonMutex : IDisposable
     {
@@ -16,10 +16,10 @@ namespace CMSAgent.Core
         private bool _disposed = false;
 
         /// <summary>
-        /// Khởi tạo một instance mới của SingletonMutex.
+        /// Initializes a new instance of SingletonMutex.
         /// </summary>
-        /// <param name="mutexName">Tên của mutex, xác định danh tính duy nhất.</param>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
+        /// <param name="mutexName">Name of the mutex, which determines its unique identity.</param>
+        /// <param name="logger">Logger for logging.</param>
         public SingletonMutex(string mutexName, ILogger<SingletonMutex> logger)
         {
             _mutexName = string.IsNullOrEmpty(mutexName) 
@@ -29,39 +29,39 @@ namespace CMSAgent.Core
             
             try
             {
-                // Cố gắng tạo và sở hữu mutex toàn cục
+                // Try to create and own the global mutex
                 _mutex = new Mutex(true, _mutexName, out _ownsHandle);
                 
                 if (_ownsHandle)
                 {
-                    _logger.LogInformation("Đã có được khóa singleton với tên {MutexName}", _mutexName);
+                    _logger.LogInformation("Acquired singleton lock with name {MutexName}", _mutexName);
                 }
                 else
                 {
-                    _logger.LogWarning("Không thể lấy khóa singleton. Một phiên bản khác của ứng dụng có thể đang chạy.");
+                    _logger.LogWarning("Unable to acquire singleton lock. Another instance of the application may be running.");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi tạo singleton mutex");
+                _logger.LogError(ex, "Error when creating singleton mutex");
                 throw;
             }
         }
 
         /// <summary>
-        /// Kiểm tra xem phiên bản này có sở hữu mutex hay không.
+        /// Checks if this instance owns the mutex.
         /// </summary>
-        /// <returns>True nếu phiên bản này là duy nhất, ngược lại là False.</returns>
+        /// <returns>True if this instance is the only one, otherwise False.</returns>
         public bool IsSingleInstance()
         {
             return _ownsHandle;
         }
 
         /// <summary>
-        /// Thử lấy quyền sở hữu mutex.
+        /// Tries to acquire ownership of the mutex.
         /// </summary>
-        /// <param name="timeout">Thời gian chờ tối đa để lấy khóa.</param>
-        /// <returns>True nếu lấy được khóa, ngược lại là False.</returns>
+        /// <param name="timeout">Maximum wait time to acquire the lock.</param>
+        /// <returns>True if the lock was acquired, otherwise False.</returns>
         public bool TryAcquire(TimeSpan timeout)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -77,31 +77,31 @@ namespace CMSAgent.Core
                 
                 if (_ownsHandle)
                 {
-                    _logger.LogInformation("Đã có được khóa singleton với tên {MutexName} sau khi chờ", _mutexName);
+                    _logger.LogInformation("Acquired singleton lock with name {MutexName} after waiting", _mutexName);
                 }
                 else
                 {
-                    _logger.LogWarning("Không thể lấy khóa singleton sau khi chờ {Timeout}ms", timeout.TotalMilliseconds);
+                    _logger.LogWarning("Unable to acquire singleton lock after waiting {Timeout}ms", timeout.TotalMilliseconds);
                 }
                 
                 return _ownsHandle;
             }
             catch (AbandonedMutexException)
             {
-                // Một phiên bản khác đã kết thúc bất ngờ mà không giải phóng mutex
-                _logger.LogWarning("Phát hiện mutex bị bỏ rơi, lấy quyền sở hữu");
+                // Another instance ended unexpectedly without releasing the mutex
+                _logger.LogWarning("Detected abandoned mutex, taking ownership");
                 _ownsHandle = true;
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi cố gắng lấy khóa singleton");
+                _logger.LogError(ex, "Error while trying to acquire singleton lock");
                 return false;
             }
         }
 
         /// <summary>
-        /// Giải phóng tài nguyên.
+        /// Releases resources.
         /// </summary>
         public void Dispose()
         {
@@ -110,9 +110,9 @@ namespace CMSAgent.Core
         }
 
         /// <summary>
-        /// Giải phóng tài nguyên có quản lý và không quản lý.
+        /// Releases managed and unmanaged resources.
         /// </summary>
-        /// <param name="disposing">True nếu được gọi từ mã người dùng, False nếu từ finalizer.</param>
+        /// <param name="disposing">True if called from user code, False if from finalizer.</param>
         protected virtual void Dispose(bool disposing)
         {
             if (_disposed)
@@ -127,11 +127,11 @@ namespace CMSAgent.Core
                     try
                     {
                         _mutex.ReleaseMutex();
-                        _logger.LogInformation("Đã giải phóng khóa singleton {MutexName}", _mutexName);
+                        _logger.LogInformation("Released singleton lock {MutexName}", _mutexName);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Lỗi khi giải phóng khóa singleton");
+                        _logger.LogError(ex, "Error when releasing singleton lock");
                     }
                 }
 

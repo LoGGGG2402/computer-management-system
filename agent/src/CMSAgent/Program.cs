@@ -38,31 +38,31 @@ namespace CMSAgent
 
         public static async Task<int> Main(string[] args)
         {
-            // Đọc thông tin từ csproj file
+            // Read information from csproj file
             LoadProjectInfo();
 
-            // Cấu hình Serilog trước khi khởi tạo host
+            // Configure Serilog before initializing the host
             ConfigureLogging();
 
             try
             {
                 IHost host = CreateHostBuilder(args).Build();
                 
-                // Xử lý các lệnh CLI
+                // Process CLI commands
                 var cliHandler = host.Services.GetRequiredService<CliHandler>();
                 int cliResult = await cliHandler.HandleAsync(args);
                 if (cliHandler.IsCliCommandExecuted)
                 {
-                    return cliResult; // Lệnh CLI đã được xử lý
+                    return cliResult; // CLI command has been processed
                 }
 
-                // Nếu không có lệnh CLI, chạy dịch vụ
+                // If no CLI command, run the service
                 await host.RunAsync();
                 return 0;
             }
             catch (Exception ex)
             {
-                Log.Fatal(ex, "Ứng dụng gặp lỗi nghiêm trọng và phải kết thúc");
+                Log.Fatal(ex, "Application encountered a critical error and must terminate");
                 return 1;
             }
             finally
@@ -77,12 +77,12 @@ namespace CMSAgent
             {
                 string projectFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "CMSAgent.csproj");
                 
-                // Nếu file không tồn tại ở thư mục hiện tại, thử tìm trong thư mục cha
+                // If the file doesn't exist in the current directory, try to find it in the parent directory
                 if (!File.Exists(projectFilePath))
                 {
                     string sourcePath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? string.Empty;
                     
-                    // Kiểm tra sourcePath không null trước khi gọi Directory.GetParent
+                    // Check if sourcePath is not null before calling Directory.GetParent
                     if (!string.IsNullOrEmpty(sourcePath))
                     {
                         string? solutionDir = Directory.GetParent(sourcePath)?.Parent?.FullName;
@@ -118,39 +118,39 @@ namespace CMSAgent
             }
             catch (Exception ex)
             {
-                // Sử dụng giá trị mặc định nếu không đọc được từ file
-                Console.WriteLine($"Không thể đọc thông tin từ project file: {ex.Message}");
+                // Use default values if unable to read from file
+                Console.WriteLine($"Unable to read information from project file: {ex.Message}");
             }
         }
 
         private static void ConfigureLogging()
         {
-            // Đọc cấu hình từ appsettings.json
+            // Read configuration from appsettings.json
             var configuration = new ConfigurationBuilder()
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                 .Build();
 
-            // Lấy thông tin từ assembly
+            // Get information from the assembly
             var assembly = Assembly.GetExecutingAssembly();
             
-            // Thêm thông tin từ assembly vào configuration
+            // Add assembly information to configuration
             var configDictionary = new Dictionary<string, string?>
             {
                 { "Application:Name", assembly.GetName().Name ?? _applicationName },
                 { "Application:Version", assembly.GetName().Version?.ToString() ?? _version }
             };
 
-            // Tạo configuration mới kết hợp cấu hình hiện tại và thông tin từ assembly
+            // Create a new configuration combining current config and assembly information
             var combinedConfig = new ConfigurationBuilder()
                 .AddConfiguration(configuration)
                 .AddInMemoryCollection(configDictionary)
                 .Build();
 
-            // Khởi tạo logger với cấu hình kết hợp
+            // Initialize logger with combined configuration
             Log.Logger = (Serilog.ILogger)LoggingSetup.CreateLogger(combinedConfig);
 
-            Log.Information("Ứng dụng {ApplicationName} v{Version} đang khởi động...", _applicationName, _version);
+            Log.Information("Application {ApplicationName} v{Version} is starting...", _applicationName, _version);
         }
 
         public static IHostBuilder CreateHostBuilder(string[] args)
@@ -166,7 +166,7 @@ namespace CMSAgent
                           .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: true, reloadOnChange: true)
                           .AddEnvironmentVariables("CMSAGENT_");
 
-                    // Thêm thông tin từ project vào configuration
+                    // Add project information to configuration
                     config.AddInMemoryCollection(new Dictionary<string, string?>
                     {
                         {"Application:Name", _applicationName},
@@ -175,7 +175,7 @@ namespace CMSAgent
                         {"CMSAgent:Version", _version}
                     });
 
-                    // Tạo thư mục dữ liệu nếu cần
+                    // Create data directory if needed
                     var configuration = config.Build();
                     var dataDir = configuration["CMSAgent:DataDirectoryPath"] ?? "AppData";
                     var dataPath = Path.Combine(env.ContentRootPath, dataDir);
@@ -184,13 +184,13 @@ namespace CMSAgent
                         Directory.CreateDirectory(dataPath);
                     }
                     
-                    // Xác định nếu cần chạy như một Windows Service
+                    // Determine if should run as a Windows Service
                     _shouldRunAsWindowsService = !(args.Length > 0 && args[0].Equals("debug", StringComparison.OrdinalIgnoreCase));
                 })
-                .UseSerilog() // Sử dụng Serilog đã được cấu hình trước đó
+                .UseSerilog() // Use previously configured Serilog
                 .ConfigureServices(ConfigureServices);
 
-            // Cấu hình Windows Service nếu cần
+            // Configure Windows Service if needed
             if (_shouldRunAsWindowsService && OperatingSystem.IsWindows())
             {
                 hostBuilder.UseWindowsService(options =>
@@ -204,7 +204,7 @@ namespace CMSAgent
 
         private static void ConfigureServices(HostBuilderContext context, IServiceCollection services)
         {
-            // Đăng ký cấu hình từ appsettings
+            // Register configuration from appsettings
             services.AddOptions<CmsAgentSettingsOptions>()
                 .Bind(context.Configuration.GetSection("CMSAgent"))
                 .ValidateDataAnnotations();
@@ -217,7 +217,7 @@ namespace CMSAgent
                 .Bind(context.Configuration.GetSection("CMSAgent:HttpClientSettings"))
                 .ValidateDataAnnotations();
 
-            // Đăng ký Polly policies
+            // Register Polly policies
             var policyRegistry = new PolicyRegistry();
             
             // Retry policy
@@ -232,7 +232,7 @@ namespace CMSAgent
                     onRetry: (outcome, timespan, retryAttempt, context) =>
                     {
                         // Log retry attempt
-                        Log.Warning("Đang thử lại request HTTP lần {RetryAttempt} sau {RetryInterval}ms",
+                        Log.Warning("Retrying HTTP request attempt {RetryAttempt} after {RetryInterval}ms",
                             retryAttempt, timespan.TotalMilliseconds);
                     });
             
@@ -244,11 +244,11 @@ namespace CMSAgent
                     durationOfBreak: TimeSpan.FromSeconds(30),
                     onBreak: (outcome, breakDelay) =>
                     {
-                        Log.Warning("Circuit Breaker mở trong {BreakDelay}s do lỗi liên tục", breakDelay.TotalSeconds);
+                        Log.Warning("Circuit Breaker opened for {BreakDelay}s due to continuous errors", breakDelay.TotalSeconds);
                     },
                     onReset: () =>
                     {
-                        Log.Information("Circuit Breaker đã đóng, kết nối hoạt động trở lại");
+                        Log.Information("Circuit Breaker closed, connection is functioning again");
                     });
             
             // Timeout policy
@@ -263,7 +263,7 @@ namespace CMSAgent
             // Add policy registry to services
             services.AddSingleton<IReadOnlyPolicyRegistry<string>>(policyRegistry);
 
-            // Đăng ký HttpClient với Polly
+            // Register HttpClient with Polly
             services.AddHttpClient(HttpClientNames.ApiClient, (serviceProvider, client) =>
             {
                 var options = serviceProvider.GetRequiredService<IOptions<CmsAgentSettingsOptions>>();
@@ -275,7 +275,7 @@ namespace CMSAgent
             .AddPolicyHandler(httpCircuitBreakerPolicy)
             .AddPolicyHandler(httpTimeoutPolicy);
 
-            // Đăng ký singleton services
+            // Register singleton services
             services.AddSingleton<StateManager>();
             services.AddSingleton<ConfigLoader>();
             services.AddSingleton<HttpClientWrapper>();
@@ -285,7 +285,7 @@ namespace CMSAgent
             services.AddSingleton<UpdateHandler>();
             services.AddSingleton<CommandExecutor>();
             
-            // Đăng ký singleton mutex
+            // Register singleton mutex
             services.AddSingleton<SingletonMutex>(provider =>
             {
                 var options = provider.GetRequiredService<IOptions<CmsAgentSettingsOptions>>();
@@ -293,11 +293,11 @@ namespace CMSAgent
                 return new SingletonMutex(options.Value.AppName, logger);
             });
 
-            // Đăng ký Command Handlers
+            // Register Command Handlers
             services.AddTransient<ConsoleCommandHandler>();
             services.AddTransient<SystemActionCommandHandler>();
 
-            // Đăng ký CLI Handlers
+            // Register CLI Handlers
             services.AddTransient<ServiceUtils>();
             services.AddTransient<ConfigureCommand>();
             services.AddTransient<StartCommand>();
@@ -306,27 +306,27 @@ namespace CMSAgent
             services.AddTransient<DebugCommand>();
             services.AddSingleton<CliHandler>();
 
-            // Đăng ký dịch vụ chính
+            // Register main service
             services.AddHostedService<AgentService>();
 
-            // Thay thế bằng
+            // Replace with
             services.AddSingleton<TokenProtector>();
             services.AddSingleton<CommandHandlerFactory>();
         }
     }
 
     /// <summary>
-    /// Tên của HttpClient được đăng ký trong DI
+    /// Names of HttpClients registered in DI
     /// </summary>
     public static class HttpClientNames
     {
         /// <summary>
-        /// HttpClient được sử dụng cho API requests
+        /// HttpClient used for API requests
         /// </summary>
         public const string ApiClient = "ApiClient";
         
         /// <summary>
-        /// HttpClient được sử dụng cho các file lớn
+        /// HttpClient used for large files
         /// </summary>
         public const string DownloadClient = "DownloadClient";
     }

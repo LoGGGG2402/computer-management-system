@@ -6,50 +6,50 @@ using CMSAgent.Common.DTOs;
 namespace CMSAgent.Common.Interfaces
 {
     /// <summary>
-    /// Interface để kết nối và giao tiếp qua WebSocket (Socket.IO).
+    /// Interface for WebSocket (Socket.IO) connection and communication.
     /// </summary>
     public interface IWebSocketConnector
     {
         /// <summary>
-        /// Sự kiện khi nhận được thông điệp từ WebSocket.
+        /// Event triggered when a message is received from WebSocket.
         /// </summary>
         event EventHandler<string> MessageReceived;
 
         /// <summary>
-        /// Sự kiện khi kết nối WebSocket bị ngắt.
+        /// Event triggered when WebSocket connection is closed.
         /// </summary>
         event EventHandler ConnectionClosed;
 
         /// <summary>
-        /// Kiểm tra xem WebSocket có đang kết nối không.
+        /// Checks if WebSocket is currently connected.
         /// </summary>
         bool IsConnected { get; }
 
         /// <summary>
-        /// Kết nối đến server qua WebSocket và xác thực.
+        /// Connects to server via WebSocket and authenticates.
         /// </summary>
-        /// <param name="agentToken">Token xác thực của agent.</param>
-        /// <returns>True nếu kết nối và xác thực thành công, False nếu thất bại.</returns>
+        /// <param name="agentToken">Agent authentication token.</param>
+        /// <returns>True if connection and authentication successful, False if failed.</returns>
         Task<bool> ConnectAsync(string agentToken);
 
         /// <summary>
-        /// Đóng kết nối WebSocket.
+        /// Closes the WebSocket connection.
         /// </summary>
-        /// <returns>Task đại diện cho việc đóng kết nối.</returns>
+        /// <returns>Task representing the connection closure.</returns>
         Task DisconnectAsync();
 
         /// <summary>
-        /// Gửi cập nhật trạng thái tài nguyên lên server.
+        /// Sends resource status update to server.
         /// </summary>
-        /// <param name="payload">Dữ liệu trạng thái tài nguyên.</param>
-        /// <returns>Task đại diện cho việc gửi dữ liệu.</returns>
+        /// <param name="payload">Resource status data.</param>
+        /// <returns>Task representing the data transmission.</returns>
         Task SendStatusUpdateAsync(StatusUpdatePayload payload);
 
         /// <summary>
-        /// Gửi kết quả thực thi lệnh lên server.
+        /// Sends command execution result to server.
         /// </summary>
-        /// <param name="payload">Dữ liệu kết quả thực thi lệnh.</param>
-        /// <returns>Task đại diện cho việc gửi dữ liệu.</returns>
+        /// <param name="payload">Command execution result data.</param>
+        /// <returns>Task representing the data transmission.</returns>
         Task<bool> SendCommandResultAsync(CommandResultPayload payload);
     }
 }

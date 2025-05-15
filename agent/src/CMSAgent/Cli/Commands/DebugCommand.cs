@@ -4,47 +4,47 @@ using Microsoft.Extensions.Logging;
 namespace CMSAgent.Cli.Commands
 {
     /// <summary>
-    /// Lớp xử lý lệnh debug để chạy CMSAgent ở chế độ console application.
+    /// Handles the debug command to run CMSAgent in console application mode.
     /// </summary>
     public class DebugCommand
     {
         private readonly ILogger<DebugCommand> _logger;
 
         /// <summary>
-        /// Khởi tạo một instance mới của DebugCommand.
+        /// Initializes a new instance of DebugCommand.
         /// </summary>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
+        /// <param name="logger">Logger for logging events.</param>
         public DebugCommand(ILogger<DebugCommand> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         /// <summary>
-        /// Thực thi lệnh debug.
+        /// Executes the debug command.
         /// </summary>
-        /// <returns>Mã lỗi của lệnh.</returns>
+        /// <returns>Exit code of the command.</returns>
         public int Execute()
         {
             try
             {
-                // In thông tin về chế độ debug
+                // Print information about debug mode
                 Console.WriteLine("--------------------------------");
-                Console.WriteLine("| CMSAgent đang chạy ở chế độ DEBUG |");
+                Console.WriteLine("| CMSAgent running in DEBUG mode |");
                 Console.WriteLine("--------------------------------");
-                Console.WriteLine("Nhấn CTRL+C để dừng.");
+                Console.WriteLine("Press CTRL+C to stop.");
                 Console.WriteLine();
 
-                // Ghi log
-                _logger.LogInformation("CMSAgent đã khởi động ở chế độ debug");
+                // Log the event
+                _logger.LogInformation("CMSAgent has started in debug mode");
 
-                // Lệnh debug chỉ hiển thị thông báo, không thực sự làm gì
-                // Host được quản lý ở Program.cs
+                // Debug command only displays a message, doesn't actually do anything
+                // Host is managed in Program.cs
                 return 0;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Lỗi trong chế độ debug: {ex.Message}");
-                _logger.LogError(ex, "Lỗi khi khởi chạy chế độ debug");
+                Console.Error.WriteLine($"Error in debug mode: {ex.Message}");
+                _logger.LogError(ex, "Error when starting debug mode");
                 return -1;
             }
         }

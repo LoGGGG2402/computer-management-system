@@ -3,89 +3,90 @@ using System.ComponentModel.DataAnnotations;
 namespace CMSAgent.Common.DTOs
 {
     /// <summary>
-    /// Yêu cầu xác thực MFA cho agent.
+    /// MFA verification request for agent.
     /// </summary>
     public class VerifyMfaRequest
     {
         /// <summary>
-        /// ID của agent cần xác thực.
+        /// ID of the agent to verify.
         /// </summary>
         [Required]
         public required string agentId { get; set; }
 
         /// <summary>
-        /// Mã MFA do người dùng cung cấp.
+        /// MFA code provided by the user.
         /// </summary>
         [Required]
         public required string mfaCode { get; set; }
     }
 
     /// <summary>
-    /// Phản hồi từ server khi xác thực MFA.
+    /// Server response for MFA verification.
     /// </summary>
     public class VerifyMfaResponse
     {
         /// <summary>
-        /// Trạng thái của yêu cầu: "success" hoặc "error".
+        /// Request status: "success" or "error".
         /// </summary>
         public required string status { get; set; } = string.Empty;
+
         /// <summary>
-        /// Token xác thực (chỉ được trả về khi thành công).
+        /// Authentication token (returned only on success).
         /// </summary>
         public required string agentToken { get; set; } = string.Empty;
 
         /// <summary>
-        /// Thông báo lỗi hoặc thông tin bổ sung.
+        /// Error message or additional information.
         /// </summary>
         public required string message { get; set; } = string.Empty;
     }
 
     /// <summary>
-    /// Yêu cầu đăng ký agent mới hoặc định danh agent đã tồn tại với server.
+    /// Request to register new agent or identify existing agent with server.
     /// </summary>
     public class AgentIdentifyRequest
     {
         /// <summary>
-        /// Device ID duy nhất của agent.
+        /// Unique device ID of the agent.
         /// </summary>
         [Required]
         public required string agentId { get; set; }
 
         /// <summary>
-        /// Thông tin vị trí của agent.
+        /// Position information of the agent.
         /// </summary>
         [Required]
         public required PositionInfo positionInfo { get; set; }
 
         /// <summary>
-        /// Nếu true, yêu cầu server cấp token mới ngay cả khi agent đã có token hợp lệ.
+        /// If true, request server to issue new token even if agent has valid token.
         /// </summary>
         public bool forceRenewToken { get; set; } = false;
     }
 
     /// <summary>
-    /// Phản hồi từ server khi agent định danh.
+    /// Server response for agent identification.
     /// </summary>
     public class AgentIdentifyResponse
     {
         /// <summary>
-        /// Trạng thái của yêu cầu: "success", "mfa_required", "position_error", "error".
+        /// Request status: "success", "mfa_required", "position_error", "error".
         /// </summary>
         public required string status { get; set; } = string.Empty;
 
         /// <summary>
-        /// ID của agent (chỉ được trả về khi thành công).
+        /// Agent ID (returned only on success).
         /// </summary>
         public required string agentId { get; set; } = string.Empty;
 
         /// <summary>
-        /// Token xác thực (chỉ được trả về khi thành công và token được làm mới).
+        /// Authentication token (returned only on success and token renewal).
         /// </summary>
         public required string agentToken { get; set; } = string.Empty;
 
         /// <summary>
-        /// Thông báo lỗi hoặc thông tin bổ sung.
+        /// Error message or additional information.
         /// </summary>
         public required string message { get; set; } = string.Empty;
     }
-} 
+}

@@ -17,7 +17,7 @@ using Polly.Retry;
 namespace CMSAgent.Communication
 {
     /// <summary>
-    /// Wrapper cho HttpClient, thêm retry, xử lý headers, và serialization.
+    /// Wrapper for HttpClient, adding retry, handling headers, and serialization.
     /// </summary>
     public class HttpClientWrapper : IHttpClientWrapper, IDisposable
     {
@@ -27,17 +27,17 @@ namespace CMSAgent.Communication
         private readonly AsyncRetryPolicy _retryPolicy;
         private bool _disposed = false;
         
-        // Tạo JsonSerializerOptions tĩnh để tái sử dụng
+        // Create static JsonSerializerOptions for reuse
         private static readonly JsonSerializerOptions _jsonOptions = new()
         {
             PropertyNameCaseInsensitive = true
         };
 
         /// <summary>
-        /// Khởi tạo một instance mới của HttpClientWrapper.
+        /// Initializes a new instance of HttpClientWrapper.
         /// </summary>
-        /// <param name="options">Cấu hình HttpClient.</param>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
+        /// <param name="options">HttpClient configuration.</param>
+        /// <param name="logger">Logger for logging.</param>
         public HttpClientWrapper(IOptions<HttpClientSettingsOptions> options, ILogger<HttpClientWrapper> logger)
         {
             _logger = logger;
@@ -48,7 +48,7 @@ namespace CMSAgent.Communication
                 Timeout = TimeSpan.FromSeconds(_settings.RequestTimeoutSec)
             };
 
-            // Thiết lập chính sách retry
+            // Set up retry policy
             _retryPolicy = Policy
                 .Handle<HttpRequestException>()
                 .Or<TimeoutException>()
@@ -58,20 +58,20 @@ namespace CMSAgent.Communication
                     sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
                     onRetry: (exception, timeSpan, retryCount, context) =>
                     {
-                        _logger.LogWarning("Lần thử lại thứ {RetryCount} sau {RetrySeconds} giây do lỗi: {ErrorMessage}",
+                        _logger.LogWarning("Retry attempt {RetryCount} after {RetrySeconds} seconds due to error: {ErrorMessage}",
                             retryCount, timeSpan.TotalSeconds, exception.Message);
                     });
         }
 
         /// <summary>
-        /// Thực hiện HTTP GET request.
+        /// Performs an HTTP GET request.
         /// </summary>
-        /// <typeparam name="TResponse">Kiểu dữ liệu của response body.</typeparam>
-        /// <param name="endpoint">Endpoint API cần gọi.</param>
-        /// <param name="agentId">ID của agent.</param>
-        /// <param name="token">Token xác thực (có thể null).</param>
-        /// <param name="queryParams">Các tham số query string (tùy chọn).</param>
-        /// <returns>Response được deserialize từ JSON sang kiểu TResponse.</returns>
+        /// <typeparam name="TResponse">Response body data type.</typeparam>
+        /// <param name="endpoint">API endpoint to call.</param>
+        /// <param name="agentId">Agent ID.</param>
+        /// <param name="token">Authentication token (can be null).</param>
+        /// <param name="queryParams">Query string parameters (optional).</param>
+        /// <returns>Response deserialized from JSON to TResponse type.</returns>
         public async Task<TResponse> GetAsync<TResponse>(string endpoint, string agentId, string? token, Dictionary<string, string>? queryParams = null)
         {
             var requestUri = BuildRequestUri(endpoint, queryParams);
@@ -83,13 +83,13 @@ namespace CMSAgent.Communication
         }
 
         /// <summary>
-        /// Thực hiện HTTP POST request mà không cần response body.
+        /// Performs an HTTP POST request without response body.
         /// </summary>
-        /// <param name="endpoint">Endpoint API cần gọi.</param>
-        /// <param name="data">Dữ liệu cần gửi lên server.</param>
-        /// <param name="agentId">ID của agent.</param>
-        /// <param name="token">Token xác thực (có thể null).</param>
-        /// <returns>Task đại diện cho request.</returns>
+        /// <param name="endpoint">API endpoint to call.</param>
+        /// <param name="data">Data to send to the server.</param>
+        /// <param name="agentId">Agent ID.</param>
+        /// <param name="token">Authentication token (can be null).</param>
+        /// <returns>Task representing the request.</returns>
         public async Task PostAsync(string endpoint, object data, string agentId, string? token)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
@@ -105,15 +105,15 @@ namespace CMSAgent.Communication
         }
 
         /// <summary>
-        /// Thực hiện HTTP POST request và nhận response.
+        /// Performs an HTTP POST request and receives a response.
         /// </summary>
-        /// <typeparam name="TRequest">Kiểu dữ liệu của request body.</typeparam>
-        /// <typeparam name="TResponse">Kiểu dữ liệu của response body.</typeparam>
-        /// <param name="endpoint">Endpoint API cần gọi.</param>
-        /// <param name="data">Dữ liệu cần gửi lên server.</param>
-        /// <param name="agentId">ID của agent.</param>
-        /// <param name="token">Token xác thực (có thể null).</param>
-        /// <returns>Response được deserialize từ JSON sang kiểu TResponse.</returns>
+        /// <typeparam name="TRequest">Request body data type.</typeparam>
+        /// <typeparam name="TResponse">Response body data type.</typeparam>
+        /// <param name="endpoint">API endpoint to call.</param>
+        /// <param name="data">Data to send to the server.</param>
+        /// <param name="agentId">Agent ID.</param>
+        /// <param name="token">Authentication token (can be null).</param>
+        /// <returns>Response deserialized from JSON to TResponse type.</returns>
         public async Task<TResponse> PostAsync<TRequest, TResponse>(string endpoint, TRequest data, string agentId, string? token)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
@@ -129,12 +129,12 @@ namespace CMSAgent.Communication
         }
 
         /// <summary>
-        /// Tải xuống file từ server.
+        /// Downloads a file from the server.
         /// </summary>
-        /// <param name="endpoint">Endpoint API cần gọi.</param>
-        /// <param name="agentId">ID của agent.</param>
-        /// <param name="token">Token xác thực (có thể null).</param>
-        /// <returns>Stream chứa dữ liệu file được tải xuống.</returns>
+        /// <param name="endpoint">API endpoint to call.</param>
+        /// <param name="agentId">Agent ID.</param>
+        /// <param name="token">Authentication token (can be null).</param>
+        /// <returns>Stream containing the downloaded file data.</returns>
         public async Task<Stream> DownloadFileAsync(string endpoint, string agentId, string? token)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
@@ -149,10 +149,10 @@ namespace CMSAgent.Communication
                     if (!response.IsSuccessStatusCode)
                     {
                         var errorContent = await response.Content.ReadAsStringAsync();
-                        _logger.LogError("Lỗi HTTP {StatusCode} khi tải file: {ErrorContent}", 
+                        _logger.LogError("HTTP error {StatusCode} when downloading file: {ErrorContent}", 
                             response.StatusCode, errorContent);
                         
-                        throw new HttpRequestException($"Lỗi HTTP {response.StatusCode} khi tải file");
+                        throw new HttpRequestException($"HTTP error {response.StatusCode} when downloading file");
                     }
                     
                     return await response.Content.ReadAsStreamAsync();
@@ -160,19 +160,19 @@ namespace CMSAgent.Communication
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi tải file từ {Endpoint}", endpoint);
+                _logger.LogError(ex, "Error downloading file from {Endpoint}", endpoint);
                 throw;
             }
         }
 
         /// <summary>
-        /// Tải xuống file từ server và lưu vào stream đích.
+        /// Downloads a file from the server and saves it to the destination stream.
         /// </summary>
-        /// <param name="endpoint">Endpoint API cần gọi.</param>
-        /// <param name="destinationStream">Stream đích để lưu file.</param>
-        /// <param name="agentId">ID của agent.</param>
-        /// <param name="token">Token xác thực (có thể null).</param>
-        /// <returns>Task đại diện cho quá trình tải xuống.</returns>
+        /// <param name="endpoint">API endpoint to call.</param>
+        /// <param name="destinationStream">Destination stream to save the file.</param>
+        /// <param name="agentId">Agent ID.</param>
+        /// <param name="token">Authentication token (can be null).</param>
+        /// <returns>Task representing the download process.</returns>
         public async Task DownloadFileAsync(string endpoint, Stream destinationStream, string agentId, string? token)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
@@ -187,10 +187,10 @@ namespace CMSAgent.Communication
                     if (!response.IsSuccessStatusCode)
                     {
                         var errorContent = await response.Content.ReadAsStringAsync();
-                        _logger.LogError("Lỗi HTTP {StatusCode} khi tải file: {ErrorContent}", 
+                        _logger.LogError("HTTP error {StatusCode} when downloading file: {ErrorContent}", 
                             response.StatusCode, errorContent);
                         
-                        throw new HttpRequestException($"Lỗi HTTP {response.StatusCode} khi tải file");
+                        throw new HttpRequestException($"HTTP error {response.StatusCode} when downloading file");
                     }
                     
                     await (await response.Content.ReadAsStreamAsync()).CopyToAsync(destinationStream);
@@ -199,13 +199,13 @@ namespace CMSAgent.Communication
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi tải file từ {Endpoint}", endpoint);
+                _logger.LogError(ex, "Error downloading file from {Endpoint}", endpoint);
                 throw;
             }
         }
 
         /// <summary>
-        /// Tạo URI với các tham số query string.
+        /// Creates URI with query string parameters.
         /// </summary>
         private static string BuildRequestUri(string endpoint, Dictionary<string, string>? queryParams)
         {
@@ -236,31 +236,31 @@ namespace CMSAgent.Communication
         }
 
         /// <summary>
-        /// Thêm các header cần thiết vào request.
+        /// Adds necessary headers to the request.
         /// </summary>
         private static void AddHeaders(HttpRequestMessage request, string agentId, string? token)
         {
-            // Thêm header Agent-ID
+            // Add Agent-ID header
             if (!string.IsNullOrEmpty(agentId))
             {
                 request.Headers.Add(Common.Constants.HttpHeaders.AgentIdHeader, agentId);
             }
             
-            // Thêm header Client-Type
+            // Add Client-Type header
             request.Headers.Add(Common.Constants.HttpHeaders.ClientTypeHeader, Common.Constants.HttpHeaders.ClientTypeValue);
             
-            // Thêm header Authorization nếu có token
+            // Add Authorization header if token exists
             if (!string.IsNullOrEmpty(token))
             {
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             }
             
-            // Chấp nhận JSON
+            // Accept JSON
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         }
 
         /// <summary>
-        /// Gửi request và xử lý response với body.
+        /// Sends request and processes response with body.
         /// </summary>
         private async Task<T> SendRequestAsync<T>(HttpRequestMessage request)
         {
@@ -273,10 +273,10 @@ namespace CMSAgent.Communication
                     if (!response.IsSuccessStatusCode)
                     {
                         var errorContent = await response.Content.ReadAsStringAsync();
-                        _logger.LogError("Lỗi HTTP {StatusCode} khi gọi {Method} {Url}: {ErrorContent}", 
+                        _logger.LogError("HTTP error {StatusCode} when calling {Method} {Url}: {ErrorContent}", 
                             response.StatusCode, request.Method, request.RequestUri, errorContent);
                         
-                        throw new HttpRequestException($"Lỗi HTTP {response.StatusCode} khi gọi {request.Method} {request.RequestUri}");
+                        throw new HttpRequestException($"HTTP error {response.StatusCode} when calling {request.Method} {request.RequestUri}");
                     }
                     
                     var content = await response.Content.ReadAsStringAsync();
@@ -289,11 +289,11 @@ namespace CMSAgent.Communication
                     try
                     {
                         return JsonSerializer.Deserialize<T>(content, _jsonOptions) ?? 
-                               throw new JsonException($"Deserialize trả về null cho {typeof(T).Name}");
+                               throw new JsonException($"Deserialize returned null for {typeof(T).Name}");
                     }
                     catch (JsonException ex)
                     {
-                        _logger.LogError(ex, "Lỗi khi deserialize JSON từ response của {Method} {Url}", 
+                        _logger.LogError(ex, "Error deserializing JSON from response of {Method} {Url}", 
                             request.Method, request.RequestUri);
                         throw;
                     }
@@ -301,14 +301,14 @@ namespace CMSAgent.Communication
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi gửi request {Method} {Url}", 
+                _logger.LogError(ex, "Error sending request {Method} {Url}", 
                     request.Method, request.RequestUri);
                 throw;
             }
         }
 
         /// <summary>
-        /// Gửi request mà không cần xử lý response body.
+        /// Sends request without processing response body.
         /// </summary>
         private async Task SendRequestWithNoResponseBodyAsync(HttpRequestMessage request)
         {
@@ -321,10 +321,10 @@ namespace CMSAgent.Communication
                     if (!response.IsSuccessStatusCode)
                     {
                         var errorContent = await response.Content.ReadAsStringAsync();
-                        _logger.LogError("Lỗi HTTP {StatusCode} khi gọi {Method} {Url}: {ErrorContent}", 
+                        _logger.LogError("HTTP error {StatusCode} when calling {Method} {Url}: {ErrorContent}", 
                             response.StatusCode, request.Method, request.RequestUri, errorContent);
                         
-                        throw new HttpRequestException($"Lỗi HTTP {response.StatusCode} khi gọi {request.Method} {request.RequestUri}");
+                        throw new HttpRequestException($"HTTP error {response.StatusCode} when calling {request.Method} {request.RequestUri}");
                     }
                     
                     return true;
@@ -332,14 +332,14 @@ namespace CMSAgent.Communication
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi gửi request {Method} {Url}", 
+                _logger.LogError(ex, "Error sending request {Method} {Url}", 
                     request.Method, request.RequestUri);
                 throw;
             }
         }
 
         /// <summary>
-        /// Giải phóng tài nguyên.
+        /// Disposes resources.
         /// </summary>
         public void Dispose()
         {
@@ -348,7 +348,7 @@ namespace CMSAgent.Communication
         }
 
         /// <summary>
-        /// Giải phóng tài nguyên.
+        /// Disposes resources.
         /// </summary>
         protected virtual void Dispose(bool disposing)
         {

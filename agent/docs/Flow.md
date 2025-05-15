@@ -1,210 +1,210 @@
-# Sơ đồ Luồng Hoạt động CMSAgent
+# CMSAgent Flow Diagrams
 
-Phần này cung cấp các sơ đồ luồng (flowcharts) mô tả các quy trình hoạt động chính của CMSAgent, dựa trên "Tài liệu Toàn Diện CMSAgent v7.4" và "Kiến trúc Hệ thống CMSAgent". Các sơ đồ được biểu diễn bằng cú pháp Mermaid.
+This section provides flowcharts describing the main operational processes of CMSAgent, based on "CMSAgent Comprehensive Documentation v7.4" and "CMSAgent System Architecture". The diagrams are presented using Mermaid syntax.
 
-## 1. Luồng Cài đặt và Cấu Hình Ban Đầu (Phần III - Tài liệu Toàn Diện)
+## 1. Installation and Initial Configuration Flow (Part III - Comprehensive Documentation)
 
 ```mermaid
 graph TD
-    A["Người dùng chạy Setup.CMSAgent.exe với quyền Admin"] --> B{"Kiểm tra quyền Admin"};
-    B -- "Thiếu quyền" --> BA["Thông báo lỗi, thoát"];
-    B -- "Đủ quyền" --> C["Sao chép file ứng dụng vào C:\\Program Files\\CMSAgent"];
-    C --> D["Tạo cấu trúc thư mục dữ liệu tại C:\\ProgramData\\CMSAgent"];
-    D --> E["Thiết lập quyền Full Control cho LocalSystem trên C:\\ProgramData\\CMSAgent"];
-    E --> F["Trình cài đặt thực thi 'CMSAgent.exe configure'"];
-    F --> G{"Mở Console tương tác"};
-    G --> H["Kiểm tra/Tạo Device ID trong runtime_config.json"];
-    H --> I{"Nhập thông tin vị trí (RoomName, PosX, PosY)"};
-    I -- "Hủy (Ctrl+C)" --> IA["Thoát tiến trình cấu hình"];
-    I -- "Nhập xong" --> J["Gửi yêu cầu POST /api/agent/identify đến Server"];
-    J --> K{"Xử lý phản hồi Server"};
-    K -- "Lỗi vị trí (position_error)" --> L{"Hỏi người dùng thử lại?"};
-    L -- "Có" --> I;
-    L -- "Không" --> IA;
-    K -- "Yêu cầu MFA (mfa_required)" --> M["Thông báo yêu cầu MFA"];
-    M --> N{"Nhập mã MFA"};
-    N -- "Hủy/Bỏ trống" --> IA;
-    N -- "Nhập xong" --> O["Gửi POST /api/agent/verify-mfa"];
-    O --> P{"Xử lý phản hồi MFA"};
-    P -- "MFA Thất bại" --> Q{"Hỏi người dùng thử lại?"};
-    Q -- "Có" --> N;
-    Q -- "Không" --> IA;
-    P -- "MFA Thành công (có agentToken)" --> R["Lưu agentToken tạm thời"];
-    K -- "Định danh thành công (có agentToken)" --> R;
-    K -- "Định danh thành công (agent đã tồn tại, không token mới)" --> S["Thông báo agent đã đăng ký"];
-    S --> T["Lưu cấu hình runtime và token (mã hóa)"];
+    A["User runs Setup.CMSAgent.exe with Admin rights"] --> B{"Check Admin rights"};
+    B -- "Insufficient rights" --> BA["Display error message, exit"];
+    B -- "Sufficient rights" --> C["Copy application files to C:\\Program Files\\CMSAgent"];
+    C --> D["Create data directory structure at C:\\ProgramData\\CMSAgent"];
+    D --> E["Set Full Control permissions for LocalSystem on C:\\ProgramData\\CMSAgent"];
+    E --> F["Installer executes 'CMSAgent.exe configure'"];
+    F --> G{"Open interactive Console"};
+    G --> H["Check/Create Device ID in runtime_config.json"];
+    H --> I{"Enter location information (RoomName, PosX, PosY)"};
+    I -- "Cancel (Ctrl+C)" --> IA["Exit configuration process"];
+    I -- "Entry complete" --> J["Send POST request /api/agent/identify to Server"];
+    J --> K{"Process Server response"};
+    K -- "Location error (position_error)" --> L{"Ask user to try again?"};
+    L -- "Yes" --> I;
+    L -- "No" --> IA;
+    K -- "MFA required (mfa_required)" --> M["Display MFA requirement notification"];
+    M --> N{"Enter MFA code"};
+    N -- "Cancel/Empty" --> IA;
+    N -- "Entry complete" --> O["Send POST /api/agent/verify-mfa"];
+    O --> P{"Process MFA response"};
+    P -- "MFA Failed" --> Q{"Ask user to try again?"};
+    Q -- "Yes" --> N;
+    Q -- "No" --> IA;
+    P -- "MFA Successful (with agentToken)" --> R["Save temporary agentToken"];
+    K -- "Identification successful (with agentToken)" --> R;
+    K -- "Identification successful (agent already exists, no new token)" --> S["Notify that agent is already registered"];
+    S --> T["Save runtime configuration and token (encrypted)"];
     R --> T;
-    K -- "Lỗi khác (HTTP 500, mạng)" --> U{"Hỏi người dùng thử lại?"};
-    U -- "Có" --> J;
-    U -- "Không" --> IA;
-    T --> V["Thông báo lưu cấu hình thành công"];
-    V --> W["Trình cài đặt đăng ký CMSAgent làm Windows Service"];
+    K -- "Other errors (HTTP 500, network)" --> U{"Ask user to try again?"};
+    U -- "Yes" --> J;
+    U -- "No" --> IA;
+    T --> V["Notification of successful configuration save"];
+    V --> W["Installer registers CMSAgent as Windows Service"];
     W -- "ServiceName: CMSAgentService" --> W1["DisplayName: Computer Management System Agent"];
     W1 -- "StartType: Automatic" --> W2["ServiceAccount: LocalSystem"];
-    W2 --> X["Trình cài đặt khởi động Service"];
-    X --> Y["Hoàn tất cài đặt, thông báo thành công"];
+    W2 --> X["Installer starts the Service"];
+    X --> Y["Installation complete, success notification"];
 ```
 
-## 2. Luồng Hoạt động Thường Xuyên của Agent (Phần IV - Tài liệu Toàn Diện)
+## 2. Regular Agent Operation Flow (Part IV - Comprehensive Documentation)
 
 ```mermaid
 graph TD
-    subgraph Khởi Động Agent
-        A["SCM khởi động CMSAgent.exe"] --> B("Trạng thái: INITIALIZING");
-        B --> C["Thiết lập Logging"];
-        C --> D["Đảm bảo cấu trúc thư mục dữ liệu"];
-        D --> E["Đảm bảo chỉ một instance (Mutex)"];
-        E -- "Đã có instance khác" --> EA["Ghi log lỗi, thoát"];
-        E -- "Chiếm được Mutex" --> F["Tải cấu hình từ appsettings.json và runtime_config.json"];
-        F --> G["Xác thực cấu hình"];
-        G -- "Lỗi cấu hình" --> GA["Trạng thái: ERROR, thoát"];
-        G -- "Cấu hình hợp lệ" --> H["Giải mã agent_token"];
-        H -- "Lỗi giải mã" --> GA;
-        H -- "Giải mã thành công" --> I["Khởi tạo các Modules"];
+    subgraph Agent Startup
+        A["SCM starts CMSAgent.exe"] --> B("Status: INITIALIZING");
+        B --> C["Setup Logging"];
+        C --> D["Ensure data directory structure"];
+        D --> E["Ensure single instance (Mutex)"];
+        E -- "Another instance exists" --> EA["Log error, exit"];
+        E -- "Mutex acquired" --> F["Load configuration from appsettings.json and runtime_config.json"];
+        F --> G["Validate configuration"];
+        G -- "Configuration error" --> GA["Status: ERROR, exit"];
+        G -- "Valid configuration" --> H["Decrypt agent_token"];
+        H -- "Decryption error" --> GA;
+        H -- "Decryption successful" --> I["Initialize Modules"];
     end
 
-    subgraph Kết Nối và Xác Thực
-        I --> J("Trạng thái: AUTHENTICATING");
-        J --> K["Kết nối WebSocket đến Server"];
-        K -- "Thất bại" --> L{"Thử lại kết nối WS theo cấu hình"};
+    subgraph Connection and Authentication
+        I --> J("Status: AUTHENTICATING");
+        J --> K["Connect WebSocket to Server"];
+        K -- "Failed" --> L{"Retry WS connection according to configuration"};
         L --> K;
-        K -- "Thành công" --> M["Gửi thông tin xác thực (Header/Event)"];
-        M --> N{"Chờ phản hồi xác thực WS"};
-        N -- "agent:ws_auth_success" --> O("Trạng thái: CONNECTED");
-        N -- "agent:ws_auth_failed" --> P["Thử POST /api/agent/identify"];
-        P -- "Identify thành công, có token mới" --> Q["Cập nhật token, quay lại kết nối WS"];
+        K -- "Successful" --> M["Send authentication information (Header/Event)"];
+        M --> N{"Wait for WS authentication response"};
+        N -- "agent:ws_auth_success" --> O("Status: CONNECTED");
+        N -- "agent:ws_auth_failed" --> P["Try POST /api/agent/identify"];
+        P -- "Identify successful, new token" --> Q["Update token, return to WS connection"];
         Q --> K;
-        P -- "Identify yêu cầu MFA / Thất bại khác" --> R("Trạng thái: DISCONNECTED");
+        P -- "Identify requires MFA / Other failure" --> R("Status: DISCONNECTED");
         R --> L;
     end
 
-    O --> S["Gửi thông tin phần cứng ban đầu (POST /hardware-info)"];
-    S -- "Lỗi" --> SA["Ghi log, tiếp tục"];
+    O --> S["Send initial hardware information (POST /hardware-info)"];
+    S -- "Error" --> SA["Log, continue"];
 
-    subgraph Vòng Lặp Hoạt Động Chính
-        O --> T["Bắt đầu vòng lặp chính (Trạng thái: CONNECTED)"];
-        T --> U["Gửi báo cáo trạng thái định kỳ (agent:status_update)"];
-        T --> V{"Kiểm tra cập nhật phiên bản mới?"};
-        V -- "Có phiên bản mới" --> W["Kích hoạt Luồng Cập Nhật Agent (Phần V)"];
-        W --> WB("Trạng thái: UPDATING");
-        T --> X{"Lắng nghe lệnh từ Server (command:execute)"};
-        X -- "Nhận lệnh" --> Y["Đưa lệnh vào hàng đợi"];
-        Y --> Z["Worker xử lý lệnh"];
-        Z --> AA["Thực thi lệnh, thu thập kết quả"];
-        AA --> AB["Gửi kết quả (agent:command_result)"];
-        T --> AC{"Có lỗi không mong muốn?"};
-        AC -- "Có" --> AD["Báo cáo lỗi (POST /api/agent/report-error)"];
-        AD -- "Gửi thất bại" --> AE["Lưu lỗi vào error_reports/"];
-        T --> AF{"Kết nối WebSocket còn tốt?"};
-        AF -- "Mất kết nối" --> R;
+    subgraph Main Operation Loop
+        O --> T["Start main loop (Status: CONNECTED)"];
+        T --> U["Send periodic status reports (agent:status_update)"];
+        T --> V{"Check for new version updates?"};
+        V -- "New version available" --> W["Activate Agent Update Flow (Part V)"];
+        W --> WB("Status: UPDATING");
+        T --> X{"Listen for commands from Server (command:execute)"};
+        X -- "Command received" --> Y["Add command to queue"];
+        Y --> Z["Worker processes command"];
+        Z --> AA["Execute command, gather results"];
+        AA --> AB["Send results (agent:command_result)"];
+        T --> AC{"Any unexpected errors?"};
+        AC -- "Yes" --> AD["Report error (POST /api/agent/report-error)"];
+        AD -- "Send failed" --> AE["Save error to error_reports/"];
+        T --> AF{"WebSocket connection healthy?"};
+        AF -- "Connection lost" --> R;
     end
 
-    subgraph Dừng Hoạt Động
-        AG["SCM yêu cầu dừng Service"] --> AH("Trạng thái: STOPPING");
-        AH --> AI["Ngắt kết nối WebSocket"];
-        AI --> AJ["Hoàn thành các lệnh đang xử lý"];
-        AJ --> AK["Hủy các Timers"];
-        AK --> AL["Giải phóng Mutex"];
-        AL --> AM["Ghi log dừng hoàn tất, thoát"];
+    subgraph Shutdown
+        AG["SCM requests Service stop"] --> AH("Status: STOPPING");
+        AH --> AI["Disconnect WebSocket"];
+        AI --> AJ["Complete processing commands in progress"];
+        AJ --> AK["Cancel Timers"];
+        AK --> AL["Release Mutex"];
+        AL --> AM["Log shutdown complete, exit"];
     end
 ```
 
-## 3. Luồng Xử lý Lệnh từ Server (Phần IV.10 - Tài liệu Toàn Diện)
+## 3. Server Command Processing Flow (Part IV.10 - Comprehensive Documentation)
 
 ```mermaid
 graph TD
-    A["Agent ở trạng thái CONNECTED, lắng nghe WebSocket"] --> B{"Nhận sự kiện 'command:execute' từ Server"};
-    B -- "Có lệnh mới (commandId, command, commandType)" --> C["Đưa lệnh vào hàng đợi (Command Queue)"];
-    C --> D{"Hàng đợi có đầy không? (max_queue_size)"};
-    D -- "Đầy" --> DA["Ghi log lỗi COMMAND_QUEUE_FULL, có thể từ chối lệnh"];
-    D -- "Không đầy" --> E["Một Worker Thread lấy lệnh từ hàng đợi"];
-    E --> F["CommandHandlerFactory tạo Handler dựa trên commandType"];
-    F --> G{"Loại Handler?"};
-    G -- "ConsoleCommandHandler" --> H["Thực thi lệnh console"];
-    G -- "SystemActionCommandHandler" --> I["Thực thi hành động hệ thống"];
-    G -- "Handler khác" --> J["Thực thi theo logic handler đó"];
-    subgraph Thực Thi Lệnh
-        K["Bắt đầu thực thi lệnh"] --> L["Theo dõi thời gian thực thi (giới hạn bởi default_timeout_sec)"];
-        L --> M["Thu thập stdout, stderr (nếu có), exitCode"];
-        M --> N{"Lệnh hoàn thành/Timeout/Lỗi?"};
+    A["Agent in CONNECTED state, listening on WebSocket"] --> B{"Receive 'command:execute' event from Server"};
+    B -- "New command (commandId, command, commandType)" --> C["Add command to Command Queue"];
+    C --> D{"Is queue full? (max_queue_size)"};
+    D -- "Full" --> DA["Log COMMAND_QUEUE_FULL error, possibly reject command"];
+    D -- "Not full" --> E["A Worker Thread retrieves command from queue"];
+    E --> F["CommandHandlerFactory creates Handler based on commandType"];
+    F --> G{"Handler type?"};
+    G -- "ConsoleCommandHandler" --> H["Execute console command"];
+    G -- "SystemActionCommandHandler" --> I["Execute system action"];
+    G -- "Other Handler" --> J["Execute according to that handler's logic"];
+    subgraph Command Execution
+        K["Begin command execution"] --> L["Monitor execution time (limited by default_timeout_sec)"];
+        L --> M["Collect stdout, stderr (if any), exitCode"];
+        M --> N{"Command completed/Timeout/Error?"};
     end
     H --> K;
     I --> K;
     J --> K;
-    N -- "Hoàn thành thành công" --> O["Chuẩn bị kết quả: success=true, result={stdout, stderr, exitCode}"];
-    N -- "Lệnh lỗi/Timeout" --> P["Chuẩn bị kết quả: success=false, result={errorMessage, errorCode}"];
-    O --> Q["Gửi kết quả (commandId, success, type, result) về Server qua WebSocket 'agent:command_result'"];
+    N -- "Successfully completed" --> O["Prepare result: success=true, result={stdout, stderr, exitCode}"];
+    N -- "Command error/Timeout" --> P["Prepare result: success=false, result={errorMessage, errorCode}"];
+    O --> Q["Send result (commandId, success, type, result) to Server via WebSocket 'agent:command_result'"];
     P --> Q;
     Q --> A;
 ```
 
-## 4. Luồng Cập nhật Agent (Phần V - Tài liệu Toàn Diện)
+## 4. Agent Update Flow (Part V - Comprehensive Documentation)
 
 ```mermaid
 graph TD
-    A["Agent nhận thông tin phiên bản mới (HTTP hoặc WebSocket)"] --> B("Trạng thái: UPDATING");
-    B --> C["Thông báo Server: 'update_started'"];
-    C --> D{"Tải gói cập nhật (.zip) về updates/download/"};
-    D -- "Lỗi tải" --> DA["Xử lý lỗi tải (retry, báo lỗi server, về CONNECTED)"];
-    D -- "Tải thành công" --> DB["Thông báo Server: 'update_downloaded'"];
-    DB --> E{"Xác minh Checksum gói cập nhật"};
-    E -- "Checksum không khớp" --> EA["Xóa file, báo lỗi server, về CONNECTED"];
-    E -- "Checksum khớp" --> F["Giải nén gói cập nhật vào updates/extracted/"];
-    F -- "Lỗi giải nén" --> FA["Báo lỗi server, về CONNECTED"];
-    F -- "Giải nén thành công" --> FB["Thông báo Server: 'update_extracted'"];
-    FB --> G["Xác định CMSUpdater.exe (ưu tiên bản mới)"];
-    G --> H["Khởi chạy CMSUpdater.exe với các tham số cần thiết"];
-    H --> HA["Thông báo Server: 'updater_launched'"];
-    HA --> I["Agent cũ (Service) bắt đầu quá trình dừng an toàn"];
+    A["Agent receives new version information (HTTP or WebSocket)"] --> B("Status: UPDATING");
+    B --> C["Notify Server: 'update_started'"];
+    C --> D{"Download update package (.zip) to updates/download/"};
+    D -- "Download error" --> DA["Handle download error (retry, report to server, return to CONNECTED)"];
+    D -- "Download successful" --> DB["Notify Server: 'update_downloaded'"];
+    DB --> E{"Verify update package Checksum"};
+    E -- "Checksum mismatch" --> EA["Delete file, report error to server, return to CONNECTED"];
+    E -- "Checksum match" --> F["Extract update package to updates/extracted/"];
+    F -- "Extraction error" --> FA["Report error to server, return to CONNECTED"];
+    F -- "Extraction successful" --> FB["Notify Server: 'update_extracted'"];
+    FB --> G["Locate CMSUpdater.exe (prioritize new version)"];
+    G --> H["Launch CMSUpdater.exe with necessary parameters"];
+    H --> HA["Notify Server: 'updater_launched'"];
+    HA --> I["Old Agent (Service) begins safe shutdown process"];
 
     subgraph CMSUpdater.exe Process
-        J["CMSUpdater.exe bắt đầu"] --> K["Thiết lập logging riêng"];
-        K --> L{"Chờ CMSAgent.exe cũ dừng hoàn toàn (timeout)"};
-        L -- "Timeout" --> LA["Ghi log lỗi, thoát Updater, cân nhắc rollback nếu đã backup"];
-        L -- "Agent cũ đã dừng" --> M["Sao lưu thư mục cài đặt agent cũ"];
-        M -- "Lỗi sao lưu" --> MA["Ghi log lỗi nghiêm trọng, thoát Updater"];
-        M -- "Sao lưu thành công" --> N["Di chuyển/Sao chép file agent mới vào thư mục cài đặt"];
-        N -- "Lỗi triển khai" --> O{"Thực hiện Rollback"};
-        O -- "Rollback thành công" --> OA["Ghi log, thoát Updater"];
-        O -- "Rollback thất bại" --> OB["Ghi log lỗi nghiêm trọng, thoát Updater"];
-        N -- "Triển khai thành công" --> P["Khởi động CMSAgent Service mới (qua SCM)"];
-        P -- "Lỗi khởi động Service mới" --> Q{"Thực hiện Rollback, cố gắng khởi động Service cũ"};
-        Q -- "Rollback và khởi động Service cũ thành công" --> QA["Agent cũ báo lỗi cập nhật lên Server, thoát Updater"];
-        Q -- "Rollback thất bại / Service cũ không khởi động được" --> QB["Ghi log lỗi nghiêm trọng, thoát Updater"];
-        P -- "Service mới khởi động thành công" --> R{"Watchdog: Theo dõi Service mới trong thời gian ngắn"};
-        R -- "Service mới ổn định" --> S["Dọn dẹp: Xóa backup, file tạm"];
-        S --> SA["Ghi log cập nhật thành công"];
-        SA --> SB["Agent mới (sau khi kết nối) thông báo Server: 'update_success'"];
-        SB --> SC["CMSUpdater.exe thoát"];
-        R -- "Service mới crash liên tục" --> Q;
+        J["CMSUpdater.exe starts"] --> K["Setup separate logging"];
+        K --> L{"Wait for old CMSAgent.exe to completely stop (timeout)"};
+        L -- "Timeout" --> LA["Log error, exit Updater, consider rollback if backup exists"];
+        L -- "Old Agent stopped" --> M["Backup old agent installation directory"];
+        M -- "Backup error" --> MA["Log critical error, exit Updater"];
+        M -- "Backup successful" --> N["Move/Copy new agent files to installation directory"];
+        N -- "Deployment error" --> O{"Perform Rollback"};
+        O -- "Rollback successful" --> OA["Log, exit Updater"];
+        O -- "Rollback failed" --> OB["Log critical error, exit Updater"];
+        N -- "Deployment successful" --> P["Start new CMSAgent Service (via SCM)"];
+        P -- "Error starting new Service" --> Q{"Perform Rollback, attempt to start old Service"};
+        Q -- "Rollback and old Service start successful" --> QA["Old Agent reports update error to Server, exit Updater"];
+        Q -- "Rollback failed / Old Service won't start" --> QB["Log critical error, exit Updater"];
+        P -- "New Service started successfully" --> R{"Watchdog: Monitor new Service for a short time"};
+        R -- "New Service stable" --> S["Cleanup: Delete backup, temporary files"];
+        S --> SA["Log successful update"];
+        SA --> SB["New Agent (after connecting) notifies Server: 'update_success'"];
+        SB --> SC["CMSUpdater.exe exits"];
+        R -- "New Service crashes repeatedly" --> Q;
     end
     I --> J;
 ```
 
-## 5. Luồng Xác thực WebSocket và Làm mới Token (Phần IV.9, VIII.6 - Tài liệu Toàn Diện)
+## 5. WebSocket Authentication and Token Refresh Flow (Part IV.9, VIII.6 - Comprehensive Documentation)
 
 ```mermaid
 graph TD
-    A["Agent cần kết nối/đã mất kết nối WebSocket"] --> B("Trạng thái: AUTHENTICATING");
-    B --> C{"Có agent_token hợp lệ cục bộ không?"};
-    C -- "Có" --> D["Kết nối WebSocket với token hiện tại"];
-    C -- "Không / Token có thể hết hạn" --> E["Thực hiện POST /api/agent/identify"];
-    E -- "Phản hồi thành công, có token mới" --> F["Lưu token mới (mã hóa), cập nhật token cục bộ"];
+    A["Agent needs to connect/lost WebSocket connection"] --> B("Status: AUTHENTICATING");
+    B --> C{"Valid local agent_token exists?"};
+    C -- "Yes" --> D["Connect WebSocket with current token"];
+    C -- "No / Token may be expired" --> E["Perform POST /api/agent/identify"];
+    E -- "Successful response, new token available" --> F["Save new token (encrypted), update local token"];
     F --> D;
-    E -- "Phản hồi yêu cầu MFA" --> FA["Ghi log, không thể xử lý MFA tự động, trạng thái DISCONNECTED, thử lại sau"];
-    E -- "Phản hồi lỗi khác" --> FB["Ghi log, trạng thái DISCONNECTED, thử lại sau"];
+    E -- "Response requires MFA" --> FA["Log, cannot handle MFA automatically, status DISCONNECTED, retry later"];
+    E -- "Other error response" --> FB["Log, status DISCONNECTED, retry later"];
 
-    D --> G{"Chờ phản hồi xác thực từ WebSocket Server"};
-    G -- "agent:ws_auth_success" --> H("Trạng thái: CONNECTED");
-    G -- "agent:ws_auth_failed (ví dụ: token không hợp lệ/hết hạn)" --> I["Ghi log lỗi xác thực WS"];
+    D --> G{"Wait for authentication response from WebSocket Server"};
+    G -- "agent:ws_auth_success" --> H("Status: CONNECTED");
+    G -- "agent:ws_auth_failed (e.g., invalid/expired token)" --> I["Log WS authentication error"];
     I --> E;
 
-    subgraph Làm mới Token Chủ Động
-        J["Timer định kỳ (ví dụ: 24 giờ) kích hoạt"] --> K["Thực hiện POST /api/agent/identify với forceRenewToken:true"];
-        K -- "Phản hồi thành công, có token mới" --> L["Lưu token mới (mã hóa), cập nhật token cục bộ"];
-        K -- "Phản hồi lỗi" --> M["Ghi log lỗi làm mới token, agent tiếp tục với token cũ nếu còn"];
+    subgraph Proactive Token Refresh
+        J["Periodic timer (e.g., 24 hours) triggers"] --> K["Perform POST /api/agent/identify with forceRenewToken:true"];
+        K -- "Successful response, new token available" --> L["Save new token (encrypted), update local token"];
+        K -- "Error response" --> M["Log token refresh error, agent continues with old token if valid"];
     end
 
-    H --> N{"Agent đang hoạt động (CONNECTED)"};
-    N -- "Gặp lỗi HTTP 401 khi gọi API" --> I;
+    H --> N{"Agent operating (CONNECTED)"};
+    N -- "Encounters HTTP 401 error when calling API" --> I;
 ```

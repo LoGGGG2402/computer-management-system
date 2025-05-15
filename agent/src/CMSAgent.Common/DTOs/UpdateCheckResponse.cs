@@ -1,32 +1,32 @@
 namespace CMSAgent.Common.DTOs
 {
     /// <summary>
-    /// Phản hồi từ server khi kiểm tra cập nhật.
+    /// Response from server when checking for updates.
     /// </summary>
     public class UpdateCheckResponse
     {
         /// <summary>
-        /// Trạng thái của yêu cầu: "success".
+        /// Request status: "success".
         /// </summary>
         public required string status { get; set; } = string.Empty;
 
         /// <summary>
-        /// Có phiên bản mới hay không.
+        /// Whether a new version is available.
         /// </summary>
         public bool update_available { get; set; }
 
         /// <summary>
-        /// Phiên bản mới (nếu có).
+        /// New version (if available).
         /// </summary>
         public required string version { get; set; } = string.Empty;
 
         /// <summary>
-        /// URL để tải gói cập nhật.
+        /// URL to download the update package.
         /// </summary>
         public required string download_url { get; set; } = string.Empty;
 
         /// <summary>
-        /// Checksum SHA256 của gói cập nhật.
+        /// SHA256 checksum of the update package.
         /// </summary>
         public required string checksum_sha256 { get; set; } = string.Empty;
     }

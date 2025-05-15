@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 namespace CMSAgent.Configuration
 {
     /// <summary>
-    /// Lớp thực hiện tải và lưu cấu hình của agent
+    /// Class that loads and saves agent configuration
     /// </summary>
     public class ConfigLoader : IConfigLoader
     {
@@ -25,20 +25,20 @@ namespace CMSAgent.Configuration
         private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
         /// <summary>
-        /// Cấu hình hiện tại của agent từ appsettings.json
+        /// Current agent configuration from appsettings.json
         /// </summary>
         public CmsAgentSettingsOptions Settings => _settingsMonitor.CurrentValue;
 
         /// <summary>
-        /// Cấu hình riêng của agent (phần AgentSettings trong CmsAgentSettingsOptions)
+        /// Agent-specific configuration (AgentSettings section in CmsAgentSettingsOptions)
         /// </summary>
         public AgentSpecificSettingsOptions AgentSettings => _settingsMonitor.CurrentValue.AgentSettings;
 
         /// <summary>
-        /// Khởi tạo một instance mới của ConfigLoader
+        /// Initializes a new instance of ConfigLoader
         /// </summary>
         /// <param name="logger">Logger</param>
-        /// <param name="settingsMonitor">Monitor cấu hình từ appsettings.json</param>
+        /// <param name="settingsMonitor">Configuration monitor from appsettings.json</param>
         public ConfigLoader(ILogger<ConfigLoader> logger, IOptionsMonitor<CmsAgentSettingsOptions> settingsMonitor)
         {
             _logger = logger;
@@ -50,10 +50,10 @@ namespace CMSAgent.Configuration
         }
 
         /// <summary>
-        /// Tải cấu hình runtime từ file
+        /// Loads runtime configuration from file
         /// </summary>
-        /// <param name="forceReload">Có bắt buộc tải lại từ đĩa kể cả đã có trong bộ nhớ cache</param>
-        /// <returns>Đối tượng RuntimeConfig hoặc cấu hình mặc định nếu không tìm thấy/lỗi</returns>
+        /// <param name="forceReload">Whether to force reload from disk even if already in memory cache</param>
+        /// <returns>RuntimeConfig object or default configuration if not found/error</returns>
         public async Task<RuntimeConfig> LoadRuntimeConfigAsync(bool forceReload = false)
         {
             if (_runtimeConfigCache != null && !forceReload)
@@ -63,7 +63,7 @@ namespace CMSAgent.Configuration
             {
                 if (!File.Exists(_runtimeConfigPath))
                 {
-                    _logger.LogWarning("Không tìm thấy file cấu hình runtime tại {Path}", _runtimeConfigPath);
+                    _logger.LogWarning("Runtime configuration file not found at {Path}", _runtimeConfigPath);
                     return CreateDefaultRuntimeConfig();
                 }
 
@@ -72,7 +72,7 @@ namespace CMSAgent.Configuration
                 
                 if (_runtimeConfigCache == null)
                 {
-                    _logger.LogError("Không thể deserialize cấu hình runtime, tạo cấu hình mặc định");
+                    _logger.LogError("Cannot deserialize runtime configuration, creating default configuration");
                     return CreateDefaultRuntimeConfig();
                 }
 
@@ -80,13 +80,13 @@ namespace CMSAgent.Configuration
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Không thể tải cấu hình runtime từ {Path}", _runtimeConfigPath);
+                _logger.LogError(ex, "Cannot load runtime configuration from {Path}", _runtimeConfigPath);
                 return CreateDefaultRuntimeConfig();
             }
         }
 
         /// <summary>
-        /// Tạo cấu hình runtime mặc định
+        /// Creates default runtime configuration
         /// </summary>
         private RuntimeConfig CreateDefaultRuntimeConfig()
         {
@@ -107,9 +107,9 @@ namespace CMSAgent.Configuration
         }
 
         /// <summary>
-        /// Lưu cấu hình runtime ra file
+        /// Saves runtime configuration to file
         /// </summary>
-        /// <param name="config">Đối tượng cấu hình cần lưu</param>
+        /// <param name="config">Configuration object to save</param>
         public async Task SaveRuntimeConfigAsync(RuntimeConfig config)
         {
             try
@@ -121,43 +121,43 @@ namespace CMSAgent.Configuration
                     var json = JsonSerializer.Serialize(config, _jsonOptions);
                     await File.WriteAllTextAsync(_runtimeConfigPath, json);
                     _runtimeConfigCache = config;
-                    _logger.LogInformation("Đã lưu cấu hình runtime vào {Path}", _runtimeConfigPath);
+                    _logger.LogInformation("Runtime configuration saved to {Path}", _runtimeConfigPath);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Không thể lưu cấu hình runtime vào {Path}", _runtimeConfigPath);
+                _logger.LogError(ex, "Cannot save runtime configuration to {Path}", _runtimeConfigPath);
             }
         }
 
         /// <summary>
-        /// Lấy ID agent từ cấu hình runtime
+        /// Gets agent ID from runtime configuration
         /// </summary>
-        /// <returns>AgentId hoặc chuỗi rỗng nếu chưa được đặt</returns>
+        /// <returns>AgentId or empty string if not set</returns>
         public string GetAgentId() => _runtimeConfigCache?.AgentId ?? string.Empty;
 
         /// <summary>
-        /// Lấy token đã mã hóa của agent từ cấu hình runtime
+        /// Gets encrypted agent token from runtime configuration
         /// </summary>
-        /// <returns>Token đã mã hóa hoặc chuỗi rỗng nếu chưa được đặt</returns>
+        /// <returns>Encrypted token or empty string if not set</returns>
         public string GetEncryptedAgentToken() => _runtimeConfigCache?.AgentTokenEncrypted ?? string.Empty;
 
         /// <summary>
-        /// Lấy đường dẫn cài đặt của agent
+        /// Gets the installation path of the agent
         /// </summary>
-        /// <returns>Đường dẫn cài đặt</returns>
+        /// <returns>Installation path</returns>
         public string GetInstallPath() => _installPath;
 
         /// <summary>
-        /// Lấy đường dẫn thư mục dữ liệu của agent
+        /// Gets the data directory path of the agent
         /// </summary>
-        /// <returns>Đường dẫn thư mục dữ liệu</returns>
+        /// <returns>Data directory path</returns>
         public string GetDataPath() => _dataPath;
 
         /// <summary>
-        /// Lấy phiên bản hiện tại của agent.
+        /// Gets the current version of the agent.
         /// </summary>
-        /// <returns>Phiên bản agent.</returns>
+        /// <returns>Agent version.</returns>
         public string GetAgentVersion() => Settings.Version;
     }
 }

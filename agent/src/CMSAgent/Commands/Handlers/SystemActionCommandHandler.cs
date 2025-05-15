@@ -11,13 +11,13 @@ using Microsoft.Extensions.Options;
 namespace CMSAgent.Commands.Handlers
 {
     /// <summary>
-    /// Handler để thực thi các lệnh hệ thống (khởi động lại, tắt máy, v.v).
+    /// Handler to execute system commands (restart, shutdown, etc).
     /// </summary>
     public class SystemActionCommandHandler(ILogger<SystemActionCommandHandler> logger) : ICommandHandler
     {
         private readonly ILogger<SystemActionCommandHandler> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        // Các hành động hệ thống được hỗ trợ
+        // Supported system actions
         private enum SystemAction
         {
             Restart,
@@ -28,16 +28,16 @@ namespace CMSAgent.Commands.Handlers
         }
 
         /// <summary>
-        /// Thực thi một lệnh hệ thống.
+        /// Execute a system command.
         /// </summary>
-        /// <param name="command">Thông tin lệnh cần thực thi.</param>
-        /// <param name="cancellationToken">Token để hủy thao tác.</param>
-        /// <returns>Kết quả thực thi lệnh.</returns>
+        /// <param name="command">Command information to execute.</param>
+        /// <param name="cancellationToken">Token to cancel the operation.</param>
+        /// <returns>Command execution result.</returns>
         public async Task<CommandResultPayload> ExecuteAsync(CommandPayload command, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(command);
 
-            _logger.LogInformation("Bắt đầu thực thi lệnh hệ thống: {CommandId}", command.commandId);
+            _logger.LogInformation("Starting system command execution: {CommandId}", command.commandId);
 
             var result = new CommandResultPayload
             {
@@ -55,17 +55,17 @@ namespace CMSAgent.Commands.Handlers
 
             try
             {
-                // Xác định hành động hệ thống cần thực hiện
+                // Determine the system action to perform
                 if (string.IsNullOrEmpty(command.command))
                 {
-                    result.result.errorMessage = "Không có hành động hệ thống được chỉ định";
+                    result.result.errorMessage = "No system action specified";
                     return result;
                 }
 
                 bool forceAction = false;
                 int delaySeconds = 0;
 
-                // Lấy tham số từ command
+                // Get parameters from command
                 if (command.parameters != null)
                 {
                     if (command.parameters.TryGetValue("force", out var forceParam) && forceParam is bool forceValue)
@@ -75,61 +75,61 @@ namespace CMSAgent.Commands.Handlers
                     
                     if (command.parameters.TryGetValue("delay_sec", out var delayParam) && delayParam is int delayValue)
                     {
-                        delaySeconds = Math.Max(0, Math.Min(delayValue, 3600)); // giới hạn từ 0s đến 1h
+                        delaySeconds = Math.Max(0, Math.Min(delayValue, 3600)); // limit from 0s to 1h
                     }
                 }
 
-                // Phân tích hành động cần thực hiện
+                // Parse the action to perform
                 if (!Enum.TryParse<SystemAction>(command.command, true, out var action))
                 {
-                    result.result.errorMessage = $"Hành động hệ thống không hợp lệ: {command.command}";
+                    result.result.errorMessage = $"Invalid system action: {command.command}";
                     return result;
                 }
 
-                // Có delay không?
+                // Is there a delay?
                 if (delaySeconds > 0)
                 {
-                    _logger.LogInformation("Sẽ thực hiện hành động {Action} sau {Delay} giây", action, delaySeconds);
+                    _logger.LogInformation("Will perform action {Action} after {Delay} seconds", action, delaySeconds);
                     await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
                 }
 
-                // Thực hiện hành động hệ thống
-                _logger.LogWarning("Thực hiện hành động hệ thống: {Action}, Force: {Force}", action, forceAction);
+                // Execute the system action
+                _logger.LogWarning("Executing system action: {Action}, Force: {Force}", action, forceAction);
                 
                 bool actionResult = await ExecuteSystemActionAsync(action, forceAction);
                 
                 result.success = actionResult;
                 if (!actionResult)
                 {
-                    result.result.errorMessage = $"Không thể thực hiện hành động {action}";
+                    result.result.errorMessage = $"Could not perform action {action}";
                 }
                 else
                 {
-                    result.result.stdout = $"Đã thực hiện hành động {action} thành công";
+                    result.result.stdout = $"Successfully performed action {action}";
                 }
 
                 return result;
             }
             catch (OperationCanceledException)
             {
-                _logger.LogWarning("Lệnh hệ thống {CommandId} đã bị hủy", command.commandId);
-                result.result.errorMessage = "Lệnh đã bị hủy";
+                _logger.LogWarning("System command {CommandId} was cancelled", command.commandId);
+                result.result.errorMessage = "Command was cancelled";
                 return result;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thực thi lệnh hệ thống {CommandId}", command.commandId);
-                result.result.errorMessage = $"Lỗi: {ex.Message}";
+                _logger.LogError(ex, "Error when executing system command {CommandId}", command.commandId);
+                result.result.errorMessage = $"Error: {ex.Message}";
                 return result;
             }
         }
 
         /// <summary>
-        /// Thực hiện một hành động hệ thống cụ thể.
+        /// Execute a specific system action.
         /// </summary>
-        /// <param name="action">Hành động cần thực hiện.</param>
-        /// <param name="force">Buộc thực hiện không cần xác nhận.</param>
-        /// <returns>True nếu thành công, False nếu thất bại.</returns>
+        /// <param name="action">Action to perform.</param>
+        /// <param name="force">Force execution without confirmation.</param>
+        /// <returns>True if successful, False if failed.</returns>
         private async Task<bool> ExecuteSystemActionAsync(SystemAction action, bool force)
         {
             try
@@ -148,13 +148,13 @@ namespace CMSAgent.Commands.Handlers
                         arguments = force ? "/l /f" : "/l";
                         break;
                     case SystemAction.Sleep:
-                        // Sử dụng powershell để sleep
+                        // Use PowerShell to sleep
                         return await RunPowerShellCommandAsync("Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)");
                     case SystemAction.Hibernate:
-                        // Sử dụng powershell để hibernate
+                        // Use PowerShell to hibernate
                         return await RunPowerShellCommandAsync("Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Hibernate', $false, $false)");
                     default:
-                        _logger.LogError("Hành động hệ thống không được hỗ trợ: {Action}", action);
+                        _logger.LogError("Unsupported system action: {Action}", action);
                         return false;
                 }
 
@@ -166,7 +166,7 @@ namespace CMSAgent.Commands.Handlers
                     process.StartInfo.UseShellExecute = false;
                     process.StartInfo.CreateNoWindow = true;
                     
-                    _logger.LogDebug("Thực thi lệnh: shutdown.exe {Arguments}", arguments);
+                    _logger.LogDebug("Executing command: shutdown.exe {Arguments}", arguments);
                     process.Start();
                     await process.WaitForExitAsync();
                     
@@ -177,16 +177,16 @@ namespace CMSAgent.Commands.Handlers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thực hiện hành động hệ thống: {Action}", action);
+                _logger.LogError(ex, "Error when performing system action: {Action}", action);
                 return false;
             }
         }
 
         /// <summary>
-        /// Chạy lệnh PowerShell.
+        /// Run a PowerShell command.
         /// </summary>
-        /// <param name="command">Lệnh PowerShell cần chạy.</param>
-        /// <returns>True nếu thành công, False nếu thất bại.</returns>
+        /// <param name="command">PowerShell command to run.</param>
+        /// <returns>True if successful, False if failed.</returns>
         private async Task<bool> RunPowerShellCommandAsync(string command)
         {
             try
@@ -197,7 +197,7 @@ namespace CMSAgent.Commands.Handlers
                 process.StartInfo.UseShellExecute = false;
                 process.StartInfo.CreateNoWindow = true;
                 
-                _logger.LogDebug("Thực thi lệnh PowerShell: {Command}", command);
+                _logger.LogDebug("Executing PowerShell command: {Command}", command);
                 process.Start();
                 await process.WaitForExitAsync();
                 
@@ -205,7 +205,7 @@ namespace CMSAgent.Commands.Handlers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thực thi lệnh PowerShell: {Command}", command);
+                _logger.LogError(ex, "Error when executing PowerShell command: {Command}", command);
                 return false;
             }
         }

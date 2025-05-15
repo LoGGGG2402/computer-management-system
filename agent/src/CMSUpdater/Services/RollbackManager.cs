@@ -4,7 +4,7 @@ using System.Runtime.Versioning;
 namespace CMSUpdater.Services;
 
 /// <summary>
-/// Lớp quản lý quá trình rollback khi cập nhật thất bại
+/// Class managing the rollback process when update fails
 /// </summary>
 [SupportedOSPlatform("windows")]
 public class RollbackManager
@@ -17,12 +17,12 @@ public class RollbackManager
     private readonly string _backupFolderPath;
     
     /// <summary>
-    /// Khởi tạo RollbackManager
+    /// Initialize RollbackManager
     /// </summary>
-    /// <param name="logger">Logger để ghi log</param>
-    /// <param name="currentAgentInstallDir">Đường dẫn thư mục cài đặt hiện tại</param>
-    /// <param name="currentAgentVersion">Phiên bản agent hiện tại</param>
-    /// <param name="serviceHelper">Helper để tương tác với Windows Service</param>
+    /// <param name="logger">Logger for logging</param>
+    /// <param name="currentAgentInstallDir">Current installation directory path</param>
+    /// <param name="currentAgentVersion">Current agent version</param>
+    /// <param name="serviceHelper">Helper for interacting with Windows Service</param>
     public RollbackManager(
         ILogger logger, 
         string currentAgentInstallDir, 
@@ -37,45 +37,45 @@ public class RollbackManager
     }
     
     /// <summary>
-    /// Thực hiện rollback
+    /// Perform rollback
     /// </summary>
-    /// <param name="reason">Lý do rollback</param>
-    /// <returns>Task đại diện cho quá trình rollback bất đồng bộ</returns>
+    /// <param name="reason">Reason for rollback</param>
+    /// <returns>Task representing the asynchronous rollback process</returns>
     public async Task RollbackAsync(string reason)
     {
-        _logger.LogWarning("Bắt đầu quá trình rollback. Lý do: {Reason}", reason);
+        _logger.LogWarning("Starting rollback process. Reason: {Reason}", reason);
         
         try
         {
-            // Dừng service agent mới (nếu đã được khởi động)
+            // Stop new agent service (if started)
             if (_serviceHelper.IsAgentServiceRunning(_agentServiceName))
             {
-                _logger.LogInformation("Dừng service agent mới trước khi rollback...");
+                _logger.LogInformation("Stopping new agent service before rollback...");
                 try
                 {
                     _serviceHelper.StopAgentService(_agentServiceName);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Không thể dừng service agent mới. Tiếp tục rollback...");
+                    _logger.LogError(ex, "Unable to stop new agent service. Continuing rollback...");
                 }
             }
             
-            // Kiểm tra xem backup có tồn tại không
+            // Check if backup exists
             if (!Directory.Exists(_backupFolderPath))
             {
-                _logger.LogError("Không tìm thấy thư mục backup tại: {BackupPath}. Không thể rollback.", _backupFolderPath);
-                throw new DirectoryNotFoundException($"Thư mục backup không tồn tại: {_backupFolderPath}");
+                _logger.LogError("Backup folder not found at: {BackupPath}. Cannot rollback.", _backupFolderPath);
+                throw new DirectoryNotFoundException($"Backup directory does not exist: {_backupFolderPath}");
             }
             
-            // Xóa nội dung hiện tại của thư mục cài đặt (trừ thư mục backup)
-            _logger.LogInformation("Xóa nội dung thư mục cài đặt hiện tại (trừ backup)...");
+            // Delete current installation directory contents (except backup)
+            _logger.LogInformation("Deleting current installation directory contents (except backup)...");
             foreach (var entry in Directory.GetFileSystemEntries(_currentAgentInstallDir))
             {
                 var entryName = Path.GetFileName(entry);
                 var backupFolderName = Path.GetFileName(_backupFolderPath);
                 
-                // Bỏ qua thư mục backup
+                // Skip backup folder
                 if (string.Equals(entryName, backupFolderName, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -94,12 +94,12 @@ public class RollbackManager
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Không thể xóa {Entry} trong quá trình rollback.", entry);
+                    _logger.LogError(ex, "Unable to delete {Entry} during rollback.", entry);
                 }
             }
             
-            // Sao chép nội dung từ backup vào thư mục cài đặt
-            _logger.LogInformation("Sao chép nội dung từ backup vào thư mục cài đặt...");
+            // Copy content from backup to installation directory
+            _logger.LogInformation("Copying content from backup to installation directory...");
             foreach (var entry in Directory.GetFileSystemEntries(_backupFolderPath))
             {
                 var entryName = Path.GetFileName(entry);
@@ -118,58 +118,57 @@ public class RollbackManager
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Không thể sao chép {Entry} trong quá trình rollback.", entry);
+                    _logger.LogError(ex, "Unable to copy {Entry} during rollback.", entry);
                 }
             }
             
-            // Khởi động lại service agent cũ
-            _logger.LogInformation("Khởi động lại service agent cũ...");
+            // Restart old agent service
+            _logger.LogInformation("Restarting old agent service...");
             try
             {
                 _serviceHelper.StartAgentService(_agentServiceName);
-                _logger.LogInformation("Khởi động lại service agent cũ thành công.");
+                _logger.LogInformation("Old agent service restarted successfully.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Không thể khởi động lại service agent cũ sau khi rollback.");
+                _logger.LogError(ex, "Unable to restart old agent service after rollback.");
                 throw;
             }
             
-            _logger.LogInformation("Rollback hoàn tất thành công.");
+            _logger.LogInformation("Rollback completed successfully.");
             
-            // Thêm một công việc bất đồng bộ thực sự
-            await Task.Delay(1); // Sử dụng await để tránh cảnh báo CS1998
+            await Task.Delay(1); // Use await to avoid CS1998 warning
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Rollback thất bại. Lý do: {Reason}", reason);
+            _logger.LogError(ex, "Rollback failed. Reason: {Reason}", reason);
             throw;
         }
     }
     
     /// <summary>
-    /// Sao chép toàn bộ thư mục và nội dung bên trong
+    /// Copy entire directory and its contents
     /// </summary>
     private static void CopyDirectory(string sourceDir, string destDir)
     {
-        // Tạo thư mục đích nếu chưa tồn tại
+        // Create destination directory if it does not exist
         if (!Directory.Exists(destDir))
         {
             Directory.CreateDirectory(destDir);
         }
         
-        // Sao chép tất cả file
+        // Copy all files
         foreach (var file in Directory.GetFiles(sourceDir))
         {
             var destFile = Path.Combine(destDir, Path.GetFileName(file));
             File.Copy(file, destFile, true);
         }
         
-        // Sao chép tất cả thư mục con
+        // Copy all subdirectories
         foreach (var dir in Directory.GetDirectories(sourceDir))
         {
             var destSubDir = Path.Combine(destDir, Path.GetFileName(dir));
             CopyDirectory(dir, destSubDir);
         }
     }
-} 
+}

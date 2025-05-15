@@ -1,57 +1,57 @@
 namespace CMSAgent.Common.Enums
 {
     /// <summary>
-    /// Mã lỗi riêng cho CMSUpdater.exe.
+    /// Exit codes specific to CMSUpdater.exe.
     /// </summary>
     public enum UpdaterExitCodes
     {
         /// <summary>
-        /// Cập nhật thành công.
+        /// Update completed successfully.
         /// </summary>
         Success = 0,
 
         /// <summary>
-        /// Lỗi: Không thể dừng agent cũ.
+        /// Error: Cannot stop the old agent.
         /// </summary>
         StopAgentFailed = 10,
 
         /// <summary>
-        /// Lỗi: Sao lưu agent cũ thất bại.
+        /// Error: Failed to backup the old agent.
         /// </summary>
         BackupFailed = 11,
 
         /// <summary>
-        /// Lỗi: Triển khai agent mới thất bại.
+        /// Error: Failed to deploy the new agent.
         /// </summary>
         DeployFailed = 12,
 
         /// <summary>
-        /// Lỗi: Khởi động service agent mới thất bại.
+        /// Error: Failed to start the new agent service.
         /// </summary>
         NewServiceStartFailed = 13,
 
         /// <summary>
-        /// Lỗi: Rollback thất bại.
+        /// Error: Rollback failed.
         /// </summary>
         RollbackFailed = 14,
 
         /// <summary>
-        /// Lỗi tham số dòng lệnh.
+        /// Command line argument error.
         /// </summary>
         InvalidArguments = 15,
 
         /// <summary>
-        /// Lỗi: Timeout chờ agent cũ dừng.
+        /// Error: Timeout waiting for old agent to stop.
         /// </summary>
         AgentStopTimeout = 16,
 
         /// <summary>
-        /// Watchdog phát hiện agent mới không ổn định và trigger rollback.
+        /// Watchdog detected new agent instability and triggered rollback.
         /// </summary>
         WatchdogTriggeredRollback = 17,
 
-        /// <summary>Z
-        /// Lỗi chung không xác định của Updater.
+        /// <summary>
+        /// General unspecified Updater error.
         /// </summary>
         GeneralError = 99
     }

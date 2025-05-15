@@ -1,47 +1,47 @@
 namespace CMSAgent.Common.Constants
 {
     /// <summary>
-    /// Tên các sự kiện WebSocket (Socket.IO) được sử dụng trong giao tiếp Agent-Server.
+    /// WebSocket (Socket.IO) event names used in Agent-Server communication.
     /// </summary>
     public static class WebSocketEvents
     {
         /// <summary>
-        /// Sự kiện server gửi cho agent để thông báo xác thực WebSocket thành công.
+        /// Event sent by server to agent to notify successful WebSocket authentication.
         /// </summary>
         public const string AgentWsAuthSuccess = "agent:ws_auth_success";
 
         /// <summary>
-        /// Sự kiện server gửi cho agent để thông báo xác thực WebSocket thất bại.
+        /// Event sent by server to agent to notify failed WebSocket authentication.
         /// </summary>
         public const string AgentWsAuthFailed = "agent:ws_auth_failed";
 
         /// <summary>
-        /// Sự kiện server gửi cho agent để yêu cầu thực thi lệnh.
+        /// Event sent by server to agent to request command execution.
         /// </summary>
         public const string CommandExecute = "command:execute";
 
         /// <summary>
-        /// Sự kiện server gửi cho agent để thông báo có phiên bản agent mới.
+        /// Event sent by server to agent to notify about new agent version availability.
         /// </summary>
         public const string AgentNewVersionAvailable = "agent:new_version_available";
 
         /// <summary>
-        /// Sự kiện agent gửi lên server để xác thực WebSocket (dự phòng nếu không dùng header).
+        /// Event sent by agent to server for WebSocket authentication (fallback if header is not used).
         /// </summary>
         public const string AgentAuthenticate = "agent:authenticate";
 
         /// <summary>
-        /// Sự kiện agent gửi lên server để báo cáo trạng thái tài nguyên (CPU, RAM, Disk).
+        /// Event sent by agent to server to report resource status (CPU, RAM, Disk).
         /// </summary>
         public const string AgentStatusUpdate = "agent:status_update";
 
         /// <summary>
-        /// Sự kiện agent gửi lên server để báo cáo kết quả thực thi lệnh.
+        /// Event sent by agent to server to report command execution results.
         /// </summary>
         public const string AgentCommandResult = "agent:command_result";
 
         /// <summary>
-        /// Sự kiện agent gửi lên server để báo cáo trạng thái quá trình cập nhật.
+        /// Event sent by agent to server to report update process status.
         /// </summary>
         public const string AgentUpdateStatus = "agent:update_status";
     }

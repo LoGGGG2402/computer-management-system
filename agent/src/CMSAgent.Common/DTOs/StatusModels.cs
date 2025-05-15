@@ -3,23 +3,23 @@ using System;
 namespace CMSAgent.Common.DTOs
 {
     /// <summary>
-    /// Thông tin trạng thái tài nguyên của máy client gửi lên server.
+    /// Resource status information of the client machine sent to the server.
     /// </summary>
     public class StatusUpdatePayload
     {
         /// <summary>
-        /// Phần trăm sử dụng CPU.
+        /// CPU usage percentage.
         /// </summary>
         public double cpuUsage { get; set; }
 
         /// <summary>
-        /// Phần trăm sử dụng RAM.
+        /// RAM usage percentage.
         /// </summary>
         public double ramUsage { get; set; }
 
         /// <summary>
-        /// Phần trăm sử dụng ổ đĩa chính.
+        /// Primary disk usage percentage.
         /// </summary>
         public double diskUsage { get; set; }
     }
-} 
+}

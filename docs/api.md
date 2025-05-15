@@ -1,10 +1,8 @@
-
-
-Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao gồm phương thức HTTP, đường dẫn, header yêu cầu, tham số, và cấu trúc response.
+This document describes in detail the API endpoints of the system, including HTTP methods, paths, required headers, parameters, and response structures.
 
 #
 
-##
+## Authentication
 * **Method:** `POST`
 * **Path:** `/api/auth/login`
 * **Headers:** `Content-Type: application/json`
@@ -33,7 +31,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     * `401 Unauthorized`: `{ "status": "error", "message": "Invalid credentials" }`
     * `400 Bad Request`: `{ "status": "error", "message": "Username and password are required" }`
 
-##
+## Get Current User Info
 * **Method:** `GET`
 * **Path:** `/api/auth/me`
 * **Headers:** `Authorization: Bearer <jwt_token_string>` (Required)
@@ -54,7 +52,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 
 #
 
-##
+## Create User
 * **Method:** `POST`
 * **Path:** `/api/users`
 * **Headers:**
@@ -89,16 +87,16 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     * `400 Bad Request`: `{ "status": "error", "message": "Username already exists" }`
     * `400 Bad Request`: `{ "status": "error", "message": "Failed to create user" }`
 
-##
+## Get Users
 * **Method:** `GET`
 * **Path:** `/api/users`
 * **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
 * **Query Parameters (Filtering):**
-    * `?page=integer` (Số trang, mặc định: 1)
-    * `?limit=integer` (Số lượng user trên mỗi trang, mặc định: 10)
-    * `?username=string` (Tìm kiếm gần đúng theo username)
-    * `?role=admin|user` (Lọc theo vai trò)
-    * `?is_active=true|false` (Lọc theo trạng thái active)
+    * `?page=integer` (Page number, default: 1)
+    * `?limit=integer` (Number of users per page, default: 10)
+    * `?username=string` (Fuzzy search by username)
+    * `?role=admin|user` (Filter by role)
+    * `?is_active=true|false` (Filter by active status)
 * **Response Success (200 OK):**
     ```json
     {
@@ -124,7 +122,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 * **Response Error:**
     * `500 Internal Server Error`: `{ "status": "error", "message": "Failed to fetch users" }`
 
-##
+## Get User by ID
 * **Method:** `GET`
 * **Path:** `/api/users/:id`
 * **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
@@ -146,14 +144,14 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     * `400 Bad Request`: `{ "status": "error", "message": "User ID is required" }`
     * `404 Not Found`: `{ "status": "error", "message": "User not found" }`
 
-##
+## Update User
 * **Method:** `PUT`
 * **Path:** `/api/users/:id`
 * **Headers:**
     * `Authorization: Bearer <admin_jwt_token_string>` (Required)
     * `Content-Type: application/json`
-* **Path Parameters:** `id` (ID của user cần cập nhật)
-* **Request Body:** (Chỉ chứa các trường cần cập nhật)
+* **Path Parameters:** `id` (ID of the user to update)
+* **Request Body:** (Only contains fields to update)
     ```json
     {
       "role": "string ('admin' or 'user') (optional)",
@@ -183,7 +181,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     * `404 Not Found`: `{ "status": "error", "message": "User not found" }`
     * `400 Bad Request`: `{ "status": "error", "message": "Failed to update user" }`
 
-##
+## Deactivate User
 * **Method:** `DELETE`
 * **Path:** `/api/users/:id`
 * **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
@@ -198,7 +196,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     * `400 Bad Request`: `{ "status": "error", "message": "User ID is required" }`
     * `404 Not Found`: `{ "status": "error", "message": "User not found" }`
 
-##
+## Reactivate User
 * **Method:** `PUT`
 * **Path:** `/api/users/:id/reactivate`
 * **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
@@ -223,7 +221,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 
 #
 
-##
+## Create Room
 * **Method:** `POST`
 * **Path:** `/api/rooms`
 * **Headers:**
@@ -262,15 +260,15 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     * `400 Bad Request`: `{ "status": "error", "message": "Room name is required" }`
     * `400 Bad Request`: `{ "status": "error", "message": "Failed to create room" }`
 
-##
+## Get Rooms
 * **Method:** `GET`
 * **Path:** `/api/rooms`
 * **Headers:** `Authorization: Bearer <jwt_token_string>` (Required)
 * **Query Parameters:**
-    * `?page=integer` (Số trang, mặc định: 1)
-    * `?limit=integer` (Số lượng room trên mỗi trang, mặc định: 10)
-    * `?name=string` (Tìm kiếm gần đúng theo tên room)
-    * `?assigned_user_id=integer` (Lọc phòng theo ID của user được gán)
+    * `?page=integer` (Page number, default: 1)
+    * `?limit=integer` (Number of rooms per page, default: 10)
+    * `?name=string` (Fuzzy search by room name)
+    * `?assigned_user_id=integer` (Filter rooms by assigned user ID)
 * **Response Success (200 OK):**
     ```json
     {
@@ -299,7 +297,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 * **Response Error:**
     * `500 Internal Server Error`: `{ "status": "error", "message": "Failed to fetch rooms" }`
 
-##
+## Get Room by ID
 * **Method:** `GET`
 * **Path:** `/api/rooms/:id`
 * **Headers:** `Authorization: Bearer <jwt_token_string>` (Required)
@@ -342,7 +340,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     * `400 Bad Request`: `{ "status": "error", "message": "Room ID is required" }`
     * `404 Not Found`: `{ "status": "error", "message": "Room not found" }`
 
-##
+## Update Room
 * **Method:** `PUT`
 * **Path:** `/api/rooms/:id`
 * **Headers:**
@@ -379,7 +377,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 
 #
 
-##
+## Assign Users to Room
 * **Method:** `POST`
 * **Path:** `/api/rooms/:roomId/assign`
 * **Headers:**
@@ -405,7 +403,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     * `400 Bad Request`: `{ "status": "error", "message": "Room ID and user IDs array are required" }`
     * `400 Bad Request`: `{ "status": "error", "message": "Failed to assign users to room" }`
 
-##
+## Unassign Users from Room
 * **Method:** `POST`
 * **Path:** `/api/rooms/:roomId/unassign`
 * **Headers:**
@@ -431,7 +429,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     * `400 Bad Request`: `{ "status": "error", "message": "Room ID and user IDs array are required" }`
     * `400 Bad Request`: `{ "status": "error", "message": "Failed to unassign users from room" }`
 
-##
+## Get Users in Room
 * **Method:** `GET`
 * **Path:** `/api/rooms/:roomId/users`
 * **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
@@ -460,17 +458,17 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 
 #
 
-##
+## Get Computers
 * **Method:** `GET`
 * **Path:** `/api/computers`
 * **Headers:** `Authorization: Bearer <jwt_token_string>` (Required)
 * **Query Parameters:**
-    * `?page=integer` (Số trang, mặc định: 1)
-    * `?limit=integer` (Số lượng computer trên mỗi trang, mặc định: 10)
-    * `?name=string` (Tìm kiếm gần đúng theo tên máy)
-    * `?roomId=integer` (Lọc theo phòng)
-    * `?status=online|offline` (Lọc theo trạng thái online/offline)
-    * `?has_errors=true|false` (Lọc theo có lỗi active hay không)
+    * `?page=integer` (Page number, default: 1)
+    * `?limit=integer` (Number of computers per page, default: 10)
+    * `?name=string` (Fuzzy search by computer name)
+    * `?roomId=integer` (Filter by room)
+    * `?status=online|offline` (Filter by online/offline status)
+    * `?has_errors=true|false` (Filter by active errors)
 * **Response Success (200 OK):**
     ```json
     {
@@ -507,7 +505,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 * **Response Error:**
     * `500 Internal Server Error`: `{ "status": "error", "message": "Failed to fetch computers" }`
 
-##
+## Get Computer by ID
 * **Method:** `GET`
 * **Path:** `/api/computers/:id`
 * **Headers:** `Authorization: Bearer <jwt_token_string>` (Required)
@@ -540,7 +538,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     * `400 Bad Request`: `{ "status": "error", "message": "Computer ID is required" }`
     * `404 Not Found`: `{ "status": "error", "message": "Computer not found" }`
 
-##
+## Delete Computer
 * **Method:** `DELETE`
 * **Path:** `/api/computers/:id`
 * **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
@@ -555,7 +553,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     * `400 Bad Request`: `{ "status": "error", "message": "Computer ID is required" }`
     * `404 Not Found`: `{ "status": "error", "message": "Computer not found" }`
 
-##
+## Get Computer Errors
 * **Method:** `GET`
 * **Path:** `/api/computers/:id/errors`
 * **Headers:** `Authorization: Bearer <jwt_token_string>` (Required)
@@ -584,7 +582,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     * `400 Bad Request`: `{ "status": "error", "message": "Computer ID is required" }`
     * `404 Not Found`: `{ "status": "error", "message": "Computer not found or no errors available" }`
 
-##
+## Report Computer Error
 * **Method:** `POST`
 * **Path:** `/api/computers/:id/errors`
 * **Headers:**
@@ -621,7 +619,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     * `400 Bad Request`: `{ "status": "error", "message": "Error type and message are required" }`
     * `400 Bad Request`: `{ "status": "error", "message": "Failed to report error" }`
 
-##
+## Resolve Computer Error
 * **Method:** `PUT`
 * **Path:** `/api/computers/:id/errors/:errorId/resolve`
 * **Headers:**
@@ -659,7 +657,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 
 #
 
-##
+## Agent Identification
 * **Method:** `POST`
 * **Path:** `/api/agent/identify`
 * **Headers:** `Content-Type: application/json`
@@ -676,20 +674,20 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     }
     ```
 * **Response Success (200 OK):**
-    * Trường hợp yêu cầu MFA: 
+    * MFA Required Case: 
     ```json
     {
       "status": "mfa_required"
     }
     ```
-    * Trường hợp đã đăng ký: 
+    * Already Registered Case: 
     ```json
     {
       "status": "success",
       "agentToken": "string (if token renewal)"
     }
     ```
-    * Trường hợp lỗi vị trí:
+    * Position Error Case:
     ```json
     {
       "status": "position_error",
@@ -697,7 +695,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     }
     ```
 
-##
+## Verify Agent MFA
 * **Method:** `POST`
 * **Path:** `/api/agent/verify-mfa`
 * **Headers:** `Content-Type: application/json`
@@ -718,7 +716,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 * **Response Error:**
     * `401 Unauthorized`: `{ "status": "error", "message": "Invalid or expired MFA code" }`
 
-##
+## Update Agent Hardware Info
 * **Method:** `POST`
 * **Path:** `/api/agent/hardware-info`
 * **Headers:**
@@ -738,7 +736,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 
 #
 
-##
+## Get System Statistics
 * **Method:** `GET`
 * **Path:** `/api/stats`
 * **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
@@ -773,17 +771,17 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 
 #
 
-##
+## WebSocket Connection
 
 * **URL:** `/socket.io`
 * **Headers:**
-    * `X-Client-Type`: `"frontend"` hoặc `"agent"` (Required)
+    * `X-Client-Type`: `"frontend"` or `"agent"` (Required)
     * `Authorization`: `Bearer <jwt_token>` (Optional)
-    * `Agent-ID`: `string (unique_agent_id)` (Optional, chỉ cho agent)
+    * `Agent-ID`: `string (unique_agent_id)` (Optional, only for agent)
 
-##
+## Frontend Events
 
-###
+### Frontend Authentication
 * **Event:** `frontend:authenticate`
 * **Data:** 
     ```json
@@ -802,7 +800,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     }
     ```
 
-###
+### Subscribe to Computer
 * **Event:** `frontend:subscribe`
 * **Data:** 
     ```json
@@ -820,7 +818,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     }
     ```
 
-###
+### Unsubscribe from Computer
 * **Event:** `frontend:unsubscribe`
 * **Data:** 
     ```json
@@ -838,7 +836,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     }
     ```
 
-###
+### Send Command to Computer
 * **Event:** `frontend:send_command`
 * **Data:** 
     ```json
@@ -859,16 +857,16 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     }
     ```
 * **Error Responses:**
-    * Không có token xác thực: `{ "status": "error", "message": "Not authenticated" }`
-    * ID máy tính không hợp lệ: `{ "status": "error", "message": "Valid Computer ID is required" }`
-    * Không có nội dung lệnh: `{ "status": "error", "message": "Command content is required", "computerId": "integer" }`
-    * Không có quyền truy cập: `{ "status": "error", "message": "Access denied to send commands to this computer", "computerId": "integer" }`
-    * Agent không kết nối: `{ "status": "error", "message": "Agent is not connected", "computerId": "integer", "commandId": "string", "commandType": "string" }`
-    * Lỗi server: `{ "status": "error", "message": "Failed to send command due to server error", "computerId": "integer" }`
+    * No authentication token: `{ "status": "error", "message": "Not authenticated" }`
+    * Invalid computer ID: `{ "status": "error", "message": "Valid Computer ID is required" }`
+    * No command content: `{ "status": "error", "message": "Command content is required", "computerId": "integer" }`
+    * No access permission: `{ "status": "error", "message": "Access denied to send commands to this computer", "computerId": "integer" }`
+    * Agent not connected: `{ "status": "error", "message": "Agent is not connected", "computerId": "integer", "commandId": "string", "commandType": "string" }`
+    * Server error: `{ "status": "error", "message": "Failed to send command due to server error", "computerId": "integer" }`
 
-##
+## Agent Events
 
-###
+### Agent Authentication
 * **Event:** `agent:authenticate`
 * **Data:** 
     ```json
@@ -877,16 +875,16 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
       "token": "string"
     }
     ```
-* **Response Event nếu thành công:** `agent:ws_auth_success`
-* **Response Data thành công:** 
+* **Success Response Event:** `agent:ws_auth_success`
+* **Success Response Data:** 
     ```json
     {
       "status": "success",
       "message": "Authentication successful"
     }
     ```
-* **Response Event nếu thất bại:** `agent:ws_auth_failed`
-* **Response Data thất bại:** 
+* **Failure Response Event:** `agent:ws_auth_failed`
+* **Failure Response Data:** 
     ```json
     {
       "status": "error",
@@ -894,7 +892,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     }
     ```
 
-###
+### Agent Status Update
 * **Event:** `agent:status_update`
 * **Data:** 
     ```json
@@ -906,7 +904,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     ```
 * **No Direct Response**
 
-###
+### Agent Command Result
 * **Event:** `agent:command_result`
 * **Data:** 
     ```json
@@ -919,9 +917,9 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     ```
 * **No Direct Response**
 
-##
+## Server Broadcast Events
 
-###
+### Computer Status Update
 * **Event:** `computer:status_updated`
 * **Data:**
     ```json
@@ -935,7 +933,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     }
     ```
 
-###
+### Command Completed
 * **Event:** `command:completed`
 * **Data:**
     ```json
@@ -949,7 +947,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     }
     ```
 
-###
+### New Agent MFA Notification
 * **Event:** `admin:new_agent_mfa`
 * **Data:**
     ```json
@@ -965,7 +963,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     }
     ```
 
-###
+### Agent Registered Notification
 * **Event:** `admin:agent_registered`
 * **Data:**
     ```json
@@ -980,9 +978,9 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     }
     ```
 
-##
+## Server to Agent Events
 
-###
+### Execute Command
 * **Event:** `command:execute`
 * **Data:**
     ```json
@@ -995,16 +993,16 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 
 #
 
-##
+## Upload Agent Version
 * **Method:** `POST`
 * **Path:** `/api/admin/agents/versions`
 * **Headers:** 
   * `Authorization: Bearer <admin_jwt_token_string>` (Required)
   * `Content-Type: multipart/form-data`
 * **Request Body:**
-  * `package`: File (required - file package của agent, định dạng .zip, .gz, hoặc .tar)
-  * `version`: String (required - phiên bản của agent, ví dụ: "1.2.0")
-  * `notes`: String (optional - ghi chú về phiên bản)
+  * `package`: File (required - agent package file, format .zip, .gz, or .tar)
+  * `version`: String (required - agent version, e.g., "1.2.0")
+  * `notes`: String (optional - version notes)
 * **Response Success (201 Created):**
   ```json
   {
@@ -1029,7 +1027,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
   * `400 Bad Request`: `{ "status": "error", "message": "Version is required" }`
   * `400 Bad Request`: `{ "status": "error", "message": "Only archive files (.zip, .gz, .tar) are allowed" }`
 
-##
+## Update Agent Version Stability
 * **Method:** `PUT`
 * **Path:** `/api/admin/agents/versions/:versionId`
 * **Headers:**
@@ -1064,7 +1062,7 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
   * `400 Bad Request`: `{ "status": "error", "message": "is_stable parameter is required" }`
   * `404 Not Found`: `{ "status": "error", "message": "Agent version with ID xyz not found" }`
 
-##
+## Get Agent Versions
 * **Method:** `GET`
 * **Path:** `/api/admin/agents/versions`
 * **Headers:** `Authorization: Bearer <admin_jwt_token_string>` (Required)
@@ -1090,15 +1088,15 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
   }
   ```
 
-##
+## Check for Agent Updates
 * **Method:** `GET`
 * **Path:** `/api/agent/check-update`
 * **Headers:**
   * `agent-id: string (unique_agent_id)` (Required)
   * `agent-token: string` (Required)
 * **Query Parameters:**
-  * `current_version`: String (optional - phiên bản hiện tại của agent, ví dụ: "1.1.0")
-* **Response Success khi có bản cập nhật (200 OK):**
+  * `current_version`: String (optional - current agent version, e.g., "1.1.0")
+* **Response Success when update available (200 OK):**
   ```json
   {
     "status": "success",
@@ -1109,12 +1107,12 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     "notes": "string"
   }
   ```
-* **Response Success khi không có bản cập nhật (204 No Content)**
+* **Response Success when no update available (204 No Content)**
 * **Response Error:**
   * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized (Invalid agent credentials)" }`
   * `500 Internal Server Error`: `{ "status": "error", "message": "Failed to check for agent updates" }`
 
-##
+## Report Agent Error
 * **Method:** `POST`
 * **Path:** `/api/agent/report-error`
 * **Headers:**
@@ -1132,25 +1130,25 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
     "stack_trace": "string (optional)"
   }
   ```
-* **Danh sách `error_type` thống nhất cho lỗi cập nhật:**
-  * `"UpdateResourceCheckFailed"`: Lỗi khi kiểm tra tài nguyên trước khi cập nhật
-  * `"UpdateDownloadFailed"`: Lỗi khi tải package cập nhật
-  * `"UpdateChecksumMismatch"`: Lỗi khi checksum file tải về không khớp
-  * `"UpdateExtractionFailed"`: Lỗi khi giải nén package
-  * `"UpdateLaunchFailed"`: Lỗi khi khởi chạy quá trình cập nhật
-  * `"UpdateGeneralFailure"`: Các lỗi chung khác trong quá trình cập nhật
+* **Standardized `error_type` list for update errors:**
+  * `"UpdateResourceCheckFailed"`: Error checking resources before update
+  * `"UpdateDownloadFailed"`: Error downloading update package
+  * `"UpdateChecksumMismatch"`: Error when downloaded file checksum doesn't match
+  * `"UpdateExtractionFailed"`: Error extracting package
+  * `"UpdateLaunchFailed"`: Error launching update process
+  * `"UpdateGeneralFailure"`: Other general errors during update
 * **Response Success (204 No Content)**
 * **Response Error:**
   * `400 Bad Request`: `{ "status": "error", "message": "Error type and message are required" }`
   * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized (Invalid agent credentials)" }`
 
-##
+## Download Agent Package
 * **Method:** `GET`
 * **Path:** `/api/agent/agent-packages/:filename`
 * **Headers:**
   * `agent-id: string (unique_agent_id)` (Required)
   * `agent-token: string` (Required)
-* **Response Success:** File nội dung package
+* **Response Success:** Package file content
 * **Response Error:**
   * `401 Unauthorized`: `{ "status": "error", "message": "Unauthorized (Invalid agent credentials)" }`
   * `404 Not Found`: `{ "status": "error", "message": "File not found" }`
@@ -1158,9 +1156,9 @@ Tài liệu này mô tả chi tiết các API endpoint của hệ thống, bao g
 
 #
 
-##
+## Agent Update Events
 
-###
+### New Version Available Notification
 * **Event:** `agent:new_version_available`
 * **Data:**
   ```json

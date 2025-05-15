@@ -12,7 +12,7 @@ using Microsoft.Extensions.Options;
 namespace CMSAgent.Commands.Handlers
 {
     /// <summary>
-    /// Handler để thực thi các lệnh console (CMD hoặc PowerShell).
+    /// Handler to execute console commands (CMD or PowerShell).
     /// </summary>
     public class ConsoleCommandHandler(ILogger<ConsoleCommandHandler> logger, IOptions<CommandExecutorSettingsOptions> options) : ICommandHandler
     {
@@ -20,22 +20,22 @@ namespace CMSAgent.Commands.Handlers
         private readonly CommandExecutorSettingsOptions _settings = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
         /// <summary>
-        /// Thực thi một lệnh console.
+        /// Execute a console command.
         /// </summary>
-        /// <param name="command">Thông tin lệnh cần thực thi.</param>
-        /// <param name="cancellationToken">Token để hủy thao tác.</param>
-        /// <returns>Kết quả thực thi lệnh.</returns>
+        /// <param name="command">Command information to execute.</param>
+        /// <param name="cancellationToken">Token to cancel the operation.</param>
+        /// <returns>Command execution result.</returns>
         public async Task<CommandResultPayload> ExecuteAsync(CommandPayload command, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(command);
 
-            _logger.LogInformation("Bắt đầu thực thi lệnh console: {CommandId}", command.commandId);
+            _logger.LogInformation("Starting console command execution: {CommandId}", command.commandId);
 
-            // Mặc định sử dụng CMD, nhưng có thể thay đổi dựa trên tham số
+            // Default to CMD, but can be changed based on parameters
             bool usePowerShell = false;
             int timeoutSeconds = _settings.DefaultTimeoutSec;
 
-            // Xác định loại shell và timeout từ tham số
+            // Determine shell type and timeout from parameters
             if (command.parameters != null)
             {
                 if (command.parameters.TryGetValue("use_powershell", out var pshellParam) && pshellParam is bool usePsParam)
@@ -45,7 +45,7 @@ namespace CMSAgent.Commands.Handlers
                 
                 if (command.parameters.TryGetValue("timeout_sec", out var timeoutParam) && timeoutParam is int timeoutValue)
                 {
-                    timeoutSeconds = Math.Max(30, Math.Min(timeoutValue, 3600)); // giới hạn từ 30s đến 1h
+                    timeoutSeconds = Math.Max(30, Math.Min(timeoutValue, 3600)); // limit from 30s to 1h
                 }
             }
 
@@ -83,7 +83,7 @@ namespace CMSAgent.Commands.Handlers
                 process.StartInfo.RedirectStandardError = true;
                 process.StartInfo.CreateNoWindow = true;
                 
-                // Thiết lập encoding cho đầu ra
+                // Set encoding for output
                 process.StartInfo.StandardOutputEncoding = Encoding.GetEncoding(_settings.ConsoleEncoding);
                 process.StartInfo.StandardErrorEncoding = Encoding.GetEncoding(_settings.ConsoleEncoding);
 
@@ -106,65 +106,65 @@ namespace CMSAgent.Commands.Handlers
                     }
                 };
 
-                _logger.LogDebug("Khởi động process {FileName} với tham số: {Arguments}", 
+                _logger.LogDebug("Starting process {FileName} with parameters: {Arguments}", 
                     process.StartInfo.FileName, process.StartInfo.Arguments);
                 
                 process.Start();
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
 
-                // Chờ process hoàn thành với timeout
+                // Wait for process to complete with timeout
                 var timeoutTask = Task.Delay(TimeSpan.FromSeconds(timeoutSeconds), cancellationToken);
                 var processExitTask = process.WaitForExitAsync(cancellationToken);
                 
-                // Task nào hoàn thành trước?
+                // Which task completes first?
                 if (await Task.WhenAny(processExitTask, timeoutTask) == timeoutTask)
                 {
-                    // Timeout xảy ra, kill process
+                    // Timeout occurred, kill process
                     try
                     {
                         if (!process.HasExited)
                         {
-                            _logger.LogWarning("Lệnh đã vượt quá thời gian chờ {Timeout} giây, đang hủy", timeoutSeconds);
+                            _logger.LogWarning("Command exceeded wait time of {Timeout} seconds, cancelling", timeoutSeconds);
                             process.Kill();
                         }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Lỗi khi hủy process");
+                        _logger.LogError(ex, "Error when killing process");
                     }
 
                     result.success = false;
                     result.result.exitCode = -1;
-                    result.result.errorMessage = $"Lệnh đã vượt quá thời gian {timeoutSeconds} giây và bị hủy";
+                    result.result.errorMessage = $"Command exceeded timeout of {timeoutSeconds} seconds and was cancelled";
                     result.result.stdout = outputBuilder.ToString();
                     result.result.stderr = errorBuilder.ToString();
                     return result;
                 }
 
-                // Process đã thoát bình thường
+                // Process exited normally
                 result.success = process.ExitCode == 0;
                 result.result.exitCode = process.ExitCode;
                 result.result.stdout = outputBuilder.ToString();
                 result.result.stderr = errorBuilder.ToString();
 
-                _logger.LogInformation("Lệnh console {CommandId} đã hoàn thành với mã thoát {ExitCode}", 
+                _logger.LogInformation("Console command {CommandId} completed with exit code {ExitCode}", 
                     command.commandId, process.ExitCode);
 
                 return result;
             }
             catch (OperationCanceledException)
             {
-                _logger.LogWarning("Lệnh console {CommandId} đã bị hủy", command.commandId);
+                _logger.LogWarning("Console command {CommandId} was cancelled", command.commandId);
                 result.success = false;
-                result.result.errorMessage = "Lệnh đã bị hủy";
+                result.result.errorMessage = "Command was cancelled";
                 return result;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thực thi lệnh console {CommandId}", command.commandId);
+                _logger.LogError(ex, "Error when executing console command {CommandId}", command.commandId);
                 result.success = false;
-                result.result.errorMessage = $"Lỗi: {ex.Message}";
+                result.result.errorMessage = $"Error: {ex.Message}";
                 return result;
             }
         }

@@ -4,60 +4,60 @@ using CMSAgent.Common.Enums;
 namespace CMSAgent.Common.DTOs
 {
     /// <summary>
-    /// Thông tin về các lỗi phát sinh trong agent gửi lên server.
+    /// Information about errors occurring in the agent sent to the server.
     /// </summary>
     public class ErrorReportPayload
     {
         /// <summary>
-        /// Phân loại lỗi.
+        /// Type of error.
         /// </summary>
         public ErrorType error_type { get; set; }
 
         /// <summary>
-        /// Thông điệp lỗi.
+        /// Error message.
         /// </summary>
         public required string error_message { get; set; } = string.Empty;
 
         /// <summary>
-        /// Chi tiết lỗi (có thể là string hoặc object phức tạp).
+        /// Error details (can be string or complex object).
         /// </summary>
         public required object error_details { get; set; } = new();
 
         /// <summary>
-        /// Thời điểm xảy ra lỗi.
+        /// Timestamp when the error occurred.
         /// </summary>
         public DateTime timestamp { get; set; }
     }
 
     /// <summary>
-    /// Thông tin phần cứng của máy client gửi lên server.
+    /// Hardware information of the client machine sent to the server.
     /// </summary>
     public class HardwareInfoPayload
     {
         /// <summary>
-        /// Thông tin hệ điều hành.
+        /// Operating system information.
         /// </summary>
         public required string os_info { get; set; } = string.Empty;
 
         /// <summary>
-        /// Thông tin CPU.
+        /// CPU information.
         /// </summary>
         public required string cpu_info { get; set; } = string.Empty;
 
         /// <summary>
-        /// Thông tin GPU.
+        /// GPU information.
         /// </summary>
         public required string gpu_info { get; set; } = string.Empty;
 
         /// <summary>
-        /// Tổng RAM (bytes).
+        /// Total RAM (bytes).
         /// </summary>
         public long total_ram { get; set; }
 
         /// <summary>
-        /// Tổng dung lượng ổ C: (bytes).
+        /// Total C: drive space (bytes).
         /// </summary>
         [Required]
         public long total_disk_space { get; set; }
     }
-} 
+}

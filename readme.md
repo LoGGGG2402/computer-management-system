@@ -1,23 +1,21 @@
-
-
-Dự án này nhằm mục đích tạo ra một ứng dụng web để quản lý và giám sát các máy tính trong công ty, được tổ chức theo phòng (Room), với khả năng gửi lệnh (qua WebSocket), theo dõi trạng thái real-time (online/offline xác định qua WS, %CPU/%RAM Agent gửi qua HTTP), hiển thị vị trí trực quan, hệ thống phân quyền người dùng (Admin, User), cơ chế đăng ký Agent an toàn (MFA/Token), chức năng báo cáo và xử lý lỗi máy tính, và khả năng lọc dữ liệu trên các API danh sách. Agent sẽ được phát triển bằng Python.
+This project aims to create a web application for managing and monitoring computers in a company, organized by Room, with the ability to send commands (via WebSocket), monitor real-time status (online/offline determined via WS, %CPU/%RAM sent by Agent via HTTP), display visual positioning, user permission system (Admin, User), secure Agent registration mechanism (MFA/Token), computer error reporting and resolution features, and data filtering capabilities on list APIs. The Agent is developed in .NET to ensure high performance and good compatibility with Windows.
 
 #
 
-* **Agent:** Chạy trên máy Windows. Thu thập thông tin hệ thống (%CPU, %RAM). Giao tiếp với Backend chủ yếu qua HTTP(S) để đăng ký, gửi trạng thái CPU/RAM, gửi kết quả lệnh (xác thực bằng Agent Token). Duy trì kết nối WebSocket chỉ để nhận lệnh từ Backend (xác thực bằng Agent Token). Trạng thái online/offline được suy ra từ kết nối WS này.
-* **Backend (Node.js):** Trung tâm xử lý. Xử lý request HTTP(S) từ Agent và Frontend. Quản lý kết nối WebSocket với Agent (xác thực, gửi lệnh) và Frontend (gửi MFA, broadcast status, kết quả lệnh). Quản lý logic nghiệp vụ, phân quyền, giao tiếp DB (lưu lỗi vào JSONB). Quản lý bộ nhớ đệm trạng thái real-time. Xử lý tham số lọc API.
-* **Frontend (React):** Giao diện web. Hiển thị giao diện theo vai trò. Hiển thị thông báo MFA (Admin). Hiển thị trạng thái máy tính real-time và thông tin lỗi (nhận qua WS). Gửi yêu cầu HTTP(S) tới Backend (đăng nhập, quản lý, báo lỗi, xử lý lỗi, yêu cầu lệnh). Cung cấp bộ lọc và gửi tham số lọc tới API.
-* **Database (Ví dụ: PostgreSQL):** Lưu trữ dữ liệu cấu hình (users, rooms, computers, agent_token_hash, user assignments, errors JSONB).
+* **Agent (.NET):** Runs on Windows machines. Collects system information (OS, CPU, GPU, RAM, Disk, %CPU, %RAM). Communicates with the Backend primarily via HTTP(S) for registration, status reporting, and sending command results (authenticated by Agent Token). Maintains WebSocket connection to receive commands from Backend and report status changes. Runs as a Windows Service to ensure continuous operation. Automatically updates to newer versions through CMSUpdater. Stores data offline when connection is lost.
+* **Backend (Node.js):** Processing center. Handles HTTP(S) requests from Agent and Frontend. Manages WebSocket connections with Agent (authentication, sending commands) and Frontend (sending MFA, broadcasting status, command results). Manages business logic, permissions, DB communication (storing errors in JSONB). Manages real-time status cache. Processes API filter parameters.
+* **Frontend (React):** Web interface. Displays interface based on role. Shows MFA notifications (Admin). Displays real-time computer status and error information (received via WS). Sends HTTP(S) requests to Backend (login, management, error reporting, error resolution, command requests). Provides filters and sends filter parameters to APIs.
+* **Database (Example: PostgreSQL):** Stores configuration data (users, rooms, computers, agent_token_hash, user assignments, errors JSONB).
 
 #
 
-* **Backend:** Node.js, Express.js, Socket.IO, PostgreSQL (hoặc MongoDB), Sequelize (hoặc Mongoose), JWT, bcrypt, node-cache (hoặc Redis), otp-generator, crypto/uuid. Middleware xác thực Agent Token HTTP header. Thư viện xử lý query parameters (vd: có sẵn trong Express).
-* **Frontend:** React, Vite, Tailwind CSS, React Router DOM, Socket.IO Client, axios. Context API/Zustand/Redux. CSS Positioning/SVG/Canvas. Thư viện quản lý form (vd: React Hook Form).
-* **Agent:** Python , `requests`, `websocket-client` (hoặc `python-socketio`), `psutil`, `keyring` (tùy chọn), `pyinstaller` / `cx_Freeze` (đóng gói). Cơ chế lưu trữ token an toàn.
+* **Backend:** Node.js, Express.js, Socket.IO, PostgreSQL (or MongoDB), Sequelize (or Mongoose), JWT, bcrypt, node-cache (or Redis), otp-generator, crypto/uuid. Agent Token HTTP header authentication middleware. Query parameters processing library (e.g., built into Express).
+* **Frontend:** React, Vite, Tailwind CSS, React Router DOM, Socket.IO Client, axios. Context API/Zustand/Redux. CSS Positioning/SVG/Canvas. Form management library (e.g., React Hook Form).
+* **Agent:** .NET (9.0 LTS), Serilog, SocketIOClient.Net, System.Management, Microsoft.Extensions.Hosting, Polly, System.CommandLine. Secure token storage mechanism using Windows DPAPI. Inno Setup for creating installers. Windows Service for continuous operation.
 
 #
 
-* **Bảng `users`:**
+* **`users` Table:**
     * `id`: SERIAL PRIMARY KEY
     * `username`: VARCHAR(255) UNIQUE NOT NULL
     * `password_hash`: VARCHAR(255) NOT NULL
@@ -25,51 +23,51 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
     * `is_active`: BOOLEAN DEFAULT true
     * `created_at`: TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
     * `updated_at`: TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-* **Bảng `rooms`:**
+* **`rooms` Table:**
     * `id`: SERIAL PRIMARY KEY
     * `name`: VARCHAR(255) NOT NULL
     * `description`: TEXT
-    * `layout`: JSONB - Định nghĩa cấu trúc và bố trí của phòng với định dạng:
+    * `layout`: JSONB - Defines the structure and layout of the room in the format:
       ```json
       {
-        "width": "integer - Chiều rộng của phòng trong pixels",
-        "height": "integer - Chiều cao của phòng trong pixels",
-        "background": "string - Mã màu nền (ví dụ: '#f5f5f5')",
+        "width": "integer - Room width in pixels",
+        "height": "integer - Room height in pixels",
+        "background": "string - Background color code (e.g., '#f5f5f5')",
         "grid": {
-          "columns": "integer - Số máy tính theo chiều ngang (trục X)",
-          "rows": "integer - Số máy tính theo chiều dọc (trục Y)",
-          "spacing_x": "integer - Khoảng cách ngang giữa các máy tính (pixels)",
-          "spacing_y": "integer - Khoảng cách dọc giữa các máy tính (pixels)"
+          "columns": "integer - Number of computers horizontally (X axis)",
+          "rows": "integer - Number of computers vertically (Y axis)",
+          "spacing_x": "integer - Horizontal spacing between computers (pixels)",
+          "spacing_y": "integer - Vertical spacing between computers (pixels)"
         }
       }
       ```
-      Cấu trúc này cho phép tạo lưới máy tính với số lượng tối đa là `columns` × `rows` máy tính. Mỗi máy tính sẽ được định vị bằng tọa độ `pos_x` và `pos_y` trong bảng `computers`.
+      This structure allows for creating a grid with a maximum of `columns` × `rows` computers. Each computer will be positioned using the coordinates `pos_x` and `pos_y` in the `computers` table.
     * `created_at`: TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
     * `updated_at`: TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-* **Bảng `computers`:** (Cập nhật)
+* **`computers` Table:** (Updated)
     * `id`: SERIAL PRIMARY KEY
-    * `name`: VARCHAR(255) (NULL ban đầu)
-    * `room_id`: INTEGER REFERENCES rooms(id) ON DELETE SET NULL (NULL ban đầu)
+    * `name`: VARCHAR(255) (Initially NULL)
+    * `room_id`: INTEGER REFERENCES rooms(id) ON DELETE SET NULL (Initially NULL)
     * `pos_x`: INTEGER DEFAULT 0
     * `pos_y`: INTEGER DEFAULT 0
     * `ip_address`: VARCHAR(50)
     * `unique_agent_id`: VARCHAR(255) UNIQUE NOT NULL
-    * `agent_token_hash`: VARCHAR(255) (NULL cho đến khi đăng ký thành công)
+    * `agent_token_hash`: VARCHAR(255) (NULL until successful registration)
     * `last_update`: TIMESTAMPTZ
     * `os_info`: VARCHAR(255)
     * `total_ram`: BIGINT
     * `cpu_info`: VARCHAR(255)
-    * `errors`: JSONB DEFAULT '[]'::jsonb (Lưu một mảng các đối tượng lỗi. Ví dụ cấu trúc một đối tượng lỗi: `{ "id": "uuid", "type": "string", "description": "text", "reported_by": "integer (user_id)", "reported_at": "timestamp", "status": "string ('active'|'resolved')", "resolved_by": "integer (user_id, optional)", "resolved_at": "timestamp (optional)" }`)
+    * `errors`: JSONB DEFAULT '[]'::jsonb (Stores an array of error objects. Example structure of an error object: `{ "id": "uuid", "type": "string", "description": "text", "reported_by": "integer (user_id)", "reported_at": "timestamp", "status": "string ('active'|'resolved')", "resolved_by": "integer (user_id, optional)", "resolved_at": "timestamp (optional)" }`)
     * `created_at`: TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
     * `updated_at`: TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-* **Bảng `user_room_assignments`:**
+* **`user_room_assignments` Table:**
     * `user_id`: INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
     * `room_id`: INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE
     * PRIMARY KEY (user_id, room_id)
 
 #
 
-(Phần này giữ nguyên đặc tả chi tiết như đã trình bày ở phiên bản trước)
+(This section maintains the detailed specifications as presented in the previous version)
 
 ##
 * `POST /api/auth/login`
@@ -77,13 +75,13 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
 
 ##
 * `POST /api/users`
-* `GET /api/users` (Hỗ trợ lọc: `?role=`, `?is_active=`, `?username=`)
+* `GET /api/users` (Supports filtering: `?role=`, `?is_active=`, `?username=`)
 * `PUT /api/users/:id`
 * `DELETE /api/users/:id`
 
 ##
 * `POST /api/rooms` (Admin Only)
-* `GET /api/rooms` (Hỗ trợ lọc: `?name=`, `?assigned_user_id=`)
+* `GET /api/rooms` (Supports filtering: `?name=`, `?assigned_user_id=`)
 * `GET /api/rooms/:id`
 * `PUT /api/rooms/:id` (Admin Only)
 * `DELETE /api/rooms/:id` (Admin Only)
@@ -94,13 +92,13 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
 * `GET /api/rooms/:roomId/users`
 
 ##
-* `GET /api/computers` (Hỗ trợ lọc: `?room_id=`, `?name=`, `?status=`, `?has_errors=`, `?unique_agent_id=`)
-* `PUT /api/computers/:id` (Admin cập nhật chi tiết)
-* `GET /api/computers/:id` (Response bao gồm `errors`)
-* `DELETE /api/computers/:id` (Admin xóa computer)
-* `POST /api/computers/:id/command` (Gửi yêu cầu thực thi lệnh)
-* `POST /api/computers/:id/errors` (Báo cáo lỗi)
-* `PUT /api/computers/:computerId/errors/:errorId/resolve` (Xử lý lỗi - Admin Only)
+* `GET /api/computers` (Supports filtering: `?room_id=`, `?name=`, `?status=`, `?has_errors=`, `?unique_agent_id=`)
+* `PUT /api/computers/:id` (Admin updates details)
+* `GET /api/computers/:id` (Response includes `errors`)
+* `DELETE /api/computers/:id` (Admin deletes computer)
+* `POST /api/computers/:id/command` (Send command execution request)
+* `POST /api/computers/:id/errors` (Report error)
+* `PUT /api/computers/:computerId/errors/:errorId/resolve` (Resolve error - Admin Only)
 
 ##
 * `POST /api/agent/identify`
@@ -110,196 +108,196 @@ Dự án này nhằm mục đích tạo ra một ứng dụng web để quản l
 
 #
 
-##
-1.  **Agent:** Gửi HTTP `POST /api/agent/identify` với body `{"unique_agent_id": "agent-uuid-123"}`.
+## 
+1.  **Agent:** Sends HTTP `POST /api/agent/identify` with body `{"unique_agent_id": "agent-uuid-123"}`.
 2.  **Backend:**
-    * Nhận request, trích xuất `unique_agent_id`.
-    * Truy vấn DB: `SELECT id, agent_token_hash FROM computers WHERE unique_agent_id = 'agent-uuid-123'`.
-    * **Nếu không tìm thấy record hoặc `agent_token_hash` là NULL:** (Agent mới)
-        * Tạo mã MFA (vd: 6 chữ số, dùng `otp-generator`): `mfaCode = '123456'`.
-        * Tạo timestamp hết hạn: `expiresAt = Date.now() + 5 * 60 * 1000` (5 phút).
-        * Lưu tạm vào cache/map: `mfaStore['agent-uuid-123'] = { code: '123456', expires: expiresAt }`. (Cần cơ chế dọn dẹp cache hết hạn).
-        * Lấy danh sách các `socket.id` của Admin đang online (từ `socket.data.role`).
-        * Gửi sự kiện WS `admin:new_agent_mfa` tới từng Admin: `socket.emit('admin:new_agent_mfa', { unique_agent_id: 'agent-uuid-123', mfaCode: '123456' })`.
-        * Trả về HTTP Response (200 OK): `{"status": "mfa_required"}`.
-    * **Nếu tìm thấy record và `agent_token_hash` không NULL:** (Agent đã đăng ký)
-        * Trả về HTTP Response (200 OK): `{"status": "authentication_required"}`.
-3.  **Agent:** Nhận response.
-    * Nếu `status === 'mfa_required'`: Hiển thị yêu cầu nhập MFA cho người dùng.
-4.  **(Người dùng):** Nhận mã MFA từ Admin, nhập vào Agent.
-5.  **Agent:** Gửi HTTP `POST /api/agent/verify-mfa` với body `{"unique_agent_id": "agent-uuid-123", "mfaCode": "user_entered_code"}`.
+    * Receives request, extracts `unique_agent_id`.
+    * Queries DB: `SELECT id, agent_token_hash FROM computers WHERE unique_agent_id = 'agent-uuid-123'`.
+    * **If record not found or `agent_token_hash` is NULL:** (New Agent)
+        * Creates MFA code (e.g., 6 digits, using `otp-generator`): `mfaCode = '123456'`.
+        * Creates expiration timestamp: `expiresAt = Date.now() + 5 * 60 * 1000` (5 minutes).
+        * Temporarily stores in cache/map: `mfaStore['agent-uuid-123'] = { code: '123456', expires: expiresAt }`. (Requires cleanup mechanism for expired cache).
+        * Gets list of online Admin `socket.id`s (from `socket.data.role`).
+        * Sends WS event `admin:new_agent_mfa` to each Admin: `socket.emit('admin:new_agent_mfa', { unique_agent_id: 'agent-uuid-123', mfaCode: '123456' })`.
+        * Returns HTTP Response (200 OK): `{"status": "mfa_required"}`.
+    * **If record found and `agent_token_hash` is not NULL:** (Registered Agent)
+        * Returns HTTP Response (200 OK): `{"status": "authentication_required"}`.
+3.  **Agent:** Receives response.
+    * If `status === 'mfa_required'`: Shows MFA input request to user.
+4.  **(User):** Receives MFA code from Admin, enters it into Agent.
+5.  **Agent:** Sends HTTP `POST /api/agent/verify-mfa` with body `{"unique_agent_id": "agent-uuid-123", "mfaCode": "user_entered_code"}`.
 6.  **Backend:**
-    * Nhận request, trích xuất `unique_agent_id`, `mfaCode`.
-    * Lấy thông tin MFA đã lưu: `storedMfa = mfaStore['agent-uuid-123']`.
-    * Kiểm tra:
-        * `storedMfa` có tồn tại không?
-        * `Date.now() < storedMfa.expires?` (Còn hạn không?)
-        * `mfaCode === storedMfa.code?` (Mã có khớp không?)
-    * **Nếu tất cả đều hợp lệ:**
-        * Xóa MFA khỏi cache: `delete mfaStore['agent-uuid-123']`.
-        * Tạo Agent Token mới (chuỗi ngẫu nhiên an toàn): `plainToken = crypto.randomBytes(32).toString('hex')`.
-        * Hash token: `hashedToken = await bcrypt.hash(plainToken, 10)`.
-        * Tạo record mới trong DB: `INSERT INTO computers (unique_agent_id, agent_token_hash, ...) VALUES ('agent-uuid-123', hashedToken, ...)` hoặc `UPDATE computers SET agent_token_hash = hashedToken WHERE unique_agent_id = 'agent-uuid-123'` (nếu record đã tồn tại nhưng chưa có hash). Lấy `computerId` mới/hiện có.
-        * Gửi sự kiện WS `admin:agent_registered` tới tất cả Admin: `{ unique_agent_id: 'agent-uuid-123', computerId: newComputerId }`.
-        * Trả về HTTP Response (200 OK): `{"agentToken": plainToken}`.
-    * **Nếu không hợp lệ:**
-        * Trả về HTTP Response (vd: 401 Unauthorized): `{"message": "Invalid or expired MFA code"}`.
-7.  **Agent:** Nhận response.
-    * Nếu thành công (có `agentToken`): Lưu token vào nơi an toàn (`tokenManager.save(agentToken)`). Tiến hành kết nối WebSocket.
-    * Nếu thất bại: Báo lỗi cho người dùng.
+    * Receives request, extracts `unique_agent_id`, `mfaCode`.
+    * Gets stored MFA info: `storedMfa = mfaStore['agent-uuid-123']`.
+    * Checks:
+        * Does `storedMfa` exist?
+        * `Date.now() < storedMfa.expires?` (Is it still valid?)
+        * `mfaCode === storedMfa.code?` (Does the code match?)
+    * **If all valid:**
+        * Removes MFA from cache: `delete mfaStore['agent-uuid-123']`.
+        * Creates new Agent Token (secure random string): `plainToken = crypto.randomBytes(32).toString('hex')`.
+        * Hashes token: `hashedToken = await bcrypt.hash(plainToken, 10)`.
+        * Creates new record in DB: `INSERT INTO computers (unique_agent_id, agent_token_hash, ...) VALUES ('agent-uuid-123', hashedToken, ...)` or `UPDATE computers SET agent_token_hash = hashedToken WHERE unique_agent_id = 'agent-uuid-123'` (if record exists but has no hash). Gets new/existing `computerId`.
+        * Sends WS event `admin:agent_registered` to all Admins: `{ unique_agent_id: 'agent-uuid-123', computerId: newComputerId }`.
+        * Returns HTTP Response (200 OK): `{"agentToken": plainToken}`.
+    * **If invalid:**
+        * Returns HTTP Response (e.g., 401 Unauthorized): `{"message": "Invalid or expired MFA code"}`.
+7.  **Agent:** Receives response.
+    * If successful (has `agentToken`): Saves token to secure location (`tokenManager.save(agentToken)`). Proceeds to establish WebSocket connection.
+    * If failed: Reports error to user.
 
 ##
 
-* **HTTP Request (vd: Status Update):**
-    1.  **Agent:** Gửi `PUT /api/agent/status` với header `X-Agent-ID: agent-uuid-123`, `Authorization: Bearer <saved_agent_token>`, và body `{ cpu, ram }`.
+* **HTTP Request (e.g., Status Update):**
+    1.  **Agent:** Sends `PUT /api/agent/status` with headers `X-Agent-ID: agent-uuid-123`, `Authorization: Bearer <saved_agent_token>`, and body `{ cpu, ram }`.
     2.  **Backend (Middleware `authAgentToken`):**
-        * Trích xuất `unique_agent_id` từ `X-Agent-ID` và `token` từ `Authorization`.
-        * Kiểm tra sự tồn tại của cả hai header.
-        * Truy vấn DB: `SELECT id, agent_token_hash FROM computers WHERE unique_agent_id = 'agent-uuid-123'`.
-        * Nếu không tìm thấy record hoặc `agent_token_hash` là NULL: Trả lỗi 401 Unauthorized.
-        * So sánh token: `isValid = await bcrypt.compare(token, record.agent_token_hash)`.
-        * Nếu `isValid`: Gắn thông tin vào request: `req.computerId = record.id`, `req.unique_agent_id = 'agent-uuid-123'`. Gọi `next()`.
-        * Nếu không `isValid`: Trả lỗi 401 Unauthorized.
-    3.  **Backend (Controller):** Nếu middleware `next()` được gọi, xử lý request (cập nhật status).
+        * Extracts `unique_agent_id` from `X-Agent-ID` and `token` from `Authorization`.
+        * Checks existence of both headers.
+        * Queries DB: `SELECT id, agent_token_hash FROM computers WHERE unique_agent_id = 'agent-uuid-123'`.
+        * If record not found or `agent_token_hash` is NULL: Returns 401 Unauthorized error.
+        * Compares token: `isValid = await bcrypt.compare(token, record.agent_token_hash)`.
+        * If `isValid`: Attaches info to request: `req.computerId = record.id`, `req.unique_agent_id = 'agent-uuid-123'`. Calls `next()`.
+        * If not `isValid`: Returns 401 Unauthorized error.
+    3.  **Backend (Controller):** If middleware calls `next()`, processes the request (updates status).
 
 * **WebSocket Connection:**
-    1.  **Agent:** Kết nối tới WS server. Ngay sau khi connect, gửi event `agent:authenticate_ws` với payload `{ unique_agent_id: 'agent-uuid-123', agentToken: '<saved_agent_token>' }`.
+    1.  **Agent:** Connects to WS server. Immediately after connecting, sends event `agent:authenticate_ws` with payload `{ unique_agent_id: 'agent-uuid-123', agentToken: '<saved_agent_token>' }`.
     2.  **Backend (WS Handler/Middleware):**
-        * Nhận event `agent:authenticate_ws`.
-        * Truy vấn DB: `SELECT id, agent_token_hash FROM computers WHERE unique_agent_id = 'agent-uuid-123'`.
-        * Nếu không tìm thấy hoặc hash là NULL: Gửi event `agent:ws_auth_failed`, ngắt kết nối.
-        * So sánh token: `isValid = await bcrypt.compare(agentToken, record.agent_token_hash)`.
-        * Nếu `isValid`:
-            * Lưu thông tin vào socket: `socket.data.computerId = record.id`, `socket.data.unique_agent_id = 'agent-uuid-123'`, `socket.data.isAuthenticated = true`.
-            * Lưu `socket.id` vào map: `agentCommandSockets[record.id] = socket.id`.
-            * Gửi event `agent:ws_auth_success`.
-            * (Trigger Luồng Cập nhật Online Status)
-        * Nếu không `isValid`: Gửi event `agent:ws_auth_failed`, ngắt kết nối.
+        * Receives event `agent:authenticate_ws`.
+        * Queries DB: `SELECT id, agent_token_hash FROM computers WHERE unique_agent_id = 'agent-uuid-123'`.
+        * If not found or hash is NULL: Sends event `agent:ws_auth_failed`, disconnects.
+        * Compares token: `isValid = await bcrypt.compare(agentToken, record.agent_token_hash)`.
+        * If `isValid`:
+            * Stores info in socket: `socket.data.computerId = record.id`, `socket.data.unique_agent_id = 'agent-uuid-123'`, `socket.data.isAuthenticated = true`.
+            * Saves `socket.id` to map: `agentCommandSockets[record.id] = socket.id`.
+            * Sends event `agent:ws_auth_success`.
+            * (Triggers Online Status Update Flow)
+        * If not `isValid`: Sends event `agent:ws_auth_failed`, disconnects.
 
 ##
-1.  **Agent:** Định kỳ (30s), dùng `psutil` lấy `cpu = psutil.cpu_percent()`, `ram = psutil.virtual_memory().percent`.
-2.  **Agent:** Gửi HTTP `PUT /api/agent/status` với header xác thực và body `{"cpu": cpu, "ram": ram}`.
+1.  **Agent:** Periodically (30s), uses `psutil` to get `cpu = psutil.cpu_percent()`, `ram = psutil.virtual_memory().percent`.
+2.  **Agent:** Sends HTTP `PUT /api/agent/status` with authentication headers and body `{"cpu": cpu, "ram": ram}`.
 3.  **Backend (HTTP Controller):**
-    * Middleware `authAgentToken` xác thực thành công, `req.computerId` đã có.
-    * Lấy `cpu`, `ram` từ `req.body`.
-    * Cập nhật cache: `agentRealtimeStatus[req.computerId] = { ...agentRealtimeStatus[req.computerId], cpu: cpu, ram: ram }`.
-    * Cập nhật DB: `UPDATE computers SET last_update = NOW() WHERE id = req.computerId`.
-    * Trả về HTTP Response (204 No Content).
-4.  **Backend (Logic sau HTTP Response hoặc dùng event emitter):**
-    * Lấy trạng thái online hiện tại: `isOnline = !!agentCommandSockets[req.computerId]`.
-    * Lấy `roomId` của computer từ DB (hoặc cache nếu có).
-    * Lấy dữ liệu đầy đủ từ cache: `currentStatus = agentRealtimeStatus[req.computerId]`.
-    * Tạo payload: `{ computerId: req.computerId, status: isOnline ? 'online' : 'offline', cpu: currentStatus.cpu, ram: currentStatus.ram }`.
-    * Broadcast qua WS tới room của Frontend: `io.to('room_' + roomId).emit('computer:status_updated', payload)`.
+    * Middleware `authAgentToken` successfully authenticates, `req.computerId` is available.
+    * Gets `cpu`, `ram` from `req.body`.
+    * Updates cache: `agentRealtimeStatus[req.computerId] = { ...agentRealtimeStatus[req.computerId], cpu: cpu, ram: ram }`.
+    * Updates DB: `UPDATE computers SET last_update = NOW() WHERE id = req.computerId`.
+    * Returns HTTP Response (204 No Content).
+4.  **Backend (Logic after HTTP Response or using event emitter):**
+    * Gets current online status: `isOnline = !!agentCommandSockets[req.computerId]`.
+    * Gets computer's `roomId` from DB (or cache if available).
+    * Gets complete data from cache: `currentStatus = agentRealtimeStatus[req.computerId]`.
+    * Creates payload: `{ computerId: req.computerId, status: isOnline ? 'online' : 'offline', cpu: currentStatus.cpu, ram: currentStatus.ram }`.
+    * Broadcasts via WS to Frontend room: `io.to('room_' + roomId).emit('computer:status_updated', payload)`.
 
 ##
 
-* **Online (Khi WS xác thực thành công):**
-    1.  **Backend (WS Handler):** Sau khi `bcrypt.compare` thành công trong `agent:authenticate_ws`:
-        * Lấy `computerId`, `roomId`.
-        * Lấy CPU/RAM cuối cùng từ cache (nếu có): `lastCpu = agentRealtimeStatus[computerId]?.cpu`, `lastRam = agentRealtimeStatus[computerId]?.ram`.
-        * Cập nhật cache: `agentRealtimeStatus[computerId] = { status: 'online', cpu: lastCpu, ram: lastRam }`.
-        * Lưu `socket.id`: `agentCommandSockets[computerId] = socket.id`.
-        * Broadcast WS: `io.to('room_' + roomId).emit('computer:status_updated', { computerId: computerId, status: 'online', cpu: lastCpu, ram: lastRam })`.
+* **Online (When WS authentication succeeds):**
+    1.  **Backend (WS Handler):** After successful `bcrypt.compare` in `agent:authenticate_ws`:
+        * Gets `computerId`, `roomId`.
+        * Gets last CPU/RAM from cache (if available): `lastCpu = agentRealtimeStatus[computerId]?.cpu`, `lastRam = agentRealtimeStatus[computerId]?.ram`.
+        * Updates cache: `agentRealtimeStatus[computerId] = { status: 'online', cpu: lastCpu, ram: lastRam }`.
+        * Saves `socket.id`: `agentCommandSockets[computerId] = socket.id`.
+        * Broadcasts WS: `io.to('room_' + roomId).emit('computer:status_updated', { computerId: computerId, status: 'online', cpu: lastCpu, ram: lastRam })`.
 
-* **Offline (Khi WS ngắt kết nối):**
+* **Offline (When WS connection is lost):**
     1.  **Backend (WS disconnect Handler):**
-        * Tìm `computerId` tương ứng với `socket.id` vừa ngắt kết nối (duyệt qua `agentCommandSockets`).
-        * Nếu tìm thấy `computerId`:
-            * Xóa khỏi map: `delete agentCommandSockets[computerId]`.
-            * Lấy CPU/RAM cuối cùng từ cache: `lastCpu = agentRealtimeStatus[computerId]?.cpu`, `lastRam = agentRealtimeStatus[computerId]?.ram`.
-            * Cập nhật cache: `agentRealtimeStatus[computerId] = { status: 'offline', cpu: lastCpu, ram: lastRam }`.
-            * Lấy `roomId`.
-            * Broadcast WS: `io.to('room_' + roomId).emit('computer:status_updated', { computerId: computerId, status: 'offline', cpu: lastCpu, ram: lastRam })`.
-            * (Tùy chọn) Cập nhật `status_db` trong DB.
+        * Finds `computerId` corresponding to the disconnected `socket.id` (iterates through `agentCommandSockets`).
+        * If `computerId` is found:
+            * Removes from map: `delete agentCommandSockets[computerId]`.
+            * Gets last CPU/RAM from cache: `lastCpu = agentRealtimeStatus[computerId]?.cpu`, `lastRam = agentRealtimeStatus[computerId]?.ram`.
+            * Updates cache: `agentRealtimeStatus[computerId] = { status: 'offline', cpu: lastCpu, ram: lastRam }`.
+            * Gets `roomId`.
+            * Broadcasts WS: `io.to('room_' + roomId).emit('computer:status_updated', { computerId: computerId, status: 'offline', cpu: lastCpu, ram: lastRam })`.
+            * (Optional) Updates `status_db` in DB.
 
 ##
-1.  **Frontend:** User nhập lệnh, nhấn gửi -> Gọi `POST /api/computers/:id/command` với body `{"command": "user_command"}` và header JWT.
+1.  **Frontend:** User enters command, clicks send -> Calls `POST /api/computers/:id/command` with body `{"command": "user_command"}` and JWT header.
 2.  **Backend (HTTP Controller):**
-    * Xác thực JWT, kiểm tra quyền truy cập room cho computer `:id`.
-    * Tạo `commandId = uuid.v4()`.
-    * Lấy `userId` từ JWT.
-    * Lưu tạm: `pendingCommands[commandId] = { userId: userId, computerId: computerId }` (Dùng cache/Redis với TTL).
-    * Tìm `socketId = agentCommandSockets[computerId]`.
-    * **Nếu `socketId` tồn tại:**
-        * Gửi sự kiện WS tới Agent: `io.to(socketId).emit('command:execute', { command: "user_command", commandId: commandId })`.
-        * Trả về HTTP Response (202 Accepted): `{"message": "Command sent", "commandId": commandId}`.
-    * **Nếu `socketId` không tồn tại (Agent offline WS):**
-        * Trả về HTTP Response (vd: 503 Service Unavailable): `{"message": "Agent is offline"}`.
+    * Authenticates JWT, checks access rights to room for computer `:id`.
+    * Creates `commandId = uuid.v4()`.
+    * Gets `userId` from JWT.
+    * Temporarily stores: `pendingCommands[commandId] = { userId: userId, computerId: computerId }` (Uses cache/Redis with TTL).
+    * Finds `socketId = agentCommandSockets[computerId]`.
+    * **If `socketId` exists:**
+        * Sends WS event to Agent: `io.to(socketId).emit('command:execute', { command: "user_command", commandId: commandId })`.
+        * Returns HTTP Response (202 Accepted): `{"message": "Command sent", "commandId": commandId}`.
+    * **If `socketId` doesn't exist (Agent offline WS):**
+        * Returns HTTP Response (e.g., 503 Service Unavailable): `{"message": "Agent is offline"}`.
 3.  **Agent (WS Handler):**
-    * Nhận sự kiện `command:execute` với `{ command, commandId }`.
-    * Thực thi lệnh: `result = subprocess.run(...)`.
-    * Lấy `stdout`, `stderr`, `exitCode` từ `result`.
+    * Receives event `command:execute` with `{ command, commandId }`.
+    * Executes command: `result = subprocess.run(...)`.
+    * Gets `stdout`, `stderr`, `exitCode` from `result`.
 4.  **Agent (HTTP Client):**
-    * Gửi HTTP `POST /api/agent/command-result` với header xác thực Agent Token và body `{"commandId": commandId, "stdout": ..., "stderr": ..., "exitCode": ...}`.
+    * Sends HTTP `POST /api/agent/command-result` with Agent Token authentication headers and body `{"commandId": commandId, "stdout": ..., "stderr": ..., "exitCode": ...}`.
 5.  **Backend (HTTP Controller):**
-    * Xác thực Agent Token.
-    * Lấy `commandId` và kết quả từ `req.body`.
-    * Tìm thông tin lệnh đang chờ: `commandInfo = pendingCommands[commandId]`.
-    * **Nếu tìm thấy `commandInfo`:**
-        * Lấy `userId = commandInfo.userId`, `computerId = commandInfo.computerId`.
-        * Xóa khỏi bộ nhớ tạm: `delete pendingCommands[commandId]`.
-        * Gửi sự kiện WS tới User: `io.to('user_' + userId).emit('command:completed', { commandId: commandId, computerId: computerId, result: { stdout: ..., stderr: ..., exitCode: ... } })`.
-        * Trả về HTTP Response (204 No Content) cho Agent.
-    * **Nếu không tìm thấy `commandInfo` (lỗi hoặc đã xử lý):**
-        * Trả về HTTP Response (vd: 404 Not Found) cho Agent.
+    * Authenticates Agent Token.
+    * Gets `commandId` and results from `req.body`.
+    * Finds pending command info: `commandInfo = pendingCommands[commandId]`.
+    * **If `commandInfo` found:**
+        * Gets `userId = commandInfo.userId`, `computerId = commandInfo.computerId`.
+        * Removes from temporary storage: `delete pendingCommands[commandId]`.
+        * Sends WS event to User: `io.to('user_' + userId).emit('command:completed', { commandId: commandId, computerId: computerId, result: { stdout: ..., stderr: ..., exitCode: ... } })`.
+        * Returns HTTP Response (204 No Content) to Agent.
+    * **If `commandInfo` not found (error or already processed):**
+        * Returns HTTP Response (e.g., 404 Not Found) to Agent.
 
 ##
-1.  **Frontend:** User nhập `type`/`description` -> Gọi `POST /api/computers/:id/errors` với body `{ type, description }` và header JWT.
+1.  **Frontend:** User enters `type`/`description` -> Calls `POST /api/computers/:id/errors` with body `{ type, description }` and JWT header.
 2.  **Backend (HTTP Controller):**
-    * Xác thực JWT, kiểm tra quyền truy cập room.
-    * Lấy `userId` từ JWT.
-    * Tạo `errorId = uuid.v4()`.
-    * Tạo object lỗi: `newError = { id: errorId, type, description, reported_by: userId, reported_at: new Date(), status: 'active' }`.
-    * Cập nhật DB (PostgreSQL ví dụ): `UPDATE computers SET errors = errors || jsonb_build_object('id', errorId, ...) WHERE id = computerId`. (Cần cú pháp chính xác để nối vào mảng JSONB).
-    * Trả về HTTP Response (201 Created) với `newError`.
+    * Authenticates JWT, checks room access permission.
+    * Gets `userId` from JWT.
+    * Creates `errorId = uuid.v4()`.
+    * Creates error object: `newError = { id: errorId, type, description, reported_by: userId, reported_at: new Date(), status: 'active' }`.
+    * Updates DB (PostgreSQL example): `UPDATE computers SET errors = errors || jsonb_build_object('id', errorId, ...) WHERE id = computerId`. (Requires exact syntax to append to JSONB array).
+    * Returns HTTP Response (201 Created) with `newError`.
 
 ##
-1.  **Frontend (Admin):** Nhấn nút Resolve cho lỗi `errorId` trên máy `computerId` -> Gọi `PUT /api/computers/:computerId/errors/:errorId/resolve` với header JWT Admin.
+1.  **Frontend (Admin):** Clicks Resolve button for error `errorId` on computer `computerId` -> Calls `PUT /api/computers/:computerId/errors/:errorId/resolve` with Admin JWT header.
 2.  **Backend (HTTP Controller):**
-    * Xác thực JWT, kiểm tra quyền Admin.
-    * Lấy `adminId` từ JWT.
-    * Đọc mảng `errors` từ computer `:computerId`.
-    * Tìm `index` của object lỗi có `id === errorId` và `status === 'active'` trong mảng.
-    * **Nếu tìm thấy tại `index`:**
-        * Tạo object lỗi đã cập nhật: `updatedError = { ...errors[index], status: 'resolved', resolved_by: adminId, resolved_at: new Date() }`.
-        * Cập nhật mảng trong DB (PostgreSQL ví dụ): `UPDATE computers SET errors = jsonb_set(errors, '{index}', to_jsonb(updatedError)) WHERE id = computerId`. (Cần cú pháp chính xác để cập nhật phần tử trong mảng JSONB).
-        * Trả về HTTP Response (200 OK) với `updatedError`.
-    * **Nếu không tìm thấy:** Trả về lỗi 404 Not Found.
+    * Authenticates JWT, checks Admin permission.
+    * Gets `adminId` from JWT.
+    * Reads `errors` array from computer `:computerId`.
+    * Finds `index` of error object with `id === errorId` and `status === 'active'` in the array.
+    * **If found at `index`:**
+        * Creates updated error object: `updatedError = { ...errors[index], status: 'resolved', resolved_by: adminId, resolved_at: new Date() }`.
+        * Updates array in DB (PostgreSQL example): `UPDATE computers SET errors = jsonb_set(errors, '{index}', to_jsonb(updatedError)) WHERE id = computerId`. (Requires exact syntax to update element in JSONB array).
+        * Returns HTTP Response (200 OK) with `updatedError`.
+    * **If not found:** Returns 404 Not Found error.
 
 #
 
-* **Thiết lập dự án Node.js:** Sử dụng Express.js, cài đặt các thư viện cần thiết (Sequelize/Mongoose, Socket.IO, bcrypt, JWT, node-cache/Redis client, otp-generator, ...). Cấu trúc thư mục (routes, controllers, models, services, middleware, config...).
-* **Kết nối Database:** Cấu hình và khởi tạo kết nối tới PostgreSQL/MongoDB. Định nghĩa Models/Schemas tương ứng với thiết kế DB.
-* **Triển khai Xác thực & Phân quyền:** API đăng nhập, tạo JWT. Middleware xác thực JWT cho Frontend. Middleware kiểm tra quyền Admin. Middleware kiểm tra quyền truy cập Room. Middleware xác thực Agent Token cho API Agent.
-* **Triển khai API Routes:** Tạo routers/controllers cho các nhóm chức năng (auth, users, rooms, computers, agent, errors). Áp dụng middleware phù hợp. Viết logic xử lý trong controllers. Triển khai logic lọc trong các API GET danh sách.
-* **Triển khai WebSocket (Socket.IO):** Tích hợp server. Middleware xác thực WS (JWT Frontend, Agent Token Agent). Quản lý kết nối, rooms (user, room, admin). Quản lý map `agentCommandSockets`. Quản lý cache `agentRealtimeStatus`. Xử lý/Phát các sự kiện WS liên quan (authenticate, disconnect, subscribe, status update, command, MFA, registration).
-* **Triển khai Logic Nghiệp vụ:** Xử lý đăng ký MFA. Xử lý cập nhật trạng thái CPU/RAM từ HTTP và broadcast WS. Xử lý gửi/nhận lệnh (HTTP request -> WS send -> Agent execute -> HTTP result -> WS notify). Xử lý báo cáo lỗi (tạo object, cập nhật JSONB). Xử lý/xóa lỗi (tìm, cập nhật JSONB).
-* **Logging và Error Handling:** Tích hợp hệ thống logging (vd: Winston), xây dựng cơ chế xử lý lỗi tập trung.
+* **Node.js Project Setup:** Use Express.js, install required libraries (Sequelize/Mongoose, Socket.IO, bcrypt, JWT, node-cache/Redis client, otp-generator, ...). Directory structure (routes, controllers, models, services, middleware, config...).
+* **Database Connection:** Configure and initialize connection to PostgreSQL/MongoDB. Define Models/Schemas corresponding to DB design.
+* **Authentication & Authorization Implementation:** Login API, create JWT. JWT authentication middleware for Frontend. Admin permission check middleware. Room access permission check middleware. Agent Token authentication middleware for Agent APIs.
+* **API Routes Implementation:** Create routers/controllers for functional groups (auth, users, rooms, computers, agent, errors). Apply appropriate middleware. Write processing logic in controllers. Implement filtering logic in GET list APIs.
+* **WebSocket Implementation (Socket.IO):** Integrate server. WS authentication middleware (JWT Frontend, Agent Token Agent). Manage connections, rooms (user, room, admin). Manage `agentCommandSockets` map. Manage `agentRealtimeStatus` cache. Handle/Emit WS events (authenticate, disconnect, subscribe, status update, command, MFA, registration).
+* **Business Logic Implementation:** Handle MFA registration. Handle CPU/RAM status updates from HTTP and WS broadcast. Handle command sending/receiving (HTTP request -> WS send -> Agent execute -> HTTP result -> WS notify). Handle error reporting (create object, update JSONB). Handle error resolution (find, update JSONB).
+* **Logging and Error Handling:** Integrate logging system (e.g., Winston), build centralized error handling mechanism.
 
 #
 
-* **Thiết lập dự án React:** Sử dụng Vite, cài đặt React Router DOM, Axios, Socket.IO Client, Tailwind CSS.
-* **Cấu trúc thư mục:** Sắp xếp components, pages, services, contexts, hooks, assets...
-* **Routing:** Thiết lập các routes (login, dashboard, rooms, room detail, admin pages...). Sử dụng ProtectedRoute.
-* **Xác thực (Authentication):** Trang Login, gọi API login. Lưu JWT. Auth Context. Gửi JWT header. Xử lý đăng xuất.
-* **Giao tiếp Backend:** Sử dụng Axios/fetch gọi API HTTP. Thiết lập kết nối Socket.IO, xác thực WS. Socket Context.
-* **Quản lý State:** Context API (Auth, Socket), useState/useReducer hoặc Zustand/Redux.
-* **Xây dựng Components & Pages:** Tạo UI components tái sử dụng. Xây dựng pages. Component RoomDetailPage/ComputerCard/ComputerIcon hiển thị chỉ báo lỗi. Trang chi tiết Computer hiển thị danh sách lỗi. Component Form Báo Lỗi. Chức năng Xử lý Lỗi (Admin). Thêm Bộ lọc (Filters) vào các trang danh sách.
-* **Xử lý WebSocket Events:** Lắng nghe `computer:status_updated` (cập nhật online/offline, CPU/RAM, chỉ báo lỗi nếu cần). Lắng nghe `command:completed`. Admin lắng nghe `admin:new_agent_mfa`, `admin:agent_registered`.
-* **Styling:** Sử dụng Tailwind CSS.
+* **React Project Setup:** Use Vite, install React Router DOM, Axios, Socket.IO Client, Tailwind CSS.
+* **Directory Structure:** Organize components, pages, services, contexts, hooks, assets...
+* **Routing:** Set up routes (login, dashboard, rooms, room detail, admin pages...). Use ProtectedRoute.
+* **Authentication:** Login page, call login API. Store JWT. Auth Context. Send JWT header. Handle logout.
+* **Backend Communication:** Use Axios/fetch for HTTP API calls. Set up Socket.IO connection, WS authentication. Socket Context.
+* **State Management:** Context API (Auth, Socket), useState/useReducer or Zustand/Redux.
+* **Build Components & Pages:** Create reusable UI components. Build pages. RoomDetailPage/ComputerCard/ComputerIcon component showing error indicators. Computer detail page displaying error list. Error Reporting Form component. Error Resolution feature (Admin). Add Filters to list pages.
+* **Handle WebSocket Events:** Listen for `computer:status_updated` (update online/offline, CPU/RAM, error indicators if needed). Listen for `command:completed`. Admin listens for `admin:new_agent_mfa`, `admin:agent_registered`.
+* **Styling:** Use Tailwind CSS.
 
 #
 
-* **Thiết lập dự án Python:** Môi trường ảo, `requirements.txt` (`requests`, `websocket-client`/`python-socketio`, `psutil`, `keyring` (tùy chọn)).
-* **Khởi động & Cấu hình:** Đọc cấu hình (địa chỉ server). Tạo/Đọc `unique_agent_id`. Kiểm tra Agent Token đã lưu.
-* **Luồng Đăng ký / Xác thực ban đầu (HTTP):** Sử dụng `requests.post` để gọi `/api/agent/identify`. Xử lý response. Nếu `mfa_required`, dùng `input()` để nhận mã, gọi `requests.post` tới `/api/agent/verify-mfa`. Nếu thành công, lưu token nhận được bằng module `tokenManager`.
-* **Kết nối và Xác thực WebSocket:** Sử dụng `websocket.create_connection` (từ `websocket-client`) hoặc client của `python-socketio`. Sau khi kết nối, gửi message/event `agent:authenticate_ws` chứa `unique_agent_id` và `agentToken`. Xử lý phản hồi xác thực từ server. Chạy luồng nhận tin nhắn WS trong một thread riêng biệt.
-* **Gửi Trạng thái định kỳ (HTTP):** Sử dụng `threading.Timer` hoặc `schedule` để lặp lại. Dùng `psutil.cpu_percent()` và `psutil.virtual_memory().percent` để lấy thông tin. Gửi `requests.put` tới `/api/agent/status` với header xác thực.
-* **Lắng nghe và Thực thi Lệnh (WebSocket):** Trong thread lắng nghe WS, khi nhận được message/event `command:execute`, lấy `command` và `commandId`. Sử dụng `subprocess.run(command, shell=True, capture_output=True, text=True, check=False)` để thực thi. Lưu ý `shell=True` tiềm ẩn rủi ro bảo mật, cần xem xét kỹ hoặc tìm cách thực thi an toàn hơn nếu có thể. Thu thập `stdout`, `stderr`, `returncode`.
-* **Gửi Kết quả Lệnh (HTTP):** Sau khi lệnh xong, gọi `requests.post` tới `/api/agent/command-result` với kết quả và header xác thực.
-* **Lưu trữ Token An toàn:** Sử dụng file với quyền truy cập hạn chế, hoặc thư viện `keyring` để tích hợp với hệ thống quản lý credential của OS.
-* **Xử lý Lỗi và Kết nối lại:** Sử dụng `try...except` để bắt lỗi mạng (HTTP, WS), lỗi thực thi lệnh. Triển khai logic kết nối lại WS với cơ chế backoff. Sử dụng module `logging` để ghi log.
-* **Đóng gói:** Sử dụng `pyinstaller your_script.py --onefile --noconsole` (cho agent chạy nền) để tạo file `.exe`.
+* **.NET Project Setup:** Use .NET 9.0 LTS, create console or Windows Service project. Install required libraries (`Serilog`, `SocketIOClient.Net`, `System.Management`, `Microsoft.Extensions.Hosting`, `Polly`, `System.CommandLine`).
+* **Startup & Configuration:** Read configuration (server address). Create/Read `unique_agent_id`. Check stored Agent Token.
+* **Initial Registration / Authentication Flow (HTTP):** Use `HttpClient` to call `/api/agent/identify`. Process response. If `mfa_required`, use console to get code, call `/api/agent/verify-mfa`. If successful, store received token using Windows DPAPI.
+* **WebSocket Connection and Authentication:** Use `SocketIOClient.Net`. After connecting, send event `agent:authenticate_ws` containing `unique_agent_id` and `agentToken`. Process authentication response from server. Run WS message receiving flow in a separate thread.
+* **Send Periodic Status (HTTP):** Use `System.Threading.Timer` for repetition. Use `System.Management` to get system information. Send `HttpClient.PutAsync` to `/api/agent/status` with authentication headers.
+* **Listen for and Execute Commands (WebSocket):** In WS listening thread, when receiving `command:execute` event, get `command` and `commandId`. Use `System.Diagnostics.Process` to execute. Collect `stdout`, `stderr`, `exitCode`.
+* **Send Command Results (HTTP):** After command completion, call `HttpClient.PostAsync` to `/api/agent/command-result` with results and authentication headers.
+* **Secure Token Storage:** Use Windows DPAPI to store token.
+* **Error Handling and Reconnection:** Use `try...catch` to catch network errors (HTTP, WS), command execution errors. Implement WS reconnection logic with backoff mechanism. Use `Serilog` for logging.
+* **Packaging:** Use Inno Setup to create installer. Register Windows Service to ensure continuous operation.
 
-Kế hoạch này cung cấp lộ trình chi tiết qua từng giai đoạn phát triển. Thứ tự và mức độ ưu tiên của các chức năng có thể được điều chỉnh tùy theo yêu cầu thực tế.
+This plan provides a detailed roadmap through each development phase. The order and priority of features can be adjusted based on actual requirements.

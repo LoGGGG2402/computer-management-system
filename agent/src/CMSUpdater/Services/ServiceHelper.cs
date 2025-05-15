@@ -6,7 +6,7 @@ using System.Runtime.Versioning;
 namespace CMSUpdater.Services;
 
 /// <summary>
-/// Lớp tiện ích tương tác với Windows Service Control Manager (SCM) cho Updater
+/// Utility class for interacting with Windows Service Control Manager (SCM) for Updater
 /// </summary>
 [SupportedOSPlatform("windows")]
 public class ServiceHelper(ILogger logger)
@@ -14,100 +14,100 @@ public class ServiceHelper(ILogger logger)
     private readonly ILogger _logger = logger;
     
     /// <summary>
-    /// Khởi động service agent
+    /// Start the agent service
     /// </summary>
-    /// <param name="serviceName">Tên service</param>
-    /// <exception cref="InvalidOperationException">Thrown khi không thể khởi động service</exception>
+    /// <param name="serviceName">Service name</param>
+    /// <exception cref="InvalidOperationException">Thrown when unable to start the service</exception>
     [SupportedOSPlatform("windows")]
     public void StartAgentService(string serviceName)
     {
         try
         {
             using var service = new ServiceController(serviceName);
-            _logger.LogInformation("Đang khởi động service {ServiceName}...", serviceName);
+            _logger.LogInformation("Starting service {ServiceName}...", serviceName);
             
             var timeout = TimeSpan.FromSeconds(30);
             
             if (service.Status != ServiceControllerStatus.Running)
             {
-                // Bật service nếu nó không đang chạy
+                // Start service if it's not running
                 if (service.Status == ServiceControllerStatus.Stopped)
                 {
                     service.Start();
                     service.WaitForStatus(ServiceControllerStatus.Running, timeout);
-                    _logger.LogInformation("Service {ServiceName} đã được khởi động thành công.", serviceName);
+                    _logger.LogInformation("Service {ServiceName} started successfully.", serviceName);
                 }
                 else
                 {
-                    // Nếu service đang ở trạng thái khác (StartPending, PausePending, etc.), chờ nó hoàn thành
-                    _logger.LogWarning("Service {ServiceName} đang ở trạng thái {Status}. Đang chờ...", 
+                    // If service is in another state (StartPending, PausePending, etc.), wait for it to complete
+                    _logger.LogWarning("Service {ServiceName} is in state {Status}. Waiting...", 
                         serviceName, service.Status);
                     service.WaitForStatus(ServiceControllerStatus.Running, timeout);
-                    _logger.LogInformation("Service {ServiceName} đã chuyển sang trạng thái Running.", serviceName);
+                    _logger.LogInformation("Service {ServiceName} transitioned to Running state.", serviceName);
                 }
             }
             else
             {
-                _logger.LogInformation("Service {ServiceName} đã đang chạy.", serviceName);
+                _logger.LogInformation("Service {ServiceName} is already running.", serviceName);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Không thể khởi động service {ServiceName}.", serviceName);
-            throw new InvalidOperationException($"Không thể khởi động service {serviceName}.", ex);
+            _logger.LogError(ex, "Unable to start service {ServiceName}.", serviceName);
+            throw new InvalidOperationException($"Unable to start service {serviceName}.", ex);
         }
     }
     
     /// <summary>
-    /// Dừng service agent
+    /// Stop the agent service
     /// </summary>
-    /// <param name="serviceName">Tên service</param>
-    /// <exception cref="InvalidOperationException">Thrown khi không thể dừng service</exception>
+    /// <param name="serviceName">Service name</param>
+    /// <exception cref="InvalidOperationException">Thrown when unable to stop the service</exception>
     [SupportedOSPlatform("windows")]
     public void StopAgentService(string serviceName)
     {
         try
         {
             using var service = new ServiceController(serviceName);
-            _logger.LogInformation("Đang dừng service {ServiceName}...", serviceName);
+            _logger.LogInformation("Stopping service {ServiceName}...", serviceName);
             
             var timeout = TimeSpan.FromSeconds(30);
             
             if (service.Status != ServiceControllerStatus.Stopped)
             {
-                // Dừng service nếu nó đang chạy
+                // Stop service if it's running
                 if (service.Status == ServiceControllerStatus.Running)
                 {
                     service.Stop();
                     service.WaitForStatus(ServiceControllerStatus.Stopped, timeout);
-                    _logger.LogInformation("Service {ServiceName} đã được dừng thành công.", serviceName);
+                    _logger.LogInformation("Service {ServiceName} stopped successfully.", serviceName);
                 }
                 else
                 {
-                    // Nếu service đang ở trạng thái khác (StopPending, PausePending, etc.), chờ nó hoàn thành
-                    _logger.LogWarning("Service {ServiceName} đang ở trạng thái {Status}. Đang chờ...", 
+                    // If service is in another state (StopPending, PausePending, etc.), wait for it to complete
+                    _logger.LogWarning("Service {ServiceName} is in state {Status}. Waiting...", 
                         serviceName, service.Status);
                     service.WaitForStatus(ServiceControllerStatus.Stopped, timeout);
-                    _logger.LogInformation("Service {ServiceName} đã chuyển sang trạng thái Stopped.", serviceName);
+                    _logger.LogInformation("Service {ServiceName} transitioned to Stopped state.", serviceName);
                 }
             }
             else
             {
-                _logger.LogInformation("Service {ServiceName} đã dừng.", serviceName);
+                _logger.LogInformation("Service {ServiceName} is already stopped.", serviceName);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Không thể dừng service {ServiceName}.", serviceName);
-            throw new InvalidOperationException($"Không thể dừng service {serviceName}.", ex);
+            _logger.LogError(ex, "Unable to stop service {ServiceName}.", serviceName);
+            throw new InvalidOperationException($"Unable to stop service {serviceName}.", ex);
         }
     }
     
     /// <summary>
-    /// Kiểm tra service agent có đang chạy hay không
+    /// Check if the agent service is running
     /// </summary>
-    /// <param name="serviceName">Tên service</param>
-    /// <returns>true nếu service đang chạy; ngược lại là false</returns>
+    /// <param name="serviceName">Service name</param>
+    /// <returns>true if service is running; false otherwise</returns>
     [SupportedOSPlatform("windows")]
     public bool IsAgentServiceRunning(string serviceName)
     {
@@ -115,28 +115,28 @@ public class ServiceHelper(ILogger logger)
         {
             using var service = new ServiceController(serviceName);
             var isRunning = service.Status == ServiceControllerStatus.Running;
-            _logger.LogDebug("Service {ServiceName} có trạng thái: {Status}. Đang chạy: {IsRunning}", 
+            _logger.LogDebug("Service {ServiceName} status: {Status}. Running: {IsRunning}", 
                 serviceName, service.Status, isRunning);
             return isRunning;
         }
         catch (InvalidOperationException)
         {
-            // Service không tồn tại
-            _logger.LogWarning("Service {ServiceName} không tồn tại.", serviceName);
+            // Service doesn't exist
+            _logger.LogWarning("Service {ServiceName} does not exist.", serviceName);
             return false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Lỗi khi kiểm tra trạng thái của service {ServiceName}.", serviceName);
+            _logger.LogError(ex, "Error checking status of service {ServiceName}.", serviceName);
             return false;
         }
     }
     
     /// <summary>
-    /// Kiểm tra một process có còn tồn tại không
+    /// Check if a process is still running
     /// </summary>
-    /// <param name="processId">ID của process cần kiểm tra</param>
-    /// <returns>true nếu process còn tồn tại; ngược lại là false</returns>
+    /// <param name="processId">ID of the process to check</param>
+    /// <returns>true if process exists; false otherwise</returns>
     [SupportedOSPlatform("windows")]
     public bool IsProcessRunning(int processId)
     {
@@ -147,13 +147,13 @@ public class ServiceHelper(ILogger logger)
         }
         catch (ArgumentException)
         {
-            // Process không tồn tại
+            // Process doesn't exist
             return false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Lỗi khi kiểm tra process {ProcessId}.", processId);
+            _logger.LogError(ex, "Error checking process {ProcessId}.", processId);
             return false;
         }
     }
-} 
+}

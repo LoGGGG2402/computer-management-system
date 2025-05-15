@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 namespace CMSAgent.Cli.Commands
 {
     /// <summary>
-    /// Lớp xử lý lệnh stop để dừng CMSAgent service.
+    /// Class for handling the stop command to stop the CMSAgent service.
     /// </summary>
     public class StopCommand
     {
@@ -18,11 +18,11 @@ namespace CMSAgent.Cli.Commands
         private readonly string _serviceName;
 
         /// <summary>
-        /// Khởi tạo một instance mới của StopCommand.
+        /// Initializes a new instance of StopCommand.
         /// </summary>
-        /// <param name="logger">Logger để ghi nhật ký.</param>
-        /// <param name="serviceUtils">Tiện ích quản lý Windows Service.</param>
-        /// <param name="options">Cấu hình agent.</param>
+        /// <param name="logger">Logger for logging events.</param>
+        /// <param name="serviceUtils">Utility for managing Windows Services.</param>
+        /// <param name="options">Agent configuration.</param>
         public StopCommand(
             ILogger<StopCommand> logger,
             ServiceUtils serviceUtils,
@@ -34,51 +34,51 @@ namespace CMSAgent.Cli.Commands
         }
 
         /// <summary>
-        /// Thực thi lệnh stop.
+        /// Executes the stop command.
         /// </summary>
-        /// <returns>Mã lỗi của lệnh.</returns>
+        /// <returns>Exit code of the command.</returns>
         public async Task<int> ExecuteAsync()
         {
-            Console.WriteLine($"Đang dừng dịch vụ {_serviceName}...");
+            Console.WriteLine($"Stopping service {_serviceName}...");
 
             try
             {
-                // Kiểm tra nếu service đã được cài đặt
+                // Check if service is installed
                 if (!_serviceUtils.IsServiceInstalled(_serviceName))
                 {
-                    Console.WriteLine($"Dịch vụ {_serviceName} chưa được cài đặt.");
+                    Console.WriteLine($"Service {_serviceName} is not installed.");
                     return (int)CliExitCodes.ServiceNotInstalled;
                 }
 
-                // Kiểm tra nếu service đang chạy
+                // Check if service is running
                 if (!_serviceUtils.IsServiceRunning(_serviceName))
                 {
-                    Console.WriteLine($"Dịch vụ {_serviceName} đã dừng rồi.");
+                    Console.WriteLine($"Service {_serviceName} is already stopped.");
                     return (int)CliExitCodes.Success;
                 }
 
-                // Dừng service
+                // Stop service
                 bool stopSuccess = await _serviceUtils.StopServiceAsync(_serviceName);
                 if (stopSuccess)
                 {
-                    Console.WriteLine($"Dịch vụ {_serviceName} đã dừng thành công.");
+                    Console.WriteLine($"Service {_serviceName} has been stopped successfully.");
                     return (int)CliExitCodes.Success;
                 }
                 else
                 {
-                    Console.Error.WriteLine($"Không thể dừng dịch vụ {_serviceName}.");
+                    Console.Error.WriteLine($"Unable to stop service {_serviceName}.");
                     return (int)CliExitCodes.ServiceOperationFailed;
                 }
             }
             catch (UnauthorizedAccessException)
             {
-                Console.Error.WriteLine("Lỗi: Cần quyền Administrator để dừng dịch vụ. Vui lòng chạy lại lệnh với quyền Administrator.");
+                Console.Error.WriteLine("Error: Administrator privileges are required to stop the service. Please run the command as Administrator.");
                 return (int)CliExitCodes.MissingPermissions;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Lỗi khi dừng dịch vụ: {ex.Message}");
-                _logger.LogError(ex, "Lỗi khi dừng dịch vụ {ServiceName}", _serviceName);
+                Console.Error.WriteLine($"Error stopping service: {ex.Message}");
+                _logger.LogError(ex, "Error stopping service {ServiceName}", _serviceName);
                 return (int)CliExitCodes.GeneralError;
             }
         }
