@@ -94,7 +94,7 @@ namespace CMSAgent.Commands.Handlers
                 {
                     if (e.Data != null)
                     {
-                        outputBuilder.AppendLine(e.Data);
+                        _ = outputBuilder.AppendLine(e.Data);
                     }
                 };
 
@@ -102,14 +102,14 @@ namespace CMSAgent.Commands.Handlers
                 {
                     if (e.Data != null)
                     {
-                        errorBuilder.AppendLine(e.Data);
+                        _ = errorBuilder.AppendLine(e.Data);
                     }
                 };
 
                 _logger.LogDebug("Starting process {FileName} with parameters: {Arguments}", 
                     process.StartInfo.FileName, process.StartInfo.Arguments);
-                
-                process.Start();
+
+                _ = process.Start();
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
 

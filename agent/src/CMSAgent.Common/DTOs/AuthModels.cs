@@ -38,7 +38,7 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// Error message or additional information.
         /// </summary>
-        public required string message { get; set; } = string.Empty;
+        public string message { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -75,18 +75,13 @@ namespace CMSAgent.Common.DTOs
         public required string status { get; set; } = string.Empty;
 
         /// <summary>
-        /// Agent ID (returned only on success).
-        /// </summary>
-        public required string agentId { get; set; } = string.Empty;
-
-        /// <summary>
         /// Authentication token (returned only on success and token renewal).
         /// </summary>
-        public required string agentToken { get; set; } = string.Empty;
+        public string agentToken { get; set; } = string.Empty;
 
         /// <summary>
         /// Error message or additional information.
         /// </summary>
-        public required string message { get; set; } = string.Empty;
+        public string message { get; set; } = string.Empty;
     }
 }

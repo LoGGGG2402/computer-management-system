@@ -28,7 +28,7 @@ namespace CMSAgent.Monitoring
             {
                 _cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
                 // Read the first value (always returns 0)
-                _cpuCounter.NextValue();
+                _ = _cpuCounter.NextValue();
 
                 // Get total RAM
                 _ramTotal = GetTotalRam();
@@ -139,7 +139,7 @@ namespace CMSAgent.Monitoring
                     }
                 };
 
-                process.Start();
+                _ = process.Start();
                 string output = process.StandardOutput.ReadToEnd();
                 process.WaitForExit();
 
@@ -205,7 +205,7 @@ namespace CMSAgent.Monitoring
                     }
                 };
 
-                process.Start();
+                _ = process.Start();
                 string output = process.StandardOutput.ReadToEnd();
                 process.WaitForExit();
 

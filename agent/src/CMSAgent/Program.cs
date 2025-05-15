@@ -11,7 +11,7 @@ using CMSAgent.Commands;
 using CMSAgent.Commands.Handlers;
 using CMSAgent.Common.Models;
 using CMSAgent.Common.Logging;
-using CMSAgent.Communication;
+using CMSAgent.Common.Interfaces;
 using CMSAgent.Configuration;
 using CMSAgent.Core;
 using CMSAgent.Monitoring;
@@ -27,6 +27,7 @@ using Polly.Extensions.Http;
 using Polly.Registry;
 using Polly.Timeout;
 using Serilog;
+using CMSAgent.Communication;
 
 namespace CMSAgent
 {
@@ -55,9 +56,10 @@ namespace CMSAgent
                 {
                     return cliResult; // CLI command has been processed
                 }
-
-                // If no CLI command, run the service
+                
+                // Run the host (either as a Windows Service or console app)
                 await host.RunAsync();
+                
                 return 0;
             }
             catch (Exception ex)
@@ -148,9 +150,13 @@ namespace CMSAgent
                 .Build();
 
             // Initialize logger with combined configuration
-            Log.Logger = (Serilog.ILogger)LoggingSetup.CreateLogger(combinedConfig);
+            var logger = LoggingSetup.CreateLogger(combinedConfig);
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Information()
+                .WriteTo.Console()
+                .CreateLogger();
 
-            Log.Information("Application {ApplicationName} v{Version} is starting...", _applicationName, _version);
+            logger.LogInformation("Application {ApplicationName} v{Version} is starting...", _applicationName, _version);
         }
 
         public static IHostBuilder CreateHostBuilder(string[] args)
@@ -160,14 +166,14 @@ namespace CMSAgent
                 .ConfigureAppConfiguration((hostingContext, config) =>
                 {
                     var env = hostingContext.HostingEnvironment;
-                    
-                    config.SetBasePath(env.ContentRootPath)
+
+                    _ = config.SetBasePath(env.ContentRootPath)
                           .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                           .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: true, reloadOnChange: true)
                           .AddEnvironmentVariables("CMSAGENT_");
 
                     // Add project information to configuration
-                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    _ = config.AddInMemoryCollection(new Dictionary<string, string?>
                     {
                         {"Application:Name", _applicationName},
                         {"Application:Version", _version},
@@ -181,7 +187,7 @@ namespace CMSAgent
                     var dataPath = Path.Combine(env.ContentRootPath, dataDir);
                     if (!Directory.Exists(dataPath))
                     {
-                        Directory.CreateDirectory(dataPath);
+                        _ = Directory.CreateDirectory(dataPath);
                     }
                     
                     // Determine if should run as a Windows Service
@@ -193,7 +199,7 @@ namespace CMSAgent
             // Configure Windows Service if needed
             if (_shouldRunAsWindowsService && OperatingSystem.IsWindows())
             {
-                hostBuilder.UseWindowsService(options =>
+                _ = hostBuilder.UseWindowsService(options =>
                 {
                     options.ServiceName = _applicationName;
                 });
@@ -205,15 +211,15 @@ namespace CMSAgent
         private static void ConfigureServices(HostBuilderContext context, IServiceCollection services)
         {
             // Register configuration from appsettings
-            services.AddOptions<CmsAgentSettingsOptions>()
+            _ = services.AddOptions<CmsAgentSettingsOptions>()
                 .Bind(context.Configuration.GetSection("CMSAgent"))
                 .ValidateDataAnnotations();
-            
-            services.AddOptions<AgentSpecificSettingsOptions>()
+
+            _ = services.AddOptions<AgentSpecificSettingsOptions>()
                 .Bind(context.Configuration.GetSection("CMSAgent:AgentSpecificSettings"))
                 .ValidateDataAnnotations();
-            
-            services.AddOptions<HttpClientSettingsOptions>()
+
+            _ = services.AddOptions<HttpClientSettingsOptions>()
                 .Bind(context.Configuration.GetSection("CMSAgent:HttpClientSettings"))
                 .ValidateDataAnnotations();
 
@@ -259,12 +265,12 @@ namespace CMSAgent
             policyRegistry.Add("HttpRetryPolicy", httpRetryPolicy);
             policyRegistry.Add("HttpCircuitBreakerPolicy", httpCircuitBreakerPolicy);
             policyRegistry.Add("HttpTimeoutPolicy", httpTimeoutPolicy);
-            
+
             // Add policy registry to services
-            services.AddSingleton<IReadOnlyPolicyRegistry<string>>(policyRegistry);
+            _ = services.AddSingleton<IReadOnlyPolicyRegistry<string>>(policyRegistry);
 
             // Register HttpClient with Polly
-            services.AddHttpClient(HttpClientNames.ApiClient, (serviceProvider, client) =>
+            _ = services.AddHttpClient(HttpClientNames.ApiClient, (serviceProvider, client) =>
             {
                 var options = serviceProvider.GetRequiredService<IOptions<CmsAgentSettingsOptions>>();
                 client.BaseAddress = new Uri(options.Value.ServerUrl);
@@ -276,17 +282,17 @@ namespace CMSAgent
             .AddPolicyHandler(httpTimeoutPolicy);
 
             // Register singleton services
-            services.AddSingleton<StateManager>();
-            services.AddSingleton<ConfigLoader>();
-            services.AddSingleton<HttpClientWrapper>();
-            services.AddSingleton<WebSocketConnector>();
-            services.AddSingleton<SystemMonitor>();
-            services.AddSingleton<HardwareInfoCollector>();
-            services.AddSingleton<UpdateHandler>();
-            services.AddSingleton<CommandExecutor>();
-            
+            _ = services.AddSingleton<StateManager>();
+            _ = services.AddSingleton<IConfigLoader, ConfigLoader>();
+            _ = services.AddSingleton<IHttpClientWrapper, HttpClientWrapper>();
+            _ = services.AddSingleton<IWebSocketConnector, WebSocketConnector>();
+            _ = services.AddSingleton<SystemMonitor>();
+            _ = services.AddSingleton<HardwareInfoCollector>();
+            _ = services.AddSingleton<UpdateHandler>();
+            _ = services.AddSingleton<CommandExecutor>();
+
             // Register singleton mutex
-            services.AddSingleton<SingletonMutex>(provider =>
+            _ = services.AddSingleton<SingletonMutex>(provider =>
             {
                 var options = provider.GetRequiredService<IOptions<CmsAgentSettingsOptions>>();
                 var logger = provider.GetRequiredService<ILogger<SingletonMutex>>();
@@ -294,24 +300,25 @@ namespace CMSAgent
             });
 
             // Register Command Handlers
-            services.AddTransient<ConsoleCommandHandler>();
-            services.AddTransient<SystemActionCommandHandler>();
+            _ = services.AddTransient<ConsoleCommandHandler>();
+            _ = services.AddTransient<SystemActionCommandHandler>();
 
             // Register CLI Handlers
-            services.AddTransient<ServiceUtils>();
-            services.AddTransient<ConfigureCommand>();
-            services.AddTransient<StartCommand>();
-            services.AddTransient<StopCommand>();
-            services.AddTransient<UninstallCommand>();
-            services.AddTransient<DebugCommand>();
-            services.AddSingleton<CliHandler>();
+            _ = services.AddTransient<ServiceUtils>();
+            _ = services.AddTransient<ConfigureCommand>();
+            _ = services.AddTransient<StartCommand>();
+            _ = services.AddTransient<StopCommand>();
+            _ = services.AddTransient<UninstallCommand>();
+            _ = services.AddTransient<DebugCommand>();
+            _ = services.AddTransient<InstallCommand>();
+            _ = services.AddSingleton<CliHandler>();
 
             // Register main service
-            services.AddHostedService<AgentService>();
+            _ = services.AddHostedService<AgentService>();
 
-            // Replace with
-            services.AddSingleton<TokenProtector>();
-            services.AddSingleton<CommandHandlerFactory>();
+            // Security and other services
+            _ = services.AddSingleton<TokenProtector>();
+            _ = services.AddSingleton<CommandHandlerFactory>();
         }
     }
 

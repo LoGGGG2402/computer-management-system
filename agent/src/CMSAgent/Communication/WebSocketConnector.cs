@@ -39,7 +39,7 @@ namespace CMSAgent.Communication
         StateManager stateManager,
         IOptions<WebSocketSettingsOptions> options,
         CommandExecutor commandExecutor,
-        UpdateHandler updateHandler) : IWebSocketConnector, IDisposable
+        UpdateHandler updateHandler) : IWebSocketConnector
     {
         private readonly ILogger<WebSocketConnector> _logger = logger;
         private readonly ConfigLoader _configLoader = configLoader;

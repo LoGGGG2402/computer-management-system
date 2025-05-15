@@ -7,7 +7,7 @@ namespace CMSAgent.Core
     /// <summary>
     /// Class that ensures only one instance of the application is running at a time.
     /// </summary>
-    public class SingletonMutex : IDisposable
+    public class SingletonMutex
     {
         private readonly string _mutexName;
         private readonly Mutex _mutex;
@@ -55,58 +55,6 @@ namespace CMSAgent.Core
         public bool IsSingleInstance()
         {
             return _ownsHandle;
-        }
-
-        /// <summary>
-        /// Tries to acquire ownership of the mutex.
-        /// </summary>
-        /// <param name="timeout">Maximum wait time to acquire the lock.</param>
-        /// <returns>True if the lock was acquired, otherwise False.</returns>
-        public bool TryAcquire(TimeSpan timeout)
-        {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-
-            if (_ownsHandle)
-            {
-                return true;
-            }
-
-            try
-            {
-                _ownsHandle = _mutex.WaitOne(timeout);
-                
-                if (_ownsHandle)
-                {
-                    _logger.LogInformation("Acquired singleton lock with name {MutexName} after waiting", _mutexName);
-                }
-                else
-                {
-                    _logger.LogWarning("Unable to acquire singleton lock after waiting {Timeout}ms", timeout.TotalMilliseconds);
-                }
-                
-                return _ownsHandle;
-            }
-            catch (AbandonedMutexException)
-            {
-                // Another instance ended unexpectedly without releasing the mutex
-                _logger.LogWarning("Detected abandoned mutex, taking ownership");
-                _ownsHandle = true;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error while trying to acquire singleton lock");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Releases resources.
-        /// </summary>
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
         }
 
         /// <summary>

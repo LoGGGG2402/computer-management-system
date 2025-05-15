@@ -5,7 +5,7 @@ using CMSAgent.Common.Enums;
 using CMSAgent.Common.Models;
 using CMSAgent.Common.DTOs;
 using CMSAgent.Configuration;
-using CMSAgent.Communication;
+using CMSAgent.Common.Interfaces;
 using CMSAgent.Monitoring;
 using CMSAgent.Commands;
 using CMSAgent.Update;
@@ -27,7 +27,7 @@ namespace CMSAgent.Core
     {
         private readonly StateManager _stateManager;
         private readonly ConfigLoader _configLoader;
-        private readonly WebSocketConnector _webSocketConnector;
+        private readonly IWebSocketConnector _webSocketConnector;
         private readonly SystemMonitor _systemMonitor;
         private readonly CommandExecutor _commandExecutor;
         private readonly UpdateHandler _updateHandler;
@@ -36,7 +36,7 @@ namespace CMSAgent.Core
         private readonly AgentSpecificSettingsOptions _agentSettings;
         private readonly IHostApplicationLifetime _applicationLifetime;
         private readonly HardwareInfoCollector _hardwareInfoCollector;
-        private readonly HttpClientWrapper _httpClient;
+        private readonly IHttpClientWrapper _httpClient;
 
         private Timer? _statusReportTimer;
         private Timer? _updateCheckTimer;
@@ -73,7 +73,7 @@ namespace CMSAgent.Core
             ILogger<AgentService> logger,
             StateManager stateManager,
             ConfigLoader configLoader,
-            WebSocketConnector webSocketConnector,
+            IWebSocketConnector webSocketConnector,
             SystemMonitor systemMonitor,
             CommandExecutor commandExecutor,
             UpdateHandler updateHandler,
@@ -82,7 +82,7 @@ namespace CMSAgent.Core
             IOptions<AgentSpecificSettingsOptions> agentSettings,
             IHostApplicationLifetime applicationLifetime,
             HardwareInfoCollector hardwareInfoCollector,
-            HttpClientWrapper httpClient) 
+            IHttpClientWrapper httpClient) 
             : base(logger)
         {
             _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
@@ -127,7 +127,7 @@ namespace CMSAgent.Core
 
             // Load runtime configuration
             var config = await _configLoader.LoadRuntimeConfigAsync();
-            if (config == null || string.IsNullOrEmpty(config.AgentId) || string.IsNullOrEmpty(config.AgentTokenEncrypted))
+            if (config == null || string.IsNullOrEmpty(_configLoader.GetAgentId()) || string.IsNullOrEmpty(config.AgentTokenEncrypted))
             {
                 _logger.LogError("Valid configuration not found. Please run the configure command first.");
                 _stateManager.SetState(AgentState.CONFIGURATION_ERROR);
@@ -260,7 +260,7 @@ namespace CMSAgent.Core
             {
                 try
                 {
-                    await Task.WhenAny(_commandProcessingTask, Task.Delay(5000, cancellationToken));
+                    _ = await Task.WhenAny(_commandProcessingTask, Task.Delay(5000, cancellationToken));
                 }
                 catch { }
             }
@@ -383,7 +383,7 @@ namespace CMSAgent.Core
                 
                 // Load runtime configuration
                 var config = await _configLoader.LoadRuntimeConfigAsync();
-                if (config == null || string.IsNullOrEmpty(config.AgentId) || config.RoomConfig == null)
+                if (config == null || string.IsNullOrEmpty(_configLoader.GetAgentId()) || config.RoomConfig == null)
                 {
                     _logger.LogError("Cannot re-identify: Missing runtime configuration information");
                     return false;
@@ -392,7 +392,7 @@ namespace CMSAgent.Core
                 // Prepare payload for identify request
                 var identifyPayload = new AgentIdentifyRequest
                 {
-                    agentId = config.AgentId,
+                    agentId = _configLoader.GetAgentId(),
                     positionInfo = new PositionInfo
                     {
                         roomName = config.RoomConfig.RoomName,
@@ -406,7 +406,7 @@ namespace CMSAgent.Core
                 var response = await _httpClient.PostAsync<AgentIdentifyRequest, AgentIdentifyResponse>(
                     Common.Constants.ApiRoutes.Identify,
                     identifyPayload,
-                    config.AgentId,
+                    _configLoader.GetAgentId(),
                     null);
                 
                 if (response != null && response.status == "success" && !string.IsNullOrEmpty(response.agentToken))
@@ -483,9 +483,9 @@ namespace CMSAgent.Core
                     _logger.LogError("Cannot send hardware information: Missing agent authentication information");
                     return;
                 }
-                
+
                 // Send information to server
-                await _httpClient.PostAsync<CMSAgent.Common.DTOs.HardwareInfoPayload, object>(
+                _ = await _httpClient.PostAsync<HardwareInfoPayload, object>(
                     Common.Constants.ApiRoutes.HardwareInfo,
                     hardwareInfo,
                     agentId,
@@ -580,9 +580,9 @@ namespace CMSAgent.Core
             try
             {
                 _logger.LogDebug("Refreshing agent token...");
-                
+
                 // Perform token refresh (change token and try to re-identify)
-                await AttemptReIdentifyAndConnectAsync(true);
+                _ = await AttemptReIdentifyAndConnectAsync(true);
             }
             catch (Exception ex)
             {
@@ -679,7 +679,7 @@ namespace CMSAgent.Core
             _logger.LogInformation("Found {Count} offline error reports.", errorFiles.Length);
 
             var runtimeConfig = await _configLoader.LoadRuntimeConfigAsync();
-            if (runtimeConfig == null || string.IsNullOrEmpty(runtimeConfig.AgentId) || string.IsNullOrEmpty(runtimeConfig.AgentTokenEncrypted))
+            if (runtimeConfig == null || string.IsNullOrEmpty(_configLoader.GetAgentId()) || string.IsNullOrEmpty(runtimeConfig.AgentTokenEncrypted))
             {
                 _logger.LogError("Cannot load runtime configuration or token to send offline error reports. Error reports will be retained.");
                 return;
@@ -702,17 +702,6 @@ namespace CMSAgent.Core
                  return;
             }
 
-            // Fix how ServerUrl is obtained
-            string serverUrl = _configLoader.Settings?.ServerUrl ?? string.Empty;
-            if (string.IsNullOrEmpty(serverUrl))
-            {
-                _logger.LogError("ServerUrl not configured in appsettings.json. Cannot send offline error reports.");
-                return;
-            }
-            // Use constant from ApiRoutes
-            string reportErrorEndpoint = $"{serverUrl.TrimEnd('/')}{Common.Constants.ApiRoutes.ReportError}";
-
-
             foreach (var errorFile in errorFiles)
             {
                 try
@@ -722,9 +711,9 @@ namespace CMSAgent.Core
 
                     if (errorPayload != null)
                     {
-                        _logger.LogDebug("Sending error report from file: {ErrorFile} to endpoint {ReportErrorEndpoint}", errorFile, reportErrorEndpoint);
+                        _logger.LogDebug("Sending error report from file: {ErrorFile}", errorFile);
                         
-                        await _httpClient.PostAsync(reportErrorEndpoint, errorPayload, runtimeConfig.AgentId, agentToken);
+                        await _httpClient.PostAsync<ErrorReportPayload, object>(Common.Constants.ApiRoutes.ReportError, errorPayload, _configLoader.GetAgentId(), agentToken);
                         
                         _logger.LogInformation("Successfully sent error report from file: {ErrorFile}. Deleting file...", errorFile);
                         File.Delete(errorFile);

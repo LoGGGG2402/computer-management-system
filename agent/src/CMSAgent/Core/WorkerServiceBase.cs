@@ -27,8 +27,8 @@ namespace CMSAgent.Core
             try
             {
                 await InitializeAsync(stoppingToken);
-                
-                stoppingToken.Register(() => 
+
+                _ = stoppingToken.Register(() =>
                 {
                     _isStopping = true;
                     _logger.LogInformation("Service {ServiceName} is stopping...", GetType().Name);

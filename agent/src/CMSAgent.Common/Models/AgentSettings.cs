@@ -21,6 +21,12 @@ namespace CMSAgent.Common.Models
         public required string ServerUrl { get; set; }
 
         /// <summary>
+        /// API path for agent endpoints
+        /// </summary>
+        [Required]
+        public required string ApiPath { get; set; }
+
+        /// <summary>
         /// Version of the agent
         /// </summary>
         [Required]

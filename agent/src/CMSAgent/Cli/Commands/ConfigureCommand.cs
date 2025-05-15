@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using CMSAgent.Common.Constants;
@@ -91,7 +92,7 @@ namespace CMSAgent.Cli.Commands
                 }
 
                 // Update room configuration
-                runtimeConfig.RoomConfig = new Common.Models.RoomConfig
+                runtimeConfig.RoomConfig = new RoomConfig
                 {
                     RoomName = roomName,
                     PosX = posX,
@@ -115,12 +116,14 @@ namespace CMSAgent.Cli.Commands
 
                 try
                 {
+                    Console.WriteLine($"Runtime config: {runtimeConfig.AgentId}");
+                    Console.WriteLine($"Identify request: {JsonSerializer.Serialize(identifyRequest)}");
                     // Send registration request to server
                     var response = await _httpClient.PostAsync<AgentIdentifyRequest, AgentIdentifyResponse?>(
                         ApiRoutes.Identify, 
                         identifyRequest,
-                        string.Empty,  // agentId not needed for identify API
-                        null   // token not available at this step
+                        runtimeConfig.AgentId,
+                        null
                     );
 
                     // Process server response

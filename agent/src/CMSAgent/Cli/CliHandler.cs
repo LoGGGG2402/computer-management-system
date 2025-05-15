@@ -72,6 +72,19 @@ namespace CMSAgent.Cli
             });
             _rootCommand.AddCommand(configureCmd);
 
+            // Install command
+            var installCmd = new Command("install", "Cài đặt CMSAgent như một Windows Service");
+                
+            
+            installCmd.SetHandler(async (InvocationContext context) => 
+            {
+                IsCliCommandExecuted = true;
+                var cmd = _serviceProvider.GetRequiredService<InstallCommand>();
+                Environment.ExitCode = await cmd.ExecuteAsync();
+            });
+            
+            _rootCommand.AddCommand(installCmd);
+
             // Start command
             var startCmd = new Command("start", "Start the CMSAgent Windows service");
             startCmd.SetHandler(async (InvocationContext context) => 

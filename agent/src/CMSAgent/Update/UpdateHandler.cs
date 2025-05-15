@@ -170,7 +170,7 @@ namespace CMSAgent.Update
                 try
                 {
                     // Create temporary directory for download
-                    Directory.CreateDirectory(tempDirectory);
+                    _ = Directory.CreateDirectory(tempDirectory);
 
                     // Path to the update file
                     downloadPath = Path.Combine(tempDirectory, $"CMSUpdater_{updateInfo.version}.zip");
@@ -228,7 +228,7 @@ namespace CMSAgent.Update
 
                     // Create temporary extraction directory for the update package (containing both new agent and updater)
                     string extractedUpdateDir = Path.Combine(Path.GetTempPath(), $"cmsagent_update_extracted_{DateTime.UtcNow.Ticks}");
-                    Directory.CreateDirectory(extractedUpdateDir);
+                    _ = Directory.CreateDirectory(extractedUpdateDir);
 
                     try
                     {
@@ -315,7 +315,7 @@ namespace CMSAgent.Update
             }
             finally
             {
-                _updateLock.Release();
+                _ = _updateLock.Release();
             }
         }
 
@@ -336,7 +336,7 @@ namespace CMSAgent.Update
                 var hashStringBuilder = new StringBuilder();
                 foreach (byte b in hash)
                 {
-                    hashStringBuilder.Append(b.ToString("x2"));
+                    _ = hashStringBuilder.Append(b.ToString("x2"));
                 }
                 string actualChecksum = hashStringBuilder.ToString();
 
@@ -420,7 +420,7 @@ namespace CMSAgent.Update
                     updaterExePath, processStartInfo.Arguments);
 
                 // Start CMSUpdater
-                Process.Start(processStartInfo);
+                _ = Process.Start(processStartInfo);
 
                 // Wait a moment to ensure CMSUpdater has started
                 await Task.Delay(1000);
@@ -455,7 +455,7 @@ namespace CMSAgent.Update
             // Create destination directory if it doesn't exist
             if (!Directory.Exists(destDirName))
             {
-                Directory.CreateDirectory(destDirName);
+                _ = Directory.CreateDirectory(destDirName);
             }
 
             // Get all files in the directory
@@ -466,7 +466,7 @@ namespace CMSAgent.Update
                 string tempPath = Path.Combine(destDirName, file.Name);
 
                 // Copy the file
-                file.CopyTo(tempPath, true);
+                _ = file.CopyTo(tempPath, true);
             }
 
             // If including subdirectories

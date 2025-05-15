@@ -165,7 +165,7 @@ namespace CMSAgent.Commands.Handlers
                     process.StartInfo.CreateNoWindow = true;
                     
                     _logger.LogDebug("Executing command: shutdown.exe {Arguments}", arguments);
-                    process.Start();
+                    _ = process.Start();
                     await process.WaitForExitAsync();
                     
                     return process.ExitCode == 0;
@@ -196,7 +196,7 @@ namespace CMSAgent.Commands.Handlers
                 process.StartInfo.CreateNoWindow = true;
                 
                 _logger.LogDebug("Executing PowerShell command: {Command}", command);
-                process.Start();
+                _ = process.Start();
                 await process.WaitForExitAsync();
                 
                 return process.ExitCode == 0;

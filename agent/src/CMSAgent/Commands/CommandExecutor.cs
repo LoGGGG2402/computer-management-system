@@ -116,7 +116,7 @@ namespace CMSAgent.Commands
                         finally
                         {
                             // Release semaphore when done
-                            _executionSemaphore.Release();
+                            _ = _executionSemaphore.Release();
                         }
                     }, cancellationToken);
                 }

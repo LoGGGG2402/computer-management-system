@@ -21,16 +21,6 @@ namespace CMSAgent.Common.Interfaces
         Task<TResponse> GetAsync<TResponse>(string endpoint, string agentId, string? token, Dictionary<string, string>? queryParams = null);
 
         /// <summary>
-        /// Performs HTTP POST request.
-        /// </summary>
-        /// <param name="endpoint">API endpoint to call.</param>
-        /// <param name="data">Data to send to server.</param>
-        /// <param name="agentId">Agent ID.</param>
-        /// <param name="token">Authentication token (can be null).</param>
-        /// <returns>Task representing the request.</returns>
-        Task PostAsync(string endpoint, object data, string agentId, string? token);
-
-        /// <summary>
         /// Performs HTTP POST request and receives response.
         /// </summary>
         /// <typeparam name="TRequest">Request body data type.</typeparam>

@@ -43,7 +43,6 @@ namespace CMSAgent.Configuration
         {
             _logger = logger;
             _settingsMonitor = settingsMonitor;
-            
             _installPath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? string.Empty;
             _dataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), Settings.AppName ?? "CMSAgent");
             _runtimeConfigPath = Path.Combine(_dataPath, "runtime_config", _runtimeConfigFileName);
@@ -76,6 +75,14 @@ namespace CMSAgent.Configuration
                     return CreateDefaultRuntimeConfig();
                 }
 
+                // Validate and ensure AgentId is always set
+                if (string.IsNullOrWhiteSpace(_runtimeConfigCache.AgentId))
+                {
+                    _logger.LogWarning("Loaded configuration has empty AgentId, generating new one");
+                    _runtimeConfigCache.AgentId = GenerateNewAgentId();
+                    await SaveRuntimeConfigAsync(_runtimeConfigCache);
+                }
+
                 return _runtimeConfigCache;
             }
             catch (Exception ex)
@@ -92,7 +99,7 @@ namespace CMSAgent.Configuration
         {
             var config = new RuntimeConfig
             {
-                AgentId = "UNCONFIGURED-" + Guid.NewGuid().ToString("N")[..8],
+                AgentId = GenerateNewAgentId(),
                 RoomConfig = new RoomConfig
                 {
                     RoomName = "Default",
@@ -104,6 +111,14 @@ namespace CMSAgent.Configuration
             
             _runtimeConfigCache = config;
             return config;
+        }
+
+        /// <summary>
+        /// Generates a new unique AgentId
+        /// </summary>
+        private string GenerateNewAgentId()
+        {
+            return "AGENT-" + Guid.NewGuid().ToString("N")[..8];
         }
 
         /// <summary>

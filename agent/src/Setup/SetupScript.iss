@@ -54,7 +54,7 @@ Name: "{group}\Gỡ cài đặt CMSAgent"; Filename: "{uninstallexe}"
 ; Tạo các thư mục dữ liệu cần thiết theo tài liệu
 Name: "{commonappdata}\CMSAgent"; Permissions: admins-full system-full
 Name: "{commonappdata}\CMSAgent\logs"; Permissions: admins-full system-full
-Name: "{commonappdata}\CMSAgent\runtime_config"; Permissions: admins-readexec system-full
+Name: "{commonappdata}\CMSAgent\runtime_config"; Permissions: admins-full system-full
 Name: "{commonappdata}\CMSAgent\updates"; Permissions: admins-full system-full
 Name: "{commonappdata}\CMSAgent\updates\download"; Permissions: admins-full system-full
 Name: "{commonappdata}\CMSAgent\updates\extracted"; Permissions: admins-full system-full 
@@ -96,46 +96,29 @@ end;
 procedure SetupFolderPermissions();
 var
   DataPath: String;
-  RuntimeConfigPath: String;
   ResultCode: Integer;
 begin
   DataPath := ExpandConstant('{commonappdata}\CMSAgent');
-  RuntimeConfigPath := DataPath + '\runtime_config';
   
   // Hiển thị thông báo
   Log('Thiết lập quyền cho thư mục dữ liệu...');
   Log('Đường dẫn dữ liệu: ' + DataPath);
 
   try
-    // Thiết lập quyền cho thư mục dữ liệu chính
-    Log('Thiết lập quyền cho thư mục dữ liệu chính...');
+    // Thiết lập quyền cho tất cả thư mục
+    Log('Thiết lập quyền cho tất cả thư mục...');
 
     // Xóa các quyền kế thừa cũ trước khi áp dụng quyền mới
-    Exec('icacls.exe', '"' + DataPath + '" /inheritance:r /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Log('Đã xóa quyền kế thừa cho thư mục chính');
+    Exec('icacls.exe', '"' + DataPath + '" /inheritance:r /T /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Log('Đã xóa quyền kế thừa cho tất cả thư mục');
 
-    // Cấp quyền Full Control cho SYSTEM với kế thừa
-    Exec('icacls.exe', '"' + DataPath + '" /grant "SYSTEM:(OI)(CI)F" /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Log('Đã cấp quyền Full Control cho SYSTEM trên thư mục chính');
+    // Cấp quyền Full Control cho SYSTEM với kế thừa cho tất cả thư mục
+    Exec('icacls.exe', '"' + DataPath + '" /grant "SYSTEM:(OI)(CI)F" /T /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Log('Đã cấp quyền Full Control cho SYSTEM trên tất cả thư mục');
 
-    // Cấp quyền Full Control cho Administrators với kế thừa
-    Exec('icacls.exe', '"' + DataPath + '" /grant "Administrators:(OI)(CI)F" /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Log('Đã cấp quyền Full Control cho Administrators trên thư mục chính');
-
-    // Thiết lập quyền đặc biệt cho thư mục runtime_config
-    Log('Thiết lập quyền đặc biệt cho thư mục runtime_config...');
-
-    // Xóa quyền kế thừa cho thư mục runtime_config
-    Exec('icacls.exe', '"' + RuntimeConfigPath + '" /inheritance:r /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Log('Đã xóa quyền kế thừa cho thư mục runtime_config');
-
-    // Cấp quyền Full Control cho SYSTEM
-    Exec('icacls.exe', '"' + RuntimeConfigPath + '" /grant "SYSTEM:(OI)(CI)F" /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Log('Đã cấp quyền Full Control cho SYSTEM trên thư mục runtime_config');
-
-    // Cấp quyền Read & Execute cho Administrators (giới hạn quyền)
-    Exec('icacls.exe', '"' + RuntimeConfigPath + '" /grant "Administrators:(OI)(CI)RX" /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Log('Đã cấp quyền Read & Execute cho Administrators trên thư mục runtime_config');
+    // Cấp quyền Full Control cho Administrators với kế thừa cho tất cả thư mục
+    Exec('icacls.exe', '"' + DataPath + '" /grant "Administrators:(OI)(CI)F" /T /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Log('Đã cấp quyền Full Control cho Administrators trên tất cả thư mục');
 
     Log('Thiết lập quyền thành công!');
   except
