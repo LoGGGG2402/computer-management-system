@@ -58,6 +58,17 @@ namespace CMSAgent.Security
 
             try
             {
+                // Kiểm tra xem token có phải là Base64 hợp lệ không
+                try
+                {
+                    _ = Convert.FromBase64String(encryptedToken);
+                }
+                catch (FormatException)
+                {
+                    _logger.LogWarning("Token is not a valid Base64 string, using as plain text");
+                    return encryptedToken;
+                }
+
                 byte[] encryptedBytes = Convert.FromBase64String(encryptedToken);
                 byte[] decryptedBytes = ProtectedData.Unprotect(
                     encryptedBytes,
@@ -65,6 +76,11 @@ namespace CMSAgent.Security
                     DataProtectionScope.LocalMachine);
                 
                 return Encoding.UTF8.GetString(decryptedBytes);
+            }
+            catch (CryptographicException ex)
+            {
+                _logger.LogWarning(ex, "Failed to decrypt token using DPAPI, using as plain text");
+                return encryptedToken;
             }
             catch (Exception ex)
             {

@@ -30,8 +30,8 @@ const { initializeWebSocket } = require('./sockets');
  * Defines allowed methods, credentials policy, and allowed headers.
  */
 const corsConfig = {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
 };
 
 /**
@@ -58,8 +58,8 @@ function createApp() {
     app.use((req, res, next) => {
       const start = Date.now();
       const { method, originalUrl } = req;
-      if (method !== 'GET' && req.body && Object.keys(req.body).length > 0) {
-         logger.debug('Request Body:', { body: req.body });
+      if (process.env.NODE_ENV === 'development' && method !== 'GET' && method !== 'POST' && req.body && Object.keys(req.body).length > 0) {
+        logger.debug('Request Body:', req.body );
       }
       res.on('finish', () => {
         const duration = Date.now() - start;
@@ -82,10 +82,10 @@ function createApp() {
   // Global Error Handler
   app.use((err, req, res, next) => {
     logger.error('Unhandled Application Error:', {
-        message: err.message,
-        stack: err.stack,
-        path: req.path,
-        method: req.method
+      message: err.message,
+      stack: err.stack,
+      path: req.path,
+      method: req.method
     });
     const errorResponse = {
       success: false,

@@ -14,7 +14,7 @@ class AgentController {
    * Handle agent identification request
    * @param {Object} req - Express request object
    * @param {Object} req.body - Request body
-   * @param {string} req.body.unique_agent_id - Unique identifier for the agent
+   * @param {string} req.body.agentId - Unique identifier for the agent
    * @param {Object} req.body.positionInfo - Information about agent's physical position
    * @param {string} req.body.positionInfo.roomName - Name of the room where the agent is located
    * @param {number} req.body.positionInfo.posX - X position in the room grid
@@ -38,10 +38,10 @@ class AgentController {
    *     - message {string} - Error message
    */
   async handleIdentifyRequest(req, res, next) {
-    const { unique_agent_id, positionInfo, forceRenewToken } = req.body;
+    const { agentId, positionInfo, forceRenewToken } = req.body;
 
     try {
-      if (!unique_agent_id) {
+      if (!agentId) {
         logger.warn('Agent identification attempt without agent ID', { ip: req.ip });
         return res.status(400).json({
           status: "error",
@@ -49,7 +49,7 @@ class AgentController {
         });
       }
 
-      const computer = await computerService.findComputerByAgentId(unique_agent_id);
+      const computer = await computerService.findComputerByAgentId(agentId);
 
       if (forceRenewToken && computer) {
         if (computer.room.name === positionInfo.roomName &&
@@ -57,17 +57,17 @@ class AgentController {
           computer.pos_y === positionInfo.posY) {
           try {
             const { plainToken } = await computerService.generateAndAssignAgentToken(
-              unique_agent_id,
+              agentId,
               null,
               computer
             );
-            logger.info(`Token renewed for agent: ${unique_agent_id}, Computer ID: ${computer.id}`);
+            logger.info(`Token renewed for agent: ${agentId}, Computer ID: ${computer.id}`);
             return res.status(200).json({
               status: "success",
               agentToken: plainToken,
             });
           } catch (tokenError) {
-            logger.error(`Failed to renew token for agent ${unique_agent_id}:`, {
+            logger.error(`Failed to renew token for agent ${agentId}:`, {
               error: tokenError.message,
               stack: tokenError.stack,
               computerId: computer.id
@@ -79,7 +79,7 @@ class AgentController {
       }
 
       if (computer && computer.agent_token_hash) {
-        logger.debug(`Agent already registered: ${unique_agent_id}, Computer ID: ${computer.id}`);
+        logger.debug(`Agent already registered: ${agentId}, Computer ID: ${computer.id}`);
         return res.status(200).json({
           status: "success",
         });
@@ -94,7 +94,7 @@ class AgentController {
 
         if (result.valid) {
           const mfaCode = mfaService.generateAndStoreMfa(
-            unique_agent_id,
+            agentId,
             {
               roomId: result.room.id,
               posX: positionInfo.posX,
@@ -105,12 +105,12 @@ class AgentController {
             mfaCode,
             positionInfo
           );
-          logger.info(`MFA required for new agent: ${unique_agent_id}, Room: ${positionInfo.roomName} (${positionInfo.posX},${positionInfo.posY})`);
+          logger.info(`MFA required for new agent: ${agentId}, Room: ${positionInfo.roomName} (${positionInfo.posX},${positionInfo.posY})`);
           return res.status(200).json({
             status: "mfa_required",
           });
         } else {
-          logger.warn(`Invalid position for agent: ${unique_agent_id}, Room: ${positionInfo.roomName} (${positionInfo.posX},${positionInfo.posY})`, {
+          logger.warn(`Invalid position for agent: ${agentId}, Room: ${positionInfo.roomName} (${positionInfo.posX},${positionInfo.posY})`, {
             reason: result.message
           });
           return res.status(400).json({
@@ -119,7 +119,7 @@ class AgentController {
           });
         }
       } catch (positionError) {
-        logger.error(`Error checking position for agent ${unique_agent_id}:`, {
+        logger.error(`Error checking position for agent ${agentId}:`, {
           error: positionError.message,
           stack: positionError.stack,
           room: positionInfo.roomName,
@@ -132,7 +132,7 @@ class AgentController {
       logger.error(`Error in agent identification request:`, {
         error: error.message,
         stack: error.stack,
-        agentId: unique_agent_id
+        agentId: agentId
       });
       next(error);
     }
@@ -142,7 +142,7 @@ class AgentController {
    * Handle agent MFA verification
    * @param {Object} req - Express request object
    * @param {Object} req.body - Request body
-   * @param {string} req.body.unique_agent_id - Unique identifier for the agent
+   * @param {string} req.body.agentId - Unique identifier for the agent
    * @param {string} req.body.mfaCode - MFA code to verify
    * @param {Object} res - Express response object
    * @param {Function} next - Express next middleware function
@@ -156,11 +156,11 @@ class AgentController {
    */
   async handleVerifyMfa(req, res, next) {
     try {
-      const { unique_agent_id, mfaCode } = req.body;
+      const { agentId, mfaCode } = req.body;
 
-      if (!unique_agent_id || !mfaCode) {
+      if (!agentId || !mfaCode) {
         logger.warn('MFA verification attempt with missing data', {
-          hasAgentId: !!unique_agent_id,
+          hasAgentId: !!agentId,
           hasMfaCode: !!mfaCode,
           ip: req.ip
         });
@@ -171,27 +171,27 @@ class AgentController {
       }
 
       const { valid, positionInfo } = mfaService.verifyMfa(
-        unique_agent_id,
+        agentId,
         mfaCode
       );
 
       if (valid) {
         try {
           const { computer, plainToken } = await computerService.generateAndAssignAgentToken(
-            unique_agent_id,
+            agentId,
             positionInfo
           );
           websocketService.notifyAdminsAgentRegistered(
             computer.id,
             positionInfo
           );
-          logger.info(`Agent ${unique_agent_id} registered successfully with MFA, Computer ID: ${computer.id}`);
+          logger.info(`Agent ${agentId} registered successfully with MFA, Computer ID: ${computer.id}`);
           return res.status(200).json({
             status: "success",
             agentToken: plainToken,
           });
         } catch (tokenError) {
-          logger.error(`Failed to generate token after MFA verification for agent ${unique_agent_id}:`, {
+          logger.error(`Failed to generate token after MFA verification for agent ${agentId}:`, {
             error: tokenError.message,
             stack: tokenError.stack,
             position: positionInfo
@@ -200,7 +200,7 @@ class AgentController {
           return;
         }
       } else {
-        logger.warn(`Invalid MFA verification attempt for agent: ${unique_agent_id}`);
+        logger.warn(`Invalid MFA verification attempt for agent: ${agentId}`);
         return res.status(401).json({
           status: "error",
           message: "Invalid or expired MFA code",
@@ -210,7 +210,7 @@ class AgentController {
       logger.error(`Error in MFA verification:`, {
         error: error.message,
         stack: error.stack,
-        agentId: req.body.unique_agent_id
+        agentId: req.body.agentId
       });
       next(error);
     }
@@ -309,7 +309,6 @@ class AgentController {
           logger.debug(`No update available for agent: ${req.agentId}, Current version: ${current_version || 'unknown'}`);
           return res.status(204).end(); // 204 No Content
         }
-
         logger.info(`Update available for agent: ${req.agentId}, Current: ${current_version || 'unknown'}, Latest: ${updateInfo.version}`);
         return res.status(200).json({
           status: "success",
@@ -319,6 +318,7 @@ class AgentController {
           checksum_sha256: updateInfo.checksum_sha256,
           notes: updateInfo.notes
         });
+        
       } catch (versionError) {
         logger.error(`Failed to check for agent updates:`, {
           error: versionError.message,
@@ -327,6 +327,7 @@ class AgentController {
           computerId: req.computerId,
           currentVersion: current_version
         });
+        console.error(`Error checking for updates for agent ${req.agentId}:`, versionError);
         next(versionError);
         return;
       }
@@ -358,7 +359,7 @@ class AgentController {
       const computerId = req.computerId;
       const { error_type, error_message, error_details } = req.body;
 
-      if (!error_type || !error_message) {
+      if (!error_message) {
         logger.warn(`Error report missing required fields from agent: ${req.agentId}, Computer: ${computerId}`);
         return res.status(400).json({
           status: "error",
@@ -368,7 +369,7 @@ class AgentController {
 
       // Extract data directly from the received format
       const errorData = {
-        error_type,
+        error_type: error_type || 'unknown',
         error_message,
         error_details: error_details || {}
       };

@@ -30,20 +30,54 @@ namespace CMSAgent.Commands
         /// <param name="logger">Logger to log events.</param>
         /// <param name="commandHandlerFactory">Factory to create command execution handlers.</param>
         /// <param name="webSocketConnector">WebSocket connector to send command results.</param>
-        /// <param name="settingsOptions">Command execution configuration.</param>
+        /// <param name="options">Command execution configuration.</param>
         public CommandExecutor(
             ILogger<CommandExecutor> logger,
             CommandHandlerFactory commandHandlerFactory,
             IWebSocketConnector webSocketConnector,
-            IOptions<CommandExecutorSettingsOptions> settingsOptions)
+            IOptions<CommandExecutorSettingsOptions> options)
         {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _commandHandlerFactory = commandHandlerFactory ?? throw new ArgumentNullException(nameof(commandHandlerFactory));
-            _webSocketConnector = webSocketConnector ?? throw new ArgumentNullException(nameof(webSocketConnector));
-            _settings = settingsOptions?.Value ?? throw new ArgumentNullException(nameof(settingsOptions));
-            
-            // Initialize semaphore with the number of commands that can be executed simultaneously
-            _executionSemaphore = new SemaphoreSlim(_settings.MaxParallelCommands, _settings.MaxParallelCommands);
+            _logger = logger;
+            _commandHandlerFactory = commandHandlerFactory;
+            _webSocketConnector = webSocketConnector;
+            _settings = options.Value;
+            _executionSemaphore = new SemaphoreSlim(1, 1);
+
+            // Register for command received events
+            _webSocketConnector.CommandReceived += OnCommandReceived;
+        }
+
+        private void OnCommandReceived(object? sender, CommandPayload command)
+        {
+            try
+            {
+                bool enqueued = TryEnqueueCommand(command);
+                if (!enqueued)
+                {
+                    _logger.LogError("Cannot add command to queue: Queue is full");
+                    
+                    // Send error result back to server
+                    var result = new CommandResultPayload
+                    {
+                        commandId = command.commandId,
+                        success = false,
+                        type = command.commandType,
+                        result = new CommandResultData
+                        {
+                            stdout = string.Empty,
+                            stderr = string.Empty,
+                            errorMessage = "Cannot process command: Queue is full",
+                            errorCode = string.Empty
+                        }
+                    };
+                    
+                    _ = _webSocketConnector.SendCommandResultAsync(result);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error when processing command from WebSocket");
+            }
         }
 
         /// <summary>
@@ -195,8 +229,9 @@ namespace CMSAgent.Commands
                 // Try to send result via WebSocket first
                 if (await _webSocketConnector.SendCommandResultAsync(result))
                 {
-                    _logger.LogInformation("Successfully sent command result {CommandId} via WebSocket", 
-                        result.commandId);
+                    
+                    _logger.LogInformation("Successfully sent command result {CommandId} via WebSocket, result: {Result}", 
+                        result.commandId, System.Text.Json.JsonSerializer.Serialize(result));
                     return;
                 }
                 

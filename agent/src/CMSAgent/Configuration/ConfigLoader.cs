@@ -116,7 +116,7 @@ namespace CMSAgent.Configuration
         /// <summary>
         /// Generates a new unique AgentId
         /// </summary>
-        private string GenerateNewAgentId()
+        private static string GenerateNewAgentId()
         {
             return "AGENT-" + Guid.NewGuid().ToString("N")[..8];
         }

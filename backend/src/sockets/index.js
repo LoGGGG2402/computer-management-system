@@ -49,7 +49,7 @@ const initializeWebSocket = (io) => {
 
   io.use((socket, next) => {
     const authHeader = socket.handshake.headers.authorization;
-    const agentIdHeader = socket.handshake.headers['agent-id'];
+    const agentIdHeader = socket.handshake.headers['x-agent-id'];
 
     if (authHeader?.startsWith('Bearer ')) {
       socket.data.authToken = authHeader.substring(7);

@@ -29,23 +29,20 @@ namespace CMSAgent.Communication
     /// <param name="tokenProtector">Protector to encrypt/decrypt token.</param>
     /// <param name="stateManager">StateManager to manage agent state.</param>
     /// <param name="options">WebSocket configuration.</param>
-    /// <param name="commandExecutor">CommandExecutor to execute commands.</param>
     /// <param name="updateHandler">UpdateHandler to process updates.</param>
     /// <param name="httpClient">HttpClient to send HTTP requests.</param>
     public class WebSocketConnector(
         ILogger<WebSocketConnector> logger,
-        ConfigLoader configLoader,
+        IConfigLoader configLoader,
         TokenProtector tokenProtector,
         StateManager stateManager,
         IOptions<WebSocketSettingsOptions> options,
-        CommandExecutor commandExecutor,
-        UpdateHandler updateHandler) : IWebSocketConnector
+        UpdateHandler updateHandler) : IWebSocketConnector, IDisposable
     {
         private readonly ILogger<WebSocketConnector> _logger = logger;
-        private readonly ConfigLoader _configLoader = configLoader;
+        private readonly IConfigLoader _configLoader = configLoader;
         private readonly TokenProtector _tokenProtector = tokenProtector;
         private readonly StateManager _stateManager = stateManager;
-        private readonly CommandExecutor _commandExecutor = commandExecutor;
         private readonly UpdateHandler _updateHandler = updateHandler;
         private readonly WebSocketSettingsOptions _settings = options.Value;
         
@@ -65,6 +62,11 @@ namespace CMSAgent.Communication
         /// Event when WebSocket connection is closed.
         /// </summary>
         public event EventHandler ConnectionClosed = delegate { };
+
+        /// <summary>
+        /// Event when a command is received from WebSocket.
+        /// </summary>
+        public event EventHandler<CommandPayload> CommandReceived = delegate { };
 
         /// <summary>
         /// Checks if WebSocket is connected.
@@ -345,7 +347,7 @@ namespace CMSAgent.Communication
             });
 
             // Event when received a command to execute
-            _socket.On(WebSocketEvents.CommandExecute, async response =>
+            _socket.On(WebSocketEvents.CommandExecute, response =>
             {
                 try
                 {
@@ -353,41 +355,22 @@ namespace CMSAgent.Communication
                     if (command == null)
                     {
                         _logger.LogError("Received null command from server");
-                        return;
+                        return Task.CompletedTask;
                     }
 
                     _logger.LogInformation("Received {CommandType} command from server: {CommandId}", command.commandType, command.commandId);
 
                     MessageReceived?.Invoke(this, $"Received {command.commandType} command from server: {command.commandId}");
 
-                    // Add command to queue
-                    bool enqueued = _commandExecutor.TryEnqueueCommand(command);
-                    if (!enqueued)
-                    {
-                        _logger.LogError("Cannot add command to queue: Queue is full");
-                        
-                        // Send error result back to server
-                        var result = new CommandResultPayload
-                        {
-                            commandId = command.commandId,
-                            success = false,
-                            type = command.commandType,
-                            result = new CommandResultData
-                            {
-                                stdout = string.Empty,
-                                stderr = string.Empty,
-                                errorMessage = "Cannot process command: Queue is full",
-                                errorCode = string.Empty
-                            }
-                        };
-                        
-                        await SendCommandResultAsync(result);
-                    }
+                    // Raise command received event
+                    CommandReceived?.Invoke(this, command);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error when processing command from server");
                 }
+
+                return Task.CompletedTask;
             });
 
             // Event when there is a new agent version
@@ -569,6 +552,14 @@ namespace CMSAgent.Communication
 
                 _disposed = true;
             }
+        }
+
+        /// <summary>
+        /// Finalizer
+        /// </summary>
+        ~WebSocketConnector()
+        {
+            Dispose(false);
         }
     }
 }

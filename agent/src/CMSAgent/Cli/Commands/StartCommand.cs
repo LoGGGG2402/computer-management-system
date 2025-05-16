@@ -10,27 +10,20 @@ namespace CMSAgent.Cli.Commands
     /// <summary>
     /// Class for handling the start command to start the CMSAgent Windows service.
     /// </summary>
-    public class StartCommand
+    /// <remarks>
+    /// Initializes a new instance of StartCommand.
+    /// </remarks>
+    /// <param name="logger">Logger for logging events.</param>
+    /// <param name="serviceUtils">Utility for managing Windows Services.</param>
+    /// <param name="options">Agent configuration.</param>
+    public class StartCommand(
+        ILogger<StartCommand> logger,
+        ServiceUtils serviceUtils,
+        IOptions<CmsAgentSettingsOptions> options)
     {
-        private readonly ILogger<StartCommand> _logger;
-        private readonly ServiceUtils _serviceUtils;
-        private readonly string _serviceName;
-
-        /// <summary>
-        /// Initializes a new instance of StartCommand.
-        /// </summary>
-        /// <param name="logger">Logger for logging events.</param>
-        /// <param name="serviceUtils">Utility for managing Windows Services.</param>
-        /// <param name="options">Agent configuration.</param>
-        public StartCommand(
-            ILogger<StartCommand> logger,
-            ServiceUtils serviceUtils,
-            IOptions<CmsAgentSettingsOptions> options)
-        {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _serviceUtils = serviceUtils ?? throw new ArgumentNullException(nameof(serviceUtils));
-            _serviceName = options?.Value?.AppName + "Service" ?? "CMSAgentService";
-        }
+        private readonly ILogger<StartCommand> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        private readonly ServiceUtils _serviceUtils = serviceUtils ?? throw new ArgumentNullException(nameof(serviceUtils));
+        private readonly string _serviceName = options?.Value?.AppName + "Service" ?? "CMSAgentService";
 
         /// <summary>
         /// Executes the start command.

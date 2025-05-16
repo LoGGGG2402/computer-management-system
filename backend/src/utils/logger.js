@@ -43,9 +43,12 @@ winston.addColors(colors);
 const consoleFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
   winston.format.colorize({ all: true }),
-  winston.format.printf(
-    (info) => `${info.timestamp} ${info.level}: ${info.message}`
-  )
+  winston.format.printf((info) => {
+    const { timestamp, level, message, ...meta } = info;
+    const metaStr = Object.keys(meta).length ? 
+      `\n${JSON.stringify(meta, null, 2)}` : '';
+    return `${timestamp} ${level}: ${message}${metaStr}`;
+  })
 );
 
 // Define format for file output (no colors, but with stack traces)
@@ -60,9 +63,10 @@ const logger = winston.createLogger({
   levels,
   format: winston.format.json(),
   transports: [
-    // Console transport for all logs
+    // Console transport for logs (excluding debug level)
     new winston.transports.Console({
       format: consoleFormat,
+      level: 'http', // This will log everything up to http level (error, warn, info, http)
     }),
     // File transport for error logs
     new winston.transports.File({
@@ -72,9 +76,17 @@ const logger = winston.createLogger({
       maxsize: 5242880, // 5MB
       maxFiles: 5,
     }),
-    // File transport for all logs
+    // File transport for all logs including debug
     new winston.transports.File({
       filename: path.join(logDir, 'combined.log'),
+      format: fileFormat,
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    }),
+    // Dedicated debug log file
+    new winston.transports.File({
+      filename: path.join(logDir, 'debug.log'),
+      level: 'debug',
       format: fileFormat,
       maxsize: 5242880, // 5MB
       maxFiles: 5,

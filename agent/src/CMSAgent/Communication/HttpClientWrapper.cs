@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using CMSAgent.Common.Interfaces;
 using CMSAgent.Common.Models;
+using CMSAgent.Security;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly;
@@ -26,6 +27,7 @@ namespace CMSAgent.Communication
         private readonly HttpClientSettingsOptions _settings;
         private readonly AsyncRetryPolicy _retryPolicy;
         private readonly string _baseUrl;
+        private readonly TokenProtector _tokenProtector;
         
         // Create static JsonSerializerOptions for reuse
         private static readonly JsonSerializerOptions _jsonOptions = new()
@@ -38,11 +40,16 @@ namespace CMSAgent.Communication
         /// </summary>
         /// <param name="options">HttpClient configuration.</param>
         /// <param name="logger">Logger for logging.</param>
-        public HttpClientWrapper(IOptions<CmsAgentSettingsOptions> options, ILogger<HttpClientWrapper> logger)
+        /// <param name="tokenProtector">Token protector for decrypting tokens.</param>
+        public HttpClientWrapper(
+            IOptions<CmsAgentSettingsOptions> options, 
+            ILogger<HttpClientWrapper> logger,
+            TokenProtector tokenProtector)
         {
             _logger = logger;
             _settings = options.Value.HttpClientSettings;
             _baseUrl = options.Value.ServerUrl.TrimEnd('/') + options.Value.ApiPath.TrimEnd('/');
+            _tokenProtector = tokenProtector;
             
             _httpClient = new HttpClient
             {
@@ -147,7 +154,7 @@ namespace CMSAgent.Communication
         /// <summary>
         /// Creates URI with query string parameters.
         /// </summary>
-        private string BuildRequestUri(string endpoint, Dictionary<string, string>? queryParams)
+        private static string BuildRequestUri(string endpoint, Dictionary<string, string>? queryParams)
         {
             if (queryParams == null || queryParams.Count == 0)
             {
@@ -178,7 +185,7 @@ namespace CMSAgent.Communication
         /// <summary>
         /// Adds necessary headers to the request.
         /// </summary>
-        private static void AddHeaders(HttpRequestMessage request, string agentId, string? token)
+        private void AddHeaders(HttpRequestMessage request, string agentId, string? token)
         {
             // Add Agent-ID header
             if (!string.IsNullOrEmpty(agentId))
@@ -192,7 +199,18 @@ namespace CMSAgent.Communication
             // Add Authorization header if token exists
             if (!string.IsNullOrEmpty(token))
             {
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                try 
+                {
+                    // Decrypt token using TokenProtector
+                    string decryptedToken = _tokenProtector.DecryptToken(token);
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", decryptedToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to decrypt token");
+                    // If decryption fails, use original token
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                }
             }
             
             // Accept JSON
@@ -225,19 +243,67 @@ namespace CMSAgent.Communication
                     }
 
                     var response = await _httpClient.SendAsync(request);
+                    var responseContent = await response.Content.ReadAsStringAsync();
                     
                     if (!response.IsSuccessStatusCode)
                     {
-                        var errorContent = await response.Content.ReadAsStringAsync();
                         _logger.LogError("HTTP error {StatusCode} when calling {Method} {Uri}: {ErrorContent}",
-                            response.StatusCode, request.Method, request.RequestUri, errorContent);
+                            response.StatusCode, request.Method, request.RequestUri, responseContent);
+                        
+                        if (response.StatusCode == HttpStatusCode.Unauthorized)
+                        {
+                            _logger.LogError("Authentication failed. Please check if token is valid and not expired");
+                        }
+                        else if (response.StatusCode == HttpStatusCode.NotFound)
+                        {
+                            _logger.LogError("API endpoint not found: {Uri}", request.RequestUri);
+                        }
+                        else if (response.StatusCode == HttpStatusCode.InternalServerError)
+                        {
+                            _logger.LogError("Server internal error. Response: {ErrorContent}", responseContent);
+                        }
                         
                         throw new HttpRequestException($"HTTP error {response.StatusCode} when calling {request.Method} {request.RequestUri}");
                     }
 
-                    var responseContent = await response.Content.ReadAsStringAsync();
-                    return JsonSerializer.Deserialize<T>(responseContent, _jsonOptions)
-                           ?? throw new JsonException("Response body was null or empty");
+                    if (string.IsNullOrWhiteSpace(responseContent))
+                    {
+                        if (response.StatusCode == HttpStatusCode.NoContent)
+                        {
+                            _logger.LogDebug("Received 204 No Content response from {Method} {Uri}", 
+                                request.Method, request.RequestUri);
+                            return default!;
+                        }
+                        
+                        _logger.LogError("Empty response received from {Method} {Uri}", 
+                            request.Method, request.RequestUri);
+                        throw new JsonException("Response body was empty");
+                    }
+
+                    try
+                    {
+                        if (responseContent.Trim().StartsWith("{"))
+                        {
+                            var result = JsonSerializer.Deserialize<T>(responseContent, _jsonOptions);
+                            if (result == null)
+                            {
+                                _logger.LogError("Failed to deserialize response. Content: {Content}", responseContent);
+                                throw new JsonException("Response body was null after deserialization");
+                            }
+                            return result;
+                        }
+                        else
+                        {
+                            _logger.LogError("Invalid JSON response format. Response content: {Content}", responseContent);
+                            throw new JsonException("Invalid JSON response format");
+                        }
+                    }
+                    catch (JsonException ex)
+                    {
+                        _logger.LogError(ex, "Failed to deserialize response from {Method} {Uri}. Content: {Content}",
+                            request.Method, request.RequestUri, responseContent);
+                        throw;
+                    }
                 });
             }
             catch (Exception ex)

@@ -83,18 +83,23 @@ namespace CMSAgent.Commands.Handlers
                 process.StartInfo.RedirectStandardError = true;
                 process.StartInfo.CreateNoWindow = true;
                 
-                // Set encoding for output
-                process.StartInfo.StandardOutputEncoding = Encoding.GetEncoding(_settings.ConsoleEncoding);
-                process.StartInfo.StandardErrorEncoding = Encoding.GetEncoding(_settings.ConsoleEncoding);
+                // Set encoding for output - use Windows default code page
+                process.StartInfo.StandardOutputEncoding = Encoding.GetEncoding(65001); // UTF-8
+                process.StartInfo.StandardErrorEncoding = Encoding.GetEncoding(65001); // UTF-8
 
                 var outputBuilder = new StringBuilder();
                 var errorBuilder = new StringBuilder();
+                var outputLock = new object();
+                var errorLock = new object();
 
                 process.OutputDataReceived += (sender, e) =>
                 {
                     if (e.Data != null)
                     {
-                        _ = outputBuilder.AppendLine(e.Data);
+                        lock (outputLock)
+                        {
+                            _ = outputBuilder.AppendLine(e.Data);
+                        }
                     }
                 };
 
@@ -102,7 +107,10 @@ namespace CMSAgent.Commands.Handlers
                 {
                     if (e.Data != null)
                     {
-                        _ = errorBuilder.AppendLine(e.Data);
+                        lock (errorLock)
+                        {
+                            _ = errorBuilder.AppendLine(e.Data);
+                        }
                     }
                 };
 

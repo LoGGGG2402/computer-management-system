@@ -10,27 +10,20 @@ namespace CMSAgent.Cli.Commands
     /// <summary>
     /// Class for handling the stop command to stop the CMSAgent service.
     /// </summary>
-    public class StopCommand
+    /// <remarks>
+    /// Initializes a new instance of StopCommand.
+    /// </remarks>
+    /// <param name="logger">Logger for logging events.</param>
+    /// <param name="serviceUtils">Utility for managing Windows Services.</param>
+    /// <param name="options">Agent configuration.</param>
+    public class StopCommand(
+        ILogger<StopCommand> logger,
+        ServiceUtils serviceUtils,
+        IOptions<CmsAgentSettingsOptions> options)
     {
-        private readonly ILogger<StopCommand> _logger;
-        private readonly ServiceUtils _serviceUtils;
-        private readonly string _serviceName;
-
-        /// <summary>
-        /// Initializes a new instance of StopCommand.
-        /// </summary>
-        /// <param name="logger">Logger for logging events.</param>
-        /// <param name="serviceUtils">Utility for managing Windows Services.</param>
-        /// <param name="options">Agent configuration.</param>
-        public StopCommand(
-            ILogger<StopCommand> logger,
-            ServiceUtils serviceUtils,
-            IOptions<CmsAgentSettingsOptions> options)
-        {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _serviceUtils = serviceUtils ?? throw new ArgumentNullException(nameof(serviceUtils));
-            _serviceName = options?.Value?.AppName + "Service" ?? "CMSAgentService";
-        }
+        private readonly ILogger<StopCommand> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        private readonly ServiceUtils _serviceUtils = serviceUtils ?? throw new ArgumentNullException(nameof(serviceUtils));
+        private readonly string _serviceName = options?.Value?.AppName + "Service" ?? "CMSAgentService";
 
         /// <summary>
         /// Executes the stop command.

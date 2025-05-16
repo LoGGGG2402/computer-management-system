@@ -13,6 +13,8 @@ namespace CMSAgent.Cli
     /// </summary>
     public class CliHandler
     {
+        private static readonly string[] RemoveDataAliases = ["--remove-data", "-r"];
+
         /// <summary>
         /// Flag indicating whether a CLI command has been executed.
         /// </summary>
@@ -74,15 +76,12 @@ namespace CMSAgent.Cli
 
             // Install command
             var installCmd = new Command("install", "Cài đặt CMSAgent như một Windows Service");
-                
-            
             installCmd.SetHandler(async (InvocationContext context) => 
             {
                 IsCliCommandExecuted = true;
                 var cmd = _serviceProvider.GetRequiredService<InstallCommand>();
                 Environment.ExitCode = await cmd.ExecuteAsync();
             });
-            
             _rootCommand.AddCommand(installCmd);
 
             // Start command
@@ -108,7 +107,7 @@ namespace CMSAgent.Cli
             // Uninstall command
             var uninstallCmd = new Command("uninstall", "Uninstall the CMSAgent Windows service");
             var removeDataOption = new Option<bool>(
-                aliases: new[] { "--remove-data", "-r" },
+                aliases: RemoveDataAliases,
                 description: "Remove all agent data from ProgramData"
             );
             uninstallCmd.AddOption(removeDataOption);
@@ -119,17 +118,6 @@ namespace CMSAgent.Cli
                 Environment.ExitCode = await cmd.ExecuteAsync(removeData);
             }, removeDataOption);
             _rootCommand.AddCommand(uninstallCmd);
-
-            // Debug command
-            var debugCmd = new Command("debug", "Run the agent in console application mode");
-            debugCmd.SetHandler((InvocationContext context) => 
-            {
-                // Note: IsCliCommandExecuted should NOT be set to true for the debug command
-                // because the debug command will continue execution as normal instead of exiting
-                var cmd = _serviceProvider.GetRequiredService<DebugCommand>();
-                context.ExitCode = cmd.Execute();
-            });
-            _rootCommand.AddCommand(debugCmd);
         }
     }
 }

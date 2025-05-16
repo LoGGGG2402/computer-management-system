@@ -1,8 +1,11 @@
+using System.Text.Json.Serialization;
+
 namespace CMSAgent.Common.Enums
 {
     /// <summary>
     /// Types of commands that the agent can receive and execute.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum CommandType
     {
         /// <summary>

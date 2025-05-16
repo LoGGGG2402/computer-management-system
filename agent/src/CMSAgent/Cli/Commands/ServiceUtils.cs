@@ -11,19 +11,14 @@ namespace CMSAgent.Cli.Commands
     /// <summary>
     /// Các tiện ích để tương tác với Windows Service Control Manager (SCM).
     /// </summary>
-    public class ServiceUtils
+    /// <remarks>
+    /// Initializes a new instance of ServiceUtils.
+    /// </remarks>
+    /// <param name="logger">Logger for logging events.</param>
+    public class ServiceUtils(ILogger<ServiceUtils> logger)
     {
-        private readonly ILogger<ServiceUtils> _logger;
+        private readonly ILogger<ServiceUtils> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         private const string ScExe = "sc.exe";
-
-        /// <summary>
-        /// Initializes a new instance of ServiceUtils.
-        /// </summary>
-        /// <param name="logger">Logger for logging events.</param>
-        public ServiceUtils(ILogger<ServiceUtils> logger)
-        {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
 
         /// <summary>
         /// Kiểm tra xem service có được cài đặt hay không.

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Threading;
 using System.Reflection;
 using System.Xml.Linq;
 using System.Collections.Generic;
@@ -36,6 +37,7 @@ namespace CMSAgent
         private static bool _shouldRunAsWindowsService = true;
         private static string _applicationName = "CMSAgent";
         private static string _version = "1.0.0";
+        private static readonly CancellationTokenSource _shutdownCts = new();
 
         public static async Task<int> Main(string[] args)
         {
@@ -47,6 +49,13 @@ namespace CMSAgent
 
             try
             {
+                // Đăng ký xử lý tín hiệu shutdown
+                Console.CancelKeyPress += (sender, e) =>
+                {
+                    e.Cancel = true;
+                    _shutdownCts.Cancel();
+                };
+
                 IHost host = CreateHostBuilder(args).Build();
                 
                 // Process CLI commands
@@ -56,10 +65,21 @@ namespace CMSAgent
                 {
                     return cliResult; // CLI command has been processed
                 }
+
+                // Check if running in debug mode
+                if (args.Length > 0 && args[0].Equals("debug", StringComparison.OrdinalIgnoreCase))
+                {
+                    return await RunInDebugMode(host);
+                }
                 
                 // Run the host (either as a Windows Service or console app)
-                await host.RunAsync();
+                await host.RunAsync(_shutdownCts.Token);
                 
+                return 0;
+            }
+            catch (OperationCanceledException)
+            {
+                Log.Information("Application shutdown requested");
                 return 0;
             }
             catch (Exception ex)
@@ -194,7 +214,12 @@ namespace CMSAgent
                     _shouldRunAsWindowsService = !(args.Length > 0 && args[0].Equals("debug", StringComparison.OrdinalIgnoreCase));
                 })
                 .UseSerilog() // Use previously configured Serilog
-                .ConfigureServices(ConfigureServices);
+                .ConfigureServices(ConfigureServices)
+                .ConfigureHostOptions(options =>
+                {
+                    // Cấu hình timeout cho quá trình shutdown
+                    options.ShutdownTimeout = TimeSpan.FromSeconds(30);
+                });
 
             // Configure Windows Service if needed
             if (_shouldRunAsWindowsService && OperatingSystem.IsWindows())
@@ -309,7 +334,6 @@ namespace CMSAgent
             _ = services.AddTransient<StartCommand>();
             _ = services.AddTransient<StopCommand>();
             _ = services.AddTransient<UninstallCommand>();
-            _ = services.AddTransient<DebugCommand>();
             _ = services.AddTransient<InstallCommand>();
             _ = services.AddSingleton<CliHandler>();
 
@@ -319,6 +343,58 @@ namespace CMSAgent
             // Security and other services
             _ = services.AddSingleton<TokenProtector>();
             _ = services.AddSingleton<CommandHandlerFactory>();
+
+            // Đăng ký các service cần graceful shutdown
+            services.AddHostedService<GracefulShutdownService>();
+        }
+
+        private static async Task<int> RunInDebugMode(IHost host)
+        {
+            Console.WriteLine("--------------------------------");
+            Console.WriteLine("| CMSAgent running in DEBUG mode |");
+            Console.WriteLine("--------------------------------");
+            Console.WriteLine("Press CTRL+C to stop.\n");
+
+            try
+            {
+                var agentOperations = new AgentOperations(
+                    host.Services.GetRequiredService<ILogger<AgentService>>(),
+                    host.Services.GetRequiredService<StateManager>(),
+                    host.Services.GetRequiredService<IConfigLoader>(),
+                    host.Services.GetRequiredService<IWebSocketConnector>(),
+                    host.Services.GetRequiredService<SystemMonitor>(),
+                    host.Services.GetRequiredService<CommandExecutor>(),
+                    host.Services.GetRequiredService<UpdateHandler>(),
+                    host.Services.GetRequiredService<SingletonMutex>(),
+                    host.Services.GetRequiredService<TokenProtector>(),
+                    host.Services.GetRequiredService<IOptions<AgentSpecificSettingsOptions>>().Value,
+                    host.Services.GetRequiredService<HardwareInfoCollector>(),
+                    host.Services.GetRequiredService<IHttpClientWrapper>()
+                );
+
+                Log.Information("CMSAgent has started in debug mode");
+
+                // Initialize agent operations
+                await agentOperations.InitializeAsync();
+
+                // Create a cancellation token source for CTRL+C
+                using var cts = new CancellationTokenSource();
+                Console.CancelKeyPress += (s, e) =>
+                {
+                    e.Cancel = true;
+                    cts.Cancel();
+                };
+
+                // Start agent operations
+                await agentOperations.StartAsync(cts.Token);
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error running in debug mode");
+                return 1;
+            }
         }
     }
 
@@ -336,5 +412,32 @@ namespace CMSAgent
         /// HttpClient used for large files
         /// </summary>
         public const string DownloadClient = "DownloadClient";
+    }
+
+    public class GracefulShutdownService(
+        ILogger<GracefulShutdownService> logger,
+        IHostApplicationLifetime hostLifetime) : BackgroundService
+    {
+        private readonly ILogger<GracefulShutdownService> _logger = logger;
+        private readonly IHostApplicationLifetime _hostLifetime = hostLifetime;
+
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            try
+            {
+                // Đăng ký xử lý sự kiện shutdown
+                _hostLifetime.ApplicationStopping.Register(() =>
+                {
+                    _logger.LogInformation("Application is stopping. Starting graceful shutdown...");
+                    // Thực hiện các tác vụ cleanup cần thiết
+                });
+
+                await Task.Delay(Timeout.Infinite, stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("Graceful shutdown service is stopping");
+            }
+        }
     }
 }

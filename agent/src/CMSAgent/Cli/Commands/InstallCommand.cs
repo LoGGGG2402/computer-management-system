@@ -14,31 +14,22 @@ namespace CMSAgent.Cli.Commands
     /// <summary>
     /// Class for handling the install command to register CMSAgent as a Windows service.
     /// </summary>
-    public class InstallCommand
+    /// <remarks>
+    /// Initializes a new instance of InstallCommand.
+    /// </remarks>
+    /// <param name="logger">Logger for logging events.</param>
+    /// <param name="serviceUtils">Utility for managing Windows Services.</param>
+    /// <param name="options">Agent configuration.</param>
+    public class InstallCommand(
+        ILogger<InstallCommand> logger,
+        ServiceUtils serviceUtils,
+        IOptions<CmsAgentSettingsOptions> options)
     {
-        private readonly ILogger<InstallCommand> _logger;
-        private readonly ServiceUtils _serviceUtils;
-        private readonly string _serviceName;
-        private readonly string _displayName;
-        private readonly string _description;
-
-        /// <summary>
-        /// Initializes a new instance of InstallCommand.
-        /// </summary>
-        /// <param name="logger">Logger for logging events.</param>
-        /// <param name="serviceUtils">Utility for managing Windows Services.</param>
-        /// <param name="options">Agent configuration.</param>
-        public InstallCommand(
-            ILogger<InstallCommand> logger,
-            ServiceUtils serviceUtils,
-            IOptions<CmsAgentSettingsOptions> options)
-        {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _serviceUtils = serviceUtils ?? throw new ArgumentNullException(nameof(serviceUtils));
-            _serviceName = options?.Value?.AppName + "Service" ?? "CMSAgentService";
-            _displayName = "Computer Management System Agent";
-            _description = "Dịch vụ quản lý máy tính từ xa";
-        }
+        private readonly ILogger<InstallCommand> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        private readonly ServiceUtils _serviceUtils = serviceUtils ?? throw new ArgumentNullException(nameof(serviceUtils));
+        private readonly string _serviceName = options?.Value?.AppName + "Service" ?? "CMSAgentService";
+        private readonly string _displayName = "Computer Management System Agent";
+        private readonly string _description = "Dịch vụ quản lý máy tính từ xa";
 
         /// <summary>
         /// Executes the install command.

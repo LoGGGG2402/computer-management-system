@@ -7,12 +7,12 @@ namespace CMSAgent.Core
     /// <summary>
     /// Class that ensures only one instance of the application is running at a time.
     /// </summary>
-    public class SingletonMutex
+    public class SingletonMutex : IDisposable
     {
         private readonly string _mutexName;
         private readonly Mutex _mutex;
         private readonly ILogger<SingletonMutex> _logger;
-        private bool _ownsHandle = false;
+        private bool _hasHandle = false;
         private bool _disposed = false;
 
         /// <summary>
@@ -30,9 +30,9 @@ namespace CMSAgent.Core
             try
             {
                 // Try to create and own the global mutex
-                _mutex = new Mutex(true, _mutexName, out _ownsHandle);
+                _mutex = new Mutex(true, _mutexName, out _hasHandle);
                 
-                if (_ownsHandle)
+                if (_hasHandle)
                 {
                     _logger.LogInformation("Acquired singleton lock with name {MutexName}", _mutexName);
                 }
@@ -54,7 +54,7 @@ namespace CMSAgent.Core
         /// <returns>True if this instance is the only one, otherwise False.</returns>
         public bool IsSingleInstance()
         {
-            return _ownsHandle;
+            return _hasHandle;
         }
 
         /// <summary>
@@ -70,7 +70,7 @@ namespace CMSAgent.Core
 
             if (disposing)
             {
-                if (_ownsHandle)
+                if (_hasHandle)
                 {
                     try
                     {
@@ -87,6 +87,24 @@ namespace CMSAgent.Core
             }
 
             _disposed = true;
+        }
+
+        /// <summary>
+        /// Release the mutex when done.
+        /// </summary>
+        public void Release()
+        {
+            if (_hasHandle)
+            {
+                _mutex.ReleaseMutex();
+                _hasHandle = false;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
         }
     }
 }

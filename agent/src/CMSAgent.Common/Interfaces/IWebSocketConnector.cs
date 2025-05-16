@@ -21,6 +21,11 @@ namespace CMSAgent.Common.Interfaces
         event EventHandler ConnectionClosed;
 
         /// <summary>
+        /// Event triggered when a command is received from WebSocket.
+        /// </summary>
+        event EventHandler<CommandPayload> CommandReceived;
+
+        /// <summary>
         /// Checks if WebSocket is currently connected.
         /// </summary>
         bool IsConnected { get; }

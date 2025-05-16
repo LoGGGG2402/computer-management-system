@@ -26,7 +26,7 @@ namespace CMSAgent.Common.DTOs
         /// <summary>
         /// Additional parameters for the command (optional).
         /// </summary>
-        public required Dictionary<string, object> parameters { get; set; } = new();
+        public Dictionary<string, object> parameters { get; set; } = new();
     }
 
     /// <summary>
