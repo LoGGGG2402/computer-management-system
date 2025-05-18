@@ -26,7 +26,7 @@ class AdminService {
    */
   async getSystemStats() {
     try {
-      const response = await api.get('/stats');
+      const response = await api.get('/admin/stats');
       return response.data.status === 'success' ? response.data.data : null;
     } catch (error) {
       const errorMessage = error.extractedMessage || 'Failed to fetch system statistics';

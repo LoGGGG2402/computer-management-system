@@ -42,23 +42,23 @@ class AuthController {
       }
       
       // Additional validation for username and password format
-      const usernameRegex = /^[a-zA-Z][a-zA-Z0-9_-]{2,49}$/;
-      if (typeof username !== 'string' || !usernameRegex.test(username)) {
-        logger.warn('Invalid username format during login attempt', { username, ip: req.ip });
-        return res.status(400).json({
-          status: 'error',
-          message: 'Invalid username format. Must be 3-50 chars, alphanumeric with _-, start with a letter.'
-        });
-      }
+      // const usernameRegex = /^[a-zA-Z][a-zA-Z0-9_-]{2,49}$/;
+      // if (typeof username !== 'string' || !usernameRegex.test(username)) {
+      //   logger.warn('Invalid username format during login attempt', { username, ip: req.ip });
+      //   return res.status(400).json({
+      //     status: 'error',
+      //     message: 'Invalid username format. Must be 3-50 chars, alphanumeric with _-, start with a letter.'
+      //   });
+      // }
 
-      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,128}$/;
-      if (typeof password !== 'string' || !passwordRegex.test(password)) {
-        logger.warn('Invalid password format during login attempt', { username, ip: req.ip });
-        return res.status(400).json({
-          status: 'error',
-          message: 'Invalid password format. Must be 8-128 chars, with uppercase, lowercase, number, and special char.'
-        });
-      }
+      // const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,128}$/;
+      // if (typeof password !== 'string' || !passwordRegex.test(password)) {
+      //   logger.warn('Invalid password format during login attempt', { username, ip: req.ip });
+      //   return res.status(400).json({
+      //     status: 'error',
+      //     message: 'Invalid password format. Must be 8-128 chars, with uppercase, lowercase, number, and special char.'
+      //   });
+      // }
       
       logger.debug(`Login attempt for username: ${username}`, { ip: req.ip });
       const userData = await authService.login(username, password);

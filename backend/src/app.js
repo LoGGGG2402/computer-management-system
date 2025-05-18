@@ -32,7 +32,9 @@ const { initializeWebSocket } = require('./sockets');
  */
 const corsConfig = {
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Thêm OPTIONS
+  credentials: true, // Nếu gửi cookie hoặc Authorization
+  allowedHeaders: ['Content-Type', 'Authorization'], // Thêm các header client sử dụng
 };
 
 /**
@@ -60,6 +62,7 @@ function createApp() {
     app.use((req, res, next) => {
       const start = Date.now();
       const { method, originalUrl } = req;
+      logger.http(`${method} ${originalUrl} - Status: ${res.statusCode} - ${start}ms`);
       if (process.env.NODE_ENV === 'development' && method !== 'GET' && method !== 'POST' && req.body && Object.keys(req.body).length > 0) {
         logger.debug('Request Body:', req.body );
       }
