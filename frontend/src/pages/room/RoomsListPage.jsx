@@ -7,17 +7,25 @@
  * 
  * @module RoomsListPage
  */
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import { Card, Button, Modal, Typography, message } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import RoomList from '../../components/room/RoomList';
-import RoomForm from '../../components/room/RoomForm';
-import { useAuth } from '../../contexts/AuthContext';
+import { CommonList, CommonForm } from '../../components/common';
 import { LoadingComponent } from '../../components/common';
-import roomService from '../../services/room.service';
-import { useModalState } from '../../hooks/useModalState';
-import { useSimpleFetch } from '../../hooks/useSimpleFetch';
+import { useAppSelector, useAppDispatch, selectUserRole } from '../../app/index';
+import {
+  fetchRooms,
+  fetchRoomById,
+  createRoom,
+  updateRoom,
+  selectRooms,
+  selectRoomLoading,
+  selectRoomError,
+  selectSelectedRoom,
+  setRoomCurrentPage
+} from '../../app/index';
+import { useModalState } from '../../app/index';
 
 const { Title } = Typography;
 
@@ -42,32 +50,25 @@ const RoomsListPage = () => {
     modalAction,
     openModal,
     closeModal,
-    setSelectedItem,
   } = useModalState();
 
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const { isAdmin } = useAuth();
+  const userRole = useAppSelector(selectUserRole);
+  const isAdmin = userRole === 'admin';
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
 
-  const { loading: isModalLoading, executeFetch: fetchRoomDetailsForEdit } = useSimpleFetch(
-    roomService.getRoomById,
-    [],
-    {
-      manual: true,
-      onSuccess: (roomData) => {
-        setSelectedItem(roomData);
-      },
-      onError: (error) => {
-        message.error('Failed to load room details');
-        console.error('Error loading room details:', error);
-        closeModal();
-      },
-    }
-  );
+  // Redux selectors
+  const rooms = useAppSelector(selectRooms);
+  const loading = useAppSelector(selectRoomLoading);
+  const error = useAppSelector(selectRoomError);
+  const selectedRoomData = useAppSelector(selectSelectedRoom);
+
+  useEffect(() => {
+    dispatch(fetchRooms());
+  }, [dispatch]);
 
   /**
    * Handles opening the modal for creating a new room
-   * @function
    */
   const handleCreate = () => {
     openModal('create');
@@ -75,21 +76,14 @@ const RoomsListPage = () => {
 
   /**
    * Handles opening the modal for editing an existing room
-   * Fetches detailed room data before opening the modal
-   * 
-   * @function
-   * @param {Object} room - The room object to edit
    */
   const handleEdit = (room) => {
     openModal('edit', room);
-    fetchRoomDetailsForEdit(room.id);
+    dispatch(fetchRoomById(room.id));
   };
 
   /**
    * Handles navigation to the room details page
-   * 
-   * @function
-   * @param {number|string} roomId - ID of the room to view
    */
   const handleView = (roomId) => {
     navigate(`/rooms/${roomId}`, { state: { from: isAdmin ? 'admin' : 'user' } });
@@ -97,19 +91,25 @@ const RoomsListPage = () => {
 
   /**
    * Handles successful room creation or update
-   * 
-   * @function
    */
-  const handleSuccess = () => {
-    closeModal();
-    setRefreshTrigger(prev => prev + 1);
-    message.success(`Room ${modalAction === 'create' ? 'created' : 'updated'} successfully`);
+  const handleSuccess = async (formData) => {
+    try {
+      if (modalAction === 'create') {
+        await dispatch(createRoom(formData)).unwrap();
+        message.success('Room created successfully');
+      } else {
+        await dispatch(updateRoom({ id: selectedRoom.id, ...formData })).unwrap();
+        message.success('Room updated successfully');
+      }
+      closeModal();
+      dispatch(fetchRooms());
+    } catch (error) {
+      message.error(`Failed to ${modalAction} room: ${error.message}`);
+    }
   };
 
   /**
    * Handles canceling the room modal
-   * 
-   * @function
    */
   const handleCancel = () => {
     closeModal();
@@ -133,10 +133,14 @@ const RoomsListPage = () => {
           )
         }
       >
-        <RoomList 
+        <CommonList 
+          type="room"
+          data={rooms}
+          loading={loading}
+          error={error}
           onEdit={handleEdit} 
           onView={handleView}
-          refreshTrigger={refreshTrigger} 
+          onPageChange={(page) => dispatch(setRoomCurrentPage(page))}
         />
       </Card>
 
@@ -147,11 +151,12 @@ const RoomsListPage = () => {
         footer={null}
         width={600}
       >
-        {isModalLoading ? (
+        {loading ? (
           <LoadingComponent type="section" tip="Loading room data..." />
         ) : (
-          <RoomForm
-            initialValues={selectedRoom}
+          <CommonForm
+            type="room"
+            initialValues={selectedRoomData}
             onSuccess={handleSuccess}
             onCancel={handleCancel}
           />

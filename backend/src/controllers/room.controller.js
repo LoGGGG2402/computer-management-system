@@ -30,8 +30,8 @@ class RoomController {
    *       - layout {Object} - Room layout configuration
    *         - columns {number} - Number of columns in the room grid
    *         - rows {number} - Number of rows in the room grid
-   *       - created_at {Date} - When room was created
-   *       - updated_at {Date} - When room was last updated
+   *       - created_at {string} - When room was created (ISO-8601 format)
+   *       - updated_at {string} - When room was last updated (ISO-8601 format)
    *   - message {string} - Error message (only if status is 'error')
    */
   async getAllRooms(req, res) {
@@ -86,14 +86,14 @@ class RoomController {
    *     - layout {Object} - Room layout configuration
    *       - columns {number} - Number of columns in the room grid
    *       - rows {number} - Number of rows in the room grid
-   *     - created_at {Date} - When room was created
-   *     - updated_at {Date} - When room was last updated
+   *     - created_at {string} - When room was created (ISO-8601 format)
+   *     - updated_at {string} - When room was last updated (ISO-8601 format)
    *     - computers {Array<Object>} - Array of computers in this room:
    *       - id {number} - Computer ID
    *       - name {string} - Computer name
    *       - status {string} - Computer status ('online'/'offline') 
    *       - have_active_errors {boolean} - Whether computer has active errors
-   *       - last_update {Date} - When computer was last updated
+   *       - last_update {string} - When computer was last updated (ISO-8601 format)
    *       - room_id {number} - ID of the room this computer belongs to
    *       - pos_x {number} - X position in room grid
    *       - pos_y {number} - Y position in room grid
@@ -156,8 +156,8 @@ class RoomController {
    *     - layout {Object} - Room layout configuration
    *       - columns {number} - Number of columns in the room grid
    *       - rows {number} - Number of rows in the room grid
-   *     - created_at {Date} - When room was created
-   *     - updated_at {Date} - When room was last updated
+   *     - created_at {string} - When room was created (ISO-8601 format)
+   *     - updated_at {string} - When room was last updated (ISO-8601 format)
    *   - message {string} - Success or error message
    */
   async createRoom(req, res) {
@@ -221,8 +221,8 @@ class RoomController {
    *     - layout {Object} - Room layout configuration
    *       - columns {number} - Number of columns in the room grid
    *       - rows {number} - Number of rows in the room grid
-   *     - created_at {Date} - When room was created
-   *     - updated_at {Date} - When room was last updated
+   *     - created_at {string} - When room was created (ISO-8601 format)
+   *     - updated_at {string} - When room was last updated (ISO-8601 format)
    *   - message {string} - Success or error message
    */
   async updateRoom(req, res) {

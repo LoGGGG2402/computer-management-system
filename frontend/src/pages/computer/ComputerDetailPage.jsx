@@ -11,24 +11,26 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Button,
   Typography,
-  Tag,
-  Space,
   Card,
+  Space,
 } from "antd";
 import {
   ArrowLeftOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  ExclamationCircleOutlined,
   CodeOutlined,
 } from "@ant-design/icons";
-import computerService from "../../services/computer.service";
-import { useSocket } from "../../contexts/SocketContext";
-import ComputerCard from "../../components/computer/ComputerCard";
-import ComputerError from "../../components/computer/ComputerError";
+import ComputerDetail from "../../components/computer/ComputerDetail";
 import ComputerConsole from "../../components/computer/ComputerConsole";
 import { LoadingComponent } from "../../components/common";
-import { useSimpleFetch } from "../../hooks/useSimpleFetch";
+import {
+  useAppDispatch,
+  useAppSelector,
+  fetchComputerById,
+  selectSelectedComputer,
+  selectComputerLoading,
+  selectComputerError,
+  selectComputerStatus,
+  selectSocketConnected
+} from "../../app/index";
 
 const { Title } = Typography;
 
@@ -49,7 +51,7 @@ const ComputerDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { subscribeToComputer, unsubscribeFromComputer, getComputerStatus, isSocketReady } = useSocket();
+  const dispatch = useAppDispatch();
 
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const initialTab = searchParams.get('tab') || 'overview';
@@ -57,57 +59,39 @@ const ComputerDetailPage = () => {
 
   const computerIdInt = useMemo(() => parseInt(id), [id]);
 
-  // Fetch computer details using useSimpleFetch
-  const fetchComputerDetailsCallback = useCallback(() => {
-    if (!computerIdInt) return Promise.resolve(null);
-    return computerService.getComputerById(computerIdInt);
-  }, [computerIdInt]);
+  // Redux selectors
+  const computer = useAppSelector(selectSelectedComputer);
+  const loading = useAppSelector(selectComputerLoading);
+  const error = useAppSelector(selectComputerError);
+  const computerStatus = useAppSelector(state => selectComputerStatus(state, computerIdInt));
+  const isSocketConnected = useAppSelector(selectSocketConnected);
 
-  const { data: computer, loading, error: fetchError, refresh: refreshComputerDetails } = useSimpleFetch(
-    fetchComputerDetailsCallback,
-    [fetchComputerDetailsCallback],
-    { errorMessage: "Failed to load computer details" }
-  );
-
-  const computerStatus = getComputerStatus(computerIdInt);
   const isOnline = useMemo(() => {
-    return (isSocketReady && computerStatus?.status === "online") ||
-      (!isSocketReady && computer?.status === "online") ||
+    return (isSocketConnected && computerStatus?.status === "online") ||
+      (!isSocketConnected && computer?.status === "online") ||
       (computer?.last_update && new Date() - new Date(computer.last_update) < 5 * 60 * 1000);
-  }, [isSocketReady, computerStatus, computer]);
+  }, [isSocketConnected, computerStatus, computer]);
 
   /**
-   * Handles WebSocket subscription for real-time computer status
-   * 
-   * @effect
-   * @dependency {number} computerIdInt - Parsed integer computer ID
-   * @dependency {boolean} isSocketReady - WebSocket connection status
+   * Fetches computer details when ID changes
    */
   useEffect(() => {
-    if (computerIdInt && isSocketReady) {
-      subscribeToComputer(computerIdInt);
+    if (computerIdInt) {
+      dispatch(fetchComputerById(computerIdInt));
     }
-
-    return () => {
-      if (computerIdInt && isSocketReady) {
-        unsubscribeFromComputer(computerIdInt);
-      }
-    };
-  }, [computerIdInt, subscribeToComputer, unsubscribeFromComputer, isSocketReady]);
+  }, [dispatch, computerIdInt]);
 
   /**
    * Triggers a refresh of computer details
-   * 
-   * @function
    */
-  const handleRefresh = () => {
-    // refreshComputerDetails();
-  };
+  const handleRefresh = useCallback(() => {
+    if (computerIdInt) {
+      dispatch(fetchComputerById(computerIdInt));
+    }
+  }, [dispatch, computerIdInt]);
 
   /**
    * Handles navigation to previous page
-   * 
-   * @function
    */
   const handleGoBack = () => {
     navigate(-1);
@@ -115,9 +99,6 @@ const ComputerDetailPage = () => {
 
   /**
    * Handles tab change and updates URL query parameter
-   * 
-   * @function
-   * @param {string} key - Selected tab key
    */
   const handleTabChange = (key) => {
     setActiveTab(key);
@@ -128,8 +109,6 @@ const ComputerDetailPage = () => {
   
   /**
    * Defines tab items for the tabbed interface
-   * 
-   * @type {Array<Object>}
    */
   const items = useMemo(() => [
     {
@@ -138,7 +117,7 @@ const ComputerDetailPage = () => {
       children: (
         <div className="computer-overview">
           {computer && (
-            <ComputerCard
+            <ComputerDetail
               computer={computer}
               isOnline={isOnline}
               cpuUsage={computerStatus?.cpuUsage || 0}
@@ -148,20 +127,6 @@ const ComputerDetailPage = () => {
             />
           )}
         </div>
-      ),
-    },
-    {
-      key: "errors",
-      label: (
-        <span>
-          <ExclamationCircleOutlined /> Errors
-        </span>
-      ),
-      children: (
-        <ComputerError
-          computerId={computerIdInt}
-          onRefresh={handleRefresh}
-        />
       ),
     },
     {
@@ -192,11 +157,11 @@ const ComputerDetailPage = () => {
     );
   }
 
-  if (fetchError || !computer) {
+  if (error || !computer) {
     return (
       <Card className="computer-detail-page">
         <div className="text-center">
-          <Title level={4}>{fetchError || "Computer not found"}</Title>
+          <Title level={4}>{error || "Computer not found"}</Title>
           <Button
             type="primary"
             icon={<ArrowLeftOutlined />}

@@ -23,7 +23,7 @@ module.exports = {
       ip_address: {
         type: Sequelize.STRING(50)
       },
-      unique_agent_id: {
+      agent_id: {
         type: Sequelize.STRING(255),
         allowNull: false,
         unique: true

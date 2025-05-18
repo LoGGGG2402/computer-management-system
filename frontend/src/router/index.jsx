@@ -14,7 +14,7 @@ import MainLayout from '../layouts/MainLayout';
 
 // Import pages
 import LoginPage from '../pages/LoginPage';
-import Dashboard from '../pages/dashboard/Dashboard';
+import Dashboard from '../pages/Dashboard';
 import RoomsListPage from '../pages/room/RoomsListPage'; 
 import RoomDetailPage from '../pages/room/RoomDetailPage';
 import ComputerDetailPage from '../pages/computer/ComputerDetailPage';
@@ -24,7 +24,7 @@ import ComputerDetailPage from '../pages/computer/ComputerDetailPage';
 // Import admin pages
 import AdminDashboard from '../pages/Admin/AdminDashboard';
 // Import User and Computer list pages for admin routes
-import UsersListPage from '../pages/user/UsersListPage'; 
+import UsersListPage from '../pages/Admin/UsersListPage'; 
 import ComputersListPageAdmin from '../pages/computer/ComputersListPage'; // Use alias if needed or ensure correct import path
 import AgentVersionManagementPage from '../pages/Admin/AgentVersionManagementPage'; // Import the new page
 

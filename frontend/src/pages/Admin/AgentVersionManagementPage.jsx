@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useAppDispatch, useAppSelector } from '../../app/index';
+import { fetchAgentVersions, selectAgentVersions, selectAdminLoading } from '../../app/index';
 import AgentVersionManagement from '../../components/admin/AgentVersionManagement';
 
 /**
@@ -10,9 +12,17 @@ import AgentVersionManagement from '../../components/admin/AgentVersionManagemen
  * @returns {JSX.Element} The rendered page component
  */
 const AgentVersionManagementPage = () => {
+  const dispatch = useAppDispatch();
+  const versions = useAppSelector(selectAgentVersions);
+  const loading = useAppSelector(selectAdminLoading);
+
+  useEffect(() => {
+    dispatch(fetchAgentVersions());
+  }, [dispatch]);
+
   return (
     <div className="agent-version-management-page">
-      <AgentVersionManagement />
+      <AgentVersionManagement versions={versions} loading={loading} />
     </div>
   );
 };

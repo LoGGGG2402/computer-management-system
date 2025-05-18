@@ -67,6 +67,13 @@ module.exports = (sequelize, DataTypes) => {
       as: 'assignedRooms',
       foreignKey: 'user_id'
     });
+    
+    // One-to-many relationship with RefreshToken
+    User.hasMany(models.RefreshToken, {
+      foreignKey: 'user_id',
+      as: 'refreshTokens',
+      onDelete: 'CASCADE'
+    });
   };
 
   return User;

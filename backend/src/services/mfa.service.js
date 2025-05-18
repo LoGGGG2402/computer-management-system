@@ -78,6 +78,15 @@ class MfaService {
 
     return { valid: false, positionInfo: null };
   }
+  
+  /**
+   * Check if an agent has pending MFA verification
+   * @param {string} agentId - The unique agent ID to check
+   * @returns {boolean} True if there's a pending MFA for this agent, false otherwise
+   */
+  hasPendingMfa(agentId) {
+    return this.mfaCache.has(agentId);
+  }
 }
 
 module.exports = new MfaService();

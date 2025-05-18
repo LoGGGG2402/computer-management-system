@@ -1,19 +1,17 @@
 import { RouterProvider } from 'react-router-dom'
 import router from './router'
-import { AuthProvider } from './contexts/AuthContext'
-import { SocketProvider } from './contexts/SocketContext'
-import { CommandHandleProvider } from './contexts/CommandHandleContext'
+import { useEffect } from 'react'
+import { useAppDispatch, initializeAuth } from './app/index'
 
 function App() {
-  return (
-    <AuthProvider>
-      <SocketProvider>
-        <CommandHandleProvider>
-          <RouterProvider router={router} />
-        </CommandHandleProvider>
-      </SocketProvider>
-    </AuthProvider>
-  )
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    // Khởi tạo auth state từ localStorage (nếu có)
+    dispatch(initializeAuth());
+  }, [dispatch]);
+
+  return <RouterProvider router={router} />
 }
 
 export default App

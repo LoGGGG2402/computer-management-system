@@ -1,17 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Table, Button, Form, Input, Upload, Card, Typography, Space, 
-  Tag, Popconfirm, message, Tooltip, Switch, Select
+  Tag, Popconfirm, message, Tooltip
 } from 'antd';
 import { 
-  UploadOutlined, CheckCircleOutlined, 
-  ExclamationCircleOutlined, InfoCircleOutlined 
+  UploadOutlined
 } from '@ant-design/icons';
-import adminService from '../../services/admin.service';
+import { 
+  useAppDispatch,
+  useAppSelector,
+  fetchAgentVersions,
+  uploadAgentVersion,
+  updateAgentVersionStability,
+  selectAgentVersions,
+  selectAdminLoading
+} from '../../app/index';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 const { TextArea } = Input;
-const { Option } = Select;
 
 /**
  * Calculate SHA-256 checksum of file
@@ -48,31 +54,17 @@ const calculateSHA256 = async (file) => {
  * - Mark specific agent versions as stable
  */
 const AgentVersionManagement = () => {
-  const [versions, setVersions] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const dispatch = useAppDispatch();
+  const versions = useAppSelector(selectAgentVersions);
+  const loading = useAppSelector(selectAdminLoading);
   const [uploadLoading, setUploadLoading] = useState(false);
   const [fileChecksum, setFileChecksum] = useState('');
   const [form] = Form.useForm();
 
   // Load agent versions on component mount
   useEffect(() => {
-    fetchVersions();
-  }, []);
-
-  /**
-   * Fetch agent versions from the server
-   */
-  const fetchVersions = async () => {
-    setLoading(true);
-    try {
-      const data = await adminService.getAgentVersions();
-      setVersions(data);
-    } catch (error) {
-      message.error(`Failed to load agent versions: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+    dispatch(fetchAgentVersions());
+  }, [dispatch]);
 
   /**
    * Mark a version as stable
@@ -80,11 +72,10 @@ const AgentVersionManagement = () => {
    */
   const handleMarkStable = async (versionId) => {
     try {
-      await adminService.updateAgentVersionStability(versionId, true);
+      await dispatch(updateAgentVersionStability({ versionId, isStable: true })).unwrap();
       message.success('Agent version marked as stable successfully');
-      fetchVersions();
     } catch (error) {
-      message.error(`Failed to mark version as stable: ${error.message}`);
+      message.error(`Failed to mark version as stable: ${error}`);
     }
   };
 
@@ -136,13 +127,12 @@ const AgentVersionManagement = () => {
 
     setUploadLoading(true);
     try {
-      await adminService.uploadAgentPackage(formData);
+      await dispatch(uploadAgentVersion(formData)).unwrap();
       message.success('Agent version uploaded successfully');
       form.resetFields();
       setFileChecksum('');
-      fetchVersions();
     } catch (error) {
-      message.error(`Failed to upload agent version: ${error.message}`);
+      message.error(`Failed to upload agent version: ${error}`);
     } finally {
       setUploadLoading(false);
     }
@@ -159,16 +149,6 @@ const AgentVersionManagement = () => {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  /**
-   * Format date to readable string
-   * @param {string} dateString - ISO date string
-   * @returns {string} Formatted date
-   */
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleString();
   };
 
   /**
@@ -262,71 +242,47 @@ const AgentVersionManagement = () => {
           >
             <Input placeholder="e.g., 1.0.0" />
           </Form.Item>
-          
+
           <Form.Item
-            label="Agent Package File"
+            label="Package File"
             name="file"
-            rules={[{ required: true, message: 'Please upload agent package file' }]}
+            rules={[{ required: true, message: 'Please select a file to upload' }]}
           >
             <Upload
-              maxCount={1}
               beforeUpload={() => false}
-              accept=".zip"
               onChange={handleFileChange}
+              maxCount={1}
             >
-              <Button icon={<UploadOutlined />}>Select Agent Package</Button>
+              <Button icon={<UploadOutlined />}>Select File</Button>
             </Upload>
           </Form.Item>
-          
-          {fileChecksum && (
-            <Form.Item
-              label="File Checksum (SHA-256)"
-            >
-              <Input 
-                value={fileChecksum} 
-                readOnly 
-                className="font-mono text-xs"
-                addonAfter={<CheckCircleOutlined style={{ color: 'green' }} />}
-              />
-            </Form.Item>
-          )}
-          
+
           <Form.Item
-            label="Release Notes"
+            label="Notes"
             name="notes"
           >
-            <TextArea rows={4} placeholder="Describe what's new in this version" />
+            <TextArea rows={4} placeholder="Optional notes about this version" />
           </Form.Item>
-          
+
           <Form.Item>
             <Button 
               type="primary" 
               htmlType="submit" 
               loading={uploadLoading}
-              disabled={uploadLoading || !fileChecksum}
             >
               Upload Version
             </Button>
           </Form.Item>
         </Form>
       </Card>
-      
+
       {/* Versions Table */}
       <Card title="Agent Versions">
-        <div className="flex justify-between mb-4">
-          <Text>
-            <InfoCircleOutlined className="mr-2" />
-            Manage agent versions and mark stable releases
-          </Text>
-          <Button onClick={fetchVersions} loading={loading}>Refresh</Button>
-        </div>
-        
         <Table
           columns={columns}
           dataSource={versions}
           rowKey="id"
           loading={loading}
-          pagination={{ pageSize: 10 }}
         />
       </Card>
     </div>

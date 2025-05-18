@@ -10,9 +10,17 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button, Typography, message, Space, Input, Row, Col, Pagination, Checkbox } from 'antd';
 import { DesktopOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import SimpleComputerCard from '../../components/computer/SimpleComputerCard';
-import computerService from '../../services/computer.service';
+import ComputerCard from '../../components/room/ComputerCard';
 import { LoadingComponent } from '../../components/common';
+import {
+  useAppDispatch,
+  useAppSelector,
+  fetchComputers,
+  selectComputers,
+  selectComputerLoading,
+  selectComputerPagination,
+  setComputerCurrentPage
+} from '../../app/index';
 
 const { Title } = Typography;
 
@@ -27,137 +35,70 @@ const { Title } = Typography;
  */
 const ComputersListPage = () => {
   const navigate = useNavigate();
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const dispatch = useAppDispatch();
   
-  // Computer data state
-  const [computers, setComputers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(12); // 12 items per page for better grid layout
-
-  // Filter states
+  // Redux selectors
+  const computers = useAppSelector(selectComputers);
+  const loading = useAppSelector(selectComputerLoading);
+  const pagination = useAppSelector(selectComputerPagination);
+  
+  // Local state for filters
   const [searchName, setSearchName] = useState('');
   const [filterHasErrors, setFilterHasErrors] = useState(false);
+  const [pageSize, setPageSize] = useState(12);
 
   /**
    * Fetches computers from the API when dependencies change
-   * 
-   * @effect
-   * @dependency {number} currentPage - Current page number
-   * @dependency {number} pageSize - Number of items per page
-   * @dependency {string} searchName - Name search filter
-   * @dependency {boolean} filterHasErrors - Has errors filter
-   * @dependency {number} refreshTrigger - Counter to trigger refreshes
    */
   useEffect(() => {
-    fetchComputers();
-  }, [currentPage, pageSize, searchName, filterHasErrors, refreshTrigger]);
-
-  /**
-   * Fetches computers from the API with pagination and filters
-   * 
-   * @function
-   * @async
-   */
-  const fetchComputers = async () => {
-    try {
-      setLoading(true);
-      
-      // Create filters object for API call
-      const filters = {
-        page: currentPage,
-        limit: pageSize
-      };
-      
-      // Add filters if they have values
-      if (searchName) filters.name = searchName;
-      if (filterHasErrors) filters.has_errors = true;
-
-      // Fetch computers with pagination and filters
-      const response = await computerService.getAllComputers(filters);
-
-      // Handle the returned data structure
-      if (response) {
-        const computers = Array.isArray(response) ? response : 
-                          (response?.computers || response?.data?.computers || []);
-        const total = response?.total || response?.data?.total || computers.length;
-        
-        setComputers(computers || []);
-        setTotal(total || 0);
-        
-        // Adjust current page if needed
-        if (response?.currentPage && response.currentPage !== currentPage) {
-          setCurrentPage(response.currentPage);
-        }
-      } else {
-        setComputers([]);
-        setTotal(0);
-      }
-    } catch (error) {
-      console.error('Error fetching computers:', error);
-      message.error('Failed to load computers');
-      setComputers([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const filters = {
+      page: pagination.currentPage,
+      limit: pageSize,
+      name: searchName || undefined,
+      has_errors: filterHasErrors || undefined
+    };
+    
+    dispatch(fetchComputers(filters));
+  }, [dispatch, pagination.currentPage, pageSize, searchName, filterHasErrors]);
 
   /**
    * Handles name search input
-   * 
-   * @function
-   * @param {string} value - The search term entered by the user
    */
   const handleNameSearch = (value) => {
     setSearchName(value);
-    setCurrentPage(1); // Reset to first page when search changes
+    dispatch(setComputerCurrentPage(1));
   };
 
   /**
    * Handles error filter change
-   * @param {Event} e - Checkbox change event
    */
   const handleErrorFilterChange = (e) => {
     setFilterHasErrors(e.target.checked);
-    setCurrentPage(1);
+    dispatch(setComputerCurrentPage(1));
   };
 
   /**
    * Handles navigation to computer details page
-   * 
-   * @function
-   * @param {number|string} computerId - ID of the computer to view
    */
   const handleView = (computerId) => {
-    // Navigate to computer details page instead of showing modal
     navigate(`/computers/${computerId}`);
   };
 
   /**
    * Triggers a refresh of the computers list
-   * 
-   * @function
    */
   const handleRefresh = () => {
-    // Reset filters and trigger refresh
     setSearchName('');
     setFilterHasErrors(false);
-    setCurrentPage(1); // Go back to page 1 on full refresh
-    setRefreshTrigger(prev => prev + 1);
+    dispatch(setComputerCurrentPage(1));
     message.success('Computer list refreshed');
   };
 
   /**
    * Handles pagination changes
-   * 
-   * @function
-   * @param {number} page - New page number
-   * @param {number} pageSize - New page size
    */
   const handlePagination = (page, pageSize) => {
-    setCurrentPage(page);
+    dispatch(setComputerCurrentPage(page));
     setPageSize(pageSize);
   };
 
@@ -203,21 +144,21 @@ const ComputersListPage = () => {
             <Row gutter={[16, 16]}>
               {computers.map(computer => (
                 <Col xs={24} sm={12} md={8} lg={6} key={computer.id}>
-                  <SimpleComputerCard 
+                  <ComputerCard 
                     computer={computer} 
                     onView={handleView}
-                    onRefresh={() => setRefreshTrigger(prev => prev + 1)}
+                    onRefresh={handleRefresh}
                   />
                 </Col>
               ))}
             </Row>
             
-            {total > 0 && (
+            {pagination.total > 0 && (
               <div style={{ marginTop: '20px', textAlign: 'center' }}>
                 <Pagination
-                  current={currentPage}
+                  current={pagination.currentPage}
                   pageSize={pageSize}
-                  total={total}
+                  total={pagination.total}
                   onChange={handlePagination}
                   showSizeChanger
                   pageSizeOptions={['12', '24', '36', '48']}

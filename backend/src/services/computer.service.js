@@ -18,7 +18,7 @@ class ComputerService {
    * @returns {Promise<Object|null>} Computer object with related room data if found, null otherwise
    *   - id {number} - The database identifier of the computer
    *   - name {string} - Human-readable name of the computer
-   *   - unique_agent_id {string} - Unique identifier for the agent
+   *   - agent_id {string} - Unique identifier for the agent
    *   - agent_token_hash {string} - Hashed authentication token
    *   - status {string} - Current status ('online' or 'offline')
    *   - have_active_errors {boolean} - Whether the computer has unresolved errors
@@ -38,7 +38,7 @@ class ComputerService {
   async findComputerByAgentId(agentId) {
     try {
       const computer = await Computer.findOne({
-        where: { unique_agent_id: agentId },
+        where: { agent_id: agentId },
         include: [
           {
             model: Room,
@@ -68,7 +68,7 @@ class ComputerService {
    *   - computer {Object} - Updated computer object with the following properties:
    *     - id {number} - The database identifier of the computer
    *     - name {string} - Human-readable name of the computer
-   *     - unique_agent_id {string} - Unique identifier for the agent
+   *     - agent_id {string} - Unique identifier for the agent
    *     - agent_token_hash {string} - Hashed authentication token
    *     - status {string} - Current status ('online' or 'offline')
    *     - have_active_errors {boolean} - Whether the computer has unresolved errors
@@ -97,7 +97,7 @@ class ComputerService {
         await computer.update(updateData);
       } else {
         computer = await Computer.create({
-          unique_agent_id: agentId,
+          agent_id: agentId,
           agent_token_hash: tokenHash,
           name: `Computer-${agentId.substring(0, 8)}`,
           status: "offline",
@@ -203,7 +203,7 @@ class ComputerService {
 
       const { count, rows } = await Computer.findAndCountAll({
         attributes: {
-          exclude: ["agent_token_hash", "unique_agent_id", "errors"],
+          exclude: ["agent_token_hash", "agent_id", "errors"],
         },
         where: whereClause,
         include: [
@@ -255,7 +255,7 @@ class ComputerService {
   async getComputerById(id) {
     const computer = await Computer.findByPk(id, {
       attributes: {
-        exclude: ["agent_token_hash", "unique_agent_id", "errors"],
+        exclude: ["agent_token_hash", "agent_id", "errors"],
       },
       include: [
         {
@@ -302,7 +302,7 @@ class ComputerService {
 
       await computer.update(data);
 
-      const { agent_token_hash, unique_agent_id, ...safeData } = computer.get({
+      const { agent_token_hash, agent_id, ...safeData } = computer.get({
         plain: true,
       });
       return safeData;

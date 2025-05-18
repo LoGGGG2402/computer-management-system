@@ -16,8 +16,12 @@ import {
     LoadingOutlined,
     CloseOutlined
 } from '@ant-design/icons';
-
-import { useCommandHandle } from "../../contexts/CommandHandleContext";
+import {
+    useAppDispatch,
+    useAppSelector,
+    sendCommand,
+    selectCommandHistory
+} from '../../app/index';
 
 const { Option } = Select;
 
@@ -41,6 +45,7 @@ const { Option } = Select;
  * @returns {JSX.Element} The rendered component
  */
 const ComputerConsole = ({ computerId, computer, isOnline = false }) => {
+    const dispatch = useAppDispatch();
     /**
      * Current command input value
      * @type {string}
@@ -71,7 +76,8 @@ const ComputerConsole = ({ computerId, computer, isOnline = false }) => {
      */
     const [error, setError] = useState(null);
     
-    const { sendCommand, commandResults } = useCommandHandle();
+    const commandHistory = useAppSelector(selectCommandHistory);
+    
     const outputEndRef = useRef(null);
     const localIdCounter = useRef(0);
 
@@ -91,8 +97,8 @@ const ComputerConsole = ({ computerId, computer, isOnline = false }) => {
      * @type {Array<Object>}
      */
     const computerCommandResults = React.useMemo(() => {
-        return computerId ? commandResults[computerId] || [] : [];
-    }, [commandResults, computerId]);
+        return computerId ? commandHistory[computerId] || [] : [];
+    }, [commandHistory, computerId]);
 
     /**
      * Processes command results into formatted console entries
@@ -252,11 +258,15 @@ const ComputerConsole = ({ computerId, computer, isOnline = false }) => {
         setError(null);
 
         try {
-            await sendCommand(computerId, commandToSend, commandType);
-        } catch (err) {
+            await dispatch(sendCommand({
+                computerId,
+                command: commandToSend,
+                type: commandType
+            })).unwrap();
+        } catch (error) {
             const errorTimestamp = new Date();
-            console.error('[Console] Error sending command:', err);
-            const errorMessage = `Error: ${err?.message || 'Failed to send command to backend'}`;
+            console.error("Command execution error:", error);
+            const errorMessage = error.message || "Failed to execute command";
             setOutput(prev => [...prev, {
                 id: `live-cmd-${currentLocalId}-send-error`,
                 commandId: null,
@@ -270,7 +280,7 @@ const ComputerConsole = ({ computerId, computer, isOnline = false }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [commandInput, commandType, computerId, sendCommand, isOnline, setOutput]);
+    }, [commandInput, commandType, computerId, isOnline, dispatch]);
 
     /**
      * Updates the command input value

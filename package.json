@@ -1,7 +1,7 @@
 {
   "name": "computer-management-system",
   "version": "1.0.0",
-  "description": "Dự án này nhằm mục đích tạo ra một ứng dụng web để quản lý và giám sát các máy tính trong công ty, được tổ chức theo phòng (Room), với khả năng gửi lệnh (qua WebSocket), theo dõi trạng thái real-time (online/offline xác định qua WS, %CPU/%RAM Agent gửi qua HTTP), hiển thị vị trí trực quan, hệ thống phân quyền người dùng (Admin, User), cơ chế đăng ký Agent an toàn (MFA/Token), chức năng báo cáo và xử lý lỗi máy tính, và khả năng lọc dữ liệu trên các API danh sách. Agent sẽ được phát triển bằng Python.",
+  "description": "This project aims to create a web application to manage and monitor computers in a company, organized by rooms, with the ability to send commands (via WebSocket), monitor real-time status (online/offline determined through WS, %CPU/%RAM sent by Agent via HTTP), display visual positioning, user permission system (Admin, User), secure Agent registration mechanism (MFA/Token), computer error reporting and handling functions, and data filtering capabilities on list APIs. The Agent will be developed using Python.",
   "main": "index.js",
   "directories": {
     "doc": "docs"

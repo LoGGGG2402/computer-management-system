@@ -20,10 +20,7 @@ class RoomService {
     try {
       if (!layout) return false;
 
-      if (
-        !layout.columns ||
-        !layout.rows
-      ) {
+      if (!layout.columns || !layout.rows) {
         return false;
       }
 
@@ -34,10 +31,7 @@ class RoomService {
         return false;
       }
 
-      if (
-        layout.columns <= 0 ||
-        layout.rows <= 0
-      ) {
+      if (layout.columns <= 0 || layout.rows <= 0) {
         return false;
       }
 
@@ -68,7 +62,13 @@ class RoomService {
    *     - created_at {Date} - When the room was created
    *     - updated_at {Date} - When the room was last updated
    */
-  async getAllRooms(page = 1, limit = 10, name = "", assigned_user_id = null, user) {
+  async getAllRooms(
+    page = 1,
+    limit = 10,
+    name = "",
+    assigned_user_id = null,
+    user
+  ) {
     try {
       const offset = (page - 1) * limit;
 
@@ -89,21 +89,21 @@ class RoomService {
       }
 
       let include = [];
-      
+
       if (assigned_user_id) {
         include.push({
           model: User,
-          as: 'assignedUsers',
-          attributes: [], 
-          through: { attributes: [] }, 
-          where: { id: assigned_user_id }
+          as: "assignedUsers",
+          attributes: [],
+          through: { attributes: [] },
+          where: { id: assigned_user_id },
         });
       }
 
       const { count, rows } = await Room.findAndCountAll({
         where: whereClause,
         include,
-        distinct: true, 
+        distinct: true,
         limit,
         offset,
         order: [["id", "ASC"]],
@@ -154,26 +154,21 @@ class RoomService {
             model: Computer,
             as: "computers",
             attributes: {
-              exclude: [
-                "unique_agent_id",
-                "agent_token_hash",
-                "errors",
-              ],
+              exclude: ["agent_id", "agent_token_hash", "errors"],
             },
           },
         ],
       });
-  
+
       if (!room) {
         throw new Error("Room not found");
       }
-  
+
       return room;
     } catch (error) {
       throw error;
     }
   }
-  
 
   /**
    * Create a new room
@@ -245,7 +240,6 @@ class RoomService {
       if (roomData.name !== undefined) updateData.name = roomData.name;
       if (roomData.description !== undefined)
         updateData.description = roomData.description;
-      if (roomData.layout !== undefined) updateData.layout = roomData.layout;
 
       await room.update(updateData);
 
@@ -381,53 +375,60 @@ class RoomService {
     try {
       const room = await Room.findOne({
         where: { name: roomName },
-        include: [{
-          model: Computer,
-          as: "computers",
-          attributes: ['id', 'pos_x', 'pos_y']
-        }]
+        include: [
+          {
+            model: Computer,
+            as: "computers",
+            attributes: ["id", "pos_x", "pos_y"],
+          },
+        ],
       });
 
       if (!room) {
-        return { 
-          valid: false, 
-          message: `Phòng "${roomName}" không tồn tại`, 
-          room: null 
+        return {
+          valid: false,
+          message: `Room "${roomName}" does not exist`,
+          room: null,
         };
       }
 
       if (!room.layout || !room.layout.columns || !room.layout.rows) {
-        return { 
-          valid: false, 
-          message: "Phòng không có cấu hình layout hợp lệ", 
-          room 
+        return {
+          valid: false,
+          message: "Room does not have a valid layout configuration",
+          room,
         };
       }
 
-      if (posX < 0 || posX >= room.layout.columns || posY < 0 || posY >= room.layout.rows) {
-        return { 
-          valid: false, 
-          message: `Vị trí (${posX}, ${posY}) nằm ngoài kích thước phòng (${room.layout.columns}x${room.layout.rows})`, 
-          room 
+      if (
+        posX < 0 ||
+        posX >= room.layout.columns ||
+        posY < 0 ||
+        posY >= room.layout.rows
+      ) {
+        return {
+          valid: false,
+          message: `Position (${posX}, ${posY}) is outside the room dimensions (${room.layout.columns}x${room.layout.rows})`,
+          room,
         };
       }
 
       const isOccupied = room.computers.some(
-        comp => comp.pos_x === posX && comp.pos_y === posY
+        (comp) => comp.pos_x === posX && comp.pos_y === posY
       );
 
       if (isOccupied) {
-        return { 
-          valid: false, 
-          message: `Vị trí (${posX}, ${posY}) đã được sử dụng bởi một máy tính khác`, 
-          room 
+        return {
+          valid: false,
+          message: `Position (${posX}, ${posY}) is already occupied by another computer`,
+          room,
         };
       }
 
-      return { 
-        valid: true, 
-        message: "Vị trí hợp lệ và khả dụng", 
-        room 
+      return {
+        valid: true,
+        message: "Vị trí hợp lệ và khả dụng",
+        room,
       };
     } catch (error) {
       throw error;

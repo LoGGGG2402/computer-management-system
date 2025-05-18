@@ -17,6 +17,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const http = require('http');
+const cookieParser = require('cookie-parser');
 const { Server } = require('socket.io');
 const helmet = require('helmet');
 const routes = require('./routes');
@@ -52,6 +53,7 @@ function createApp() {
   app.use(cors(corsConfig));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  app.use(cookieParser());
 
   // Development Request Logging
   if (process.env.NODE_ENV === 'development') {

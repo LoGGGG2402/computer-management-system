@@ -13,11 +13,18 @@ const ROOM_PREFIXES = {
 };
 
 const EVENTS = {
+  // Admin events
   ADMIN_NEW_AGENT_MFA: 'admin:new_agent_mfa',
   ADMIN_AGENT_REGISTERED: 'admin:agent_registered',
+  
+  // Command events
   COMMAND_EXECUTE: 'command:execute',
-  COMPUTER_STATUS_UPDATED: 'computer:status_updated',
   COMMAND_COMPLETED: 'command:completed',
+  
+  // Computer status events
+  COMPUTER_STATUS_UPDATED: 'computer:status_updated',
+  
+  // Agent notification events
   NEW_VERSION_AVAILABLE: 'agent:new_version_available',
 };
 
@@ -309,6 +316,12 @@ class WebSocketService {
         logger.warn('sendCommandToAgent called with invalid parameters', { computerId, commandId, commandExists: !!command });
         return false;
     }
+
+    if (typeof command !== 'string' || command.length > 2000) {
+        logger.warn(`Invalid command format or length exceeds 2000 characters for command ID ${commandId}`);
+        return false;
+    }
+
     try {
       const agentRoom = ROOM_PREFIXES.AGENT(computerId);
 
@@ -317,7 +330,12 @@ class WebSocketService {
         return false;
       }
 
-      this.io.to(agentRoom).emit(EVENTS.COMMAND_EXECUTE, { commandId, command, commandType });
+      // Emit event with format matching the API documentation
+      this.io.to(agentRoom).emit(EVENTS.COMMAND_EXECUTE, { 
+        command,
+        commandId, 
+        commandType
+      });
 
       logger.info(`Command ${commandId} (type: ${commandType}) sent to agent room ${agentRoom} for computer ${computerId}`);
       return true;
@@ -462,51 +480,53 @@ class WebSocketService {
    * @param {string} [versionInfo.notes] - Release notes
    * @returns {Promise<number>} Number of connected agents that were notified
    */
+  /**
+   * Notifies all connected agents about a new version being available
+   * @param {Object} [versionInfo] - Information about the new agent version
+   * @param {string} [versionInfo.version] - The version string (e.g., "1.2.0")
+   * @param {string} [versionInfo.download_url] - URL to download the update package
+   * @param {string} [versionInfo.checksum_sha256] - SHA-256 checksum of the update package
+   * @param {string} [versionInfo.notes] - Release notes
+   * @returns {Promise<void>}
+   */
   async notifyAgentsOfNewVersion(versionInfo = {}) {
     try {
-      if (!this.io) {
-        logger.error('Cannot notify agents: WebSocket IO not initialized');
-        return 0;
+      // Validate required fields
+      if (!versionInfo.version || !versionInfo.download_url || !versionInfo.checksum_sha256) {
+        logger.warn('Incomplete version information provided for agent notification', { versionInfo });
+        return;
       }
-
-      // Format the event data to match the agent.controller.js response format
+      
+      // Format the event data according to the API documentation
       const eventData = {
         status: "success",
         update_available: true,
-        version: versionInfo.version || "unknown",
-        download_url: versionInfo.download_url || "",
-        checksum_sha256: versionInfo.checksum_sha256 || "",
-        notes: versionInfo.notes || null,
-        timestamp: new Date()
+        version: versionInfo.version,
+        download_url: versionInfo.download_url,
+        checksum_sha256: versionInfo.checksum_sha256,
+        notes: versionInfo.notes || ""
       };
 
       // Get all agent rooms
       const rooms = this.io.sockets.adapter.rooms;
-      let notifiedAgents = 0;
+      let notifiedRooms = 0;
 
       // For each room, check if it's an agent room
-      for (const [roomName, sockets] of rooms.entries()) {
+      for (const [roomName] of rooms.entries()) {
         if (roomName.startsWith('agent_')) {
-          // Extract computer ID from room name (agent_{id})
-          const computerId = roomName.split('_')[1];
-          if (!computerId) continue;
-
-          // Send notification to this agent room
-          this.io.to(roomName).emit(EVENTS.NEW_VERSION_AVAILABLE, eventData);
-          notifiedAgents++;
-          
-          logger.debug(`Notified agent for computer ${computerId} about new version ${eventData.version}`);
+          this._emitToRoom(roomName, EVENTS.NEW_VERSION_AVAILABLE, eventData);
+          logger.debug(`Notified room ${roomName} about new agent version: ${eventData.version}`);
+          notifiedRooms++;
         }
       }
 
-      logger.info(`Notified ${notifiedAgents} agents about new agent version: ${eventData.version}`);
-      return notifiedAgents;
+      logger.info(`Notified ${notifiedRooms} agent rooms about new agent version: ${eventData.version}`);
     } catch (error) {
       logger.error('Error notifying agents of new version:', { 
         error: error.message, 
-        stack: error.stack 
+        stack: error.stack,
+        version: versionInfo?.version
       });
-      return 0;
     }
   }
 }

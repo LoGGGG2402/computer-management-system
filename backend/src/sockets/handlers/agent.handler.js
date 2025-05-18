@@ -14,19 +14,23 @@ const logger = require('../../utils/logger');
  */
 async function handleAgentAuthentication(socket, data) {
   try {
-    const { agentId, token } = data || {};
+    const { agentId, authToken } = data || {};
 
-    if (!agentId || !token) {
+    if (!agentId || !authToken) {
       logger.warn(`Authentication attempt with missing credentials from ${socket.id}`);
-      socket.emit('agent:ws_auth_failed', { status: 'error', message: 'Missing agent ID or token' });
+      socket.emit('connect_error', { 
+        message: 'Authentication failed: Missing required headers' 
+      });
       return;
     }
 
-    const computerId = await computerService.verifyAgentToken(agentId, token);
+    const computerId = await computerService.verifyAgentToken(agentId, authToken);
 
     if (!computerId) {
       logger.warn(`Failed authentication attempt for agent ${agentId} from ${socket.id}`);
-      socket.emit('agent:ws_auth_failed', { status: 'error', message: 'Authentication failed (Invalid ID or token)' });
+      socket.emit('connect_error', {
+        message: 'Authentication failed: Invalid agent credentials' 
+      });
       return;
     }
 
@@ -34,17 +38,14 @@ async function handleAgentAuthentication(socket, data) {
     socket.data.agentId = agentId;
 
     websocketService.joinAgentRoom(socket, computerId);
-
-    socket.emit('agent:ws_auth_success', {
-      status: 'success',
-      message: 'Authentication successful'
-    });
   } catch (error) {
-    logger.error(`Agent authentication error for agent ${data?.agentId}, socket ${socket.id}:`, { 
-      error: error.message, 
-      stack: error.stack 
+    logger.error(`Agent authentication error for agent ${data?.agentId}, socket ${socket.id}:`, {
+      error: error.message,
+      stack: error.stack
     });
-    socket.emit('agent:ws_auth_failed', { status: 'error', message: 'Internal server error during authentication' });
+    socket.emit('connect_error', {
+      message: 'Internal error: Unable to establish WebSocket connection' 
+    });
   }
 }
 
@@ -66,11 +67,22 @@ async function handleAgentStatusUpdate(socket, data) {
       return;
   }
 
+  // Validate data according to API constraints
+  const { cpuUsage, ramUsage, diskUsage } = data;
+
+  // Check that each value is a number between 0.0 and 100.0
+  const isValidPercentage = (value) => typeof value === 'number' && value >= 0.0 && value <= 100.0;
+  
+  if (!isValidPercentage(cpuUsage) || !isValidPercentage(ramUsage) || !isValidPercentage(diskUsage)) {
+    logger.warn(`Invalid status data received from computer ${computerId} (Socket ${socket.id}): Values must be numbers between 0.0 and 100.0`);
+    return;
+  }
+
   try {
     websocketService.updateRealtimeCache(computerId, {
-      cpuUsage: data.cpuUsage,
-      ramUsage: data.ramUsage,
-      diskUsage: data.diskUsage,
+      cpuUsage,
+      ramUsage,
+      diskUsage
     });
 
     await websocketService.broadcastStatusUpdate(computerId);
@@ -99,20 +111,28 @@ function handleAgentCommandResult(socket, data) {
     return;
   }
 
-  const { commandId, type, success, result } = data || {};
+  const { commandId, commandType, success, result } = data || {};
 
-  if (!commandId) {
-    logger.warn(`Command result missing commandId from computer ${computerId} (Socket ${socket.id}). Ignoring.`);
+  // Validate according to API constraints
+  if (!commandId || typeof commandId !== 'string') {
+    logger.warn(`Command result missing or invalid commandId from computer ${computerId} (Socket ${socket.id}). Ignoring.`);
     return;
   }
 
-  logger.debug(`Command result for ID ${commandId} received from computer ${computerId} (Socket ${socket.id}) - Type: ${type || 'unknown'}, Success: ${success}`);
+  // Validate result object
+  if (!result || typeof result !== 'object') {
+    logger.warn(`Command result missing result object from computer ${computerId} (Socket ${socket.id}).`);
+    return;
+  }
+
+
+  logger.debug(`Command result for ID ${commandId} received from computer ${computerId} (Socket ${socket.id}) - Type: ${commandType}, Success: ${success}`);
 
   try {
     // Standardize the result format for the frontend
     const standardizedResult = {
       commandId,
-      type: type || 'console',
+      commandType,
       success: !!success,
       result
     };
@@ -131,36 +151,30 @@ function handleAgentCommandResult(socket, data) {
 
 /**
  * Sets up WebSocket event handlers for a connected agent socket.
- * @param {import("socket.io").Server} io - The Socket.IO server instance (passed but not used directly here).
  * @param {import("socket.io").Socket} socket - The socket instance for the agent client.
  */
-const setupAgentHandlers = (io, socket) => {
-  const agentIdFromData = socket.data.agentId;
-  const tokenFromData = socket.data.authToken;
+const setupAgentHandlers = (socket) => {
+  const agentId = socket.data.agentId;
+  const authToken = socket.data.authToken;
 
-  if (agentIdFromData && tokenFromData) {
-    logger.info(`Attempting auto-authentication for agent via headers: Agent ID ${agentIdFromData}, Socket ID ${socket.id}`);
+  // According to documentation, authentication is handled entirely through WebSocket connection headers
+  if (agentId && authToken) {
+    logger.info(`Processing agent authentication via headers: Agent ID ${agentId}, Socket ID ${socket.id}`);
     handleAgentAuthentication(socket, {
-      agentId: agentIdFromData,
-      token: tokenFromData
+      agentId,
+      authToken
     });
   } else {
-    logger.info(`Agent ${socket.id} connected without pre-authentication headers. Waiting for 'agent:authenticate' event.`);
+    logger.warn(`No agent ID or token provided for socket ${socket.id}. Disconnecting.`);
+    socket.disconnect();
+    return;
   }
 
-  socket.on('agent:authenticate', (data) => {
-    if (socket.data.computerId) {
-        logger.warn(`Agent ${socket.data.agentId} (Socket ${socket.id}) sent 'agent:authenticate' but is already authenticated. Ignoring.`);
-        return;
-    }
-    handleAgentAuthentication(socket, data);
-  });
-
-  socket.on('agent:status_update', (data) => {
+  socket.on(websocketService.EVENTS.AGENT_STATUS_UPDATE, (data) => {
     handleAgentStatusUpdate(socket, data);
   });
 
-  socket.on('agent:command_result', (data) => {
+  socket.on(websocketService.EVENTS.AGENT_COMMAND_RESULT, (data) => {
     handleAgentCommandResult(socket, data);
   });
 

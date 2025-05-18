@@ -30,7 +30,7 @@ class ComputerController {
    *       - name {string} - Computer name
    *       - status {string} - Computer status ('online'/'offline')
    *       - have_active_errors {boolean} - Whether computer has active errors
-   *       - last_update {Date} - When computer was last updated
+   *       - last_update {string} - When computer was last updated (ISO-8601 format)
    *       - room_id {number} - ID of the room this computer belongs to
    *       - pos_x {number} - X position in room grid
    *       - pos_y {number} - Y position in room grid
@@ -95,7 +95,7 @@ class ComputerController {
    *     - name {string} - Computer name
    *     - status {string} - Computer status ('online'/'offline')
    *     - have_active_errors {boolean} - Whether computer has active errors
-   *     - last_update {Date} - When computer was last updated
+   *     - last_update {string} - When computer was last updated (ISO-8601 format)
    *     - room_id {number} - ID of the room this computer belongs to
    *     - pos_x {number} - X position in room grid
    *     - pos_y {number} - Y position in room grid
@@ -204,9 +204,9 @@ class ComputerController {
    *       - error_type {string} - Type/category of the error
    *       - error_message {string} - Human-readable error message
    *       - error_details {Object} - Additional details about the error
-   *       - reported_at {Date} - When the error was reported
+   *       - reported_at {string} - When the error was reported (ISO-8601 format)
    *       - resolved {boolean} - Whether the error has been resolved
-   *       - resolved_at {Date} - When the error was resolved (if applicable)
+   *       - resolved_at {string} - When the error was resolved (if applicable) (ISO-8601 format)
    *       - resolution_notes {string} - Notes about how the error was resolved
    *   - message {string} - Error message (only if status is 'error')
    */
@@ -264,7 +264,7 @@ class ComputerController {
    *       - error_type {string} - Type/category of the error
    *       - error_message {string} - Human-readable error message
    *       - error_details {Object} - Additional details about the error
-   *       - reported_at {Date} - When the error was reported
+   *       - reported_at {string} - When the error was reported (ISO-8601 format)
    *       - resolved {boolean} - Whether the error has been resolved (false for new errors)
    *     - computerId {number} - The computer ID associated with this error
    *   - message {string} - Success or error message
@@ -344,9 +344,9 @@ class ComputerController {
    *       - error_type {string} - Type/category of the error
    *       - error_message {string} - Human-readable error message
    *       - error_details {Object} - Additional details about the error
-   *       - reported_at {Date} - When the error was reported
+   *       - reported_at {string} - When the error was reported (ISO-8601 format)
    *       - resolved {boolean} - Whether the error has been resolved (true after resolution)
-   *       - resolved_at {Date} - When the error was resolved
+   *       - resolved_at {string} - When the error was resolved (ISO-8601 format)
    *       - resolution_notes {string} - Notes about how the error was resolved
    *     - computerId {number} - The computer ID associated with this error
    *   - message {string} - Success or error message

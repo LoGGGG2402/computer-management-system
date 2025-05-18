@@ -1,6 +1,8 @@
 const db = require('../database/models');
+const authService = require('./auth.service');
 
 const User = db.User;
+const RefreshToken = db.RefreshToken;
 
 /**
  * Service class for user management operations
@@ -172,7 +174,16 @@ class UserService {
       if (userData.role) updateData.role = userData.role;
       if (userData.is_active !== undefined) updateData.is_active = userData.is_active;
       
+      // Check if password is being updated
+      const isPasswordChange = !!userData.password;
+      
       await user.update(updateData);
+      
+      // If password was changed, invalidate all refresh tokens for security
+      if (isPasswordChange) {
+        // Invalidate all tokens for this user
+        await RefreshToken.destroy({ where: { user_id: id } });
+      }
       
       const updatedUser = await User.findByPk(id, {
         attributes: { exclude: ['password_hash'] }

@@ -1,60 +1,51 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Transfer, Button, message } from 'antd';
-import roomService from '../../services/room.service';
-import userService from '../../services/user.service';
 import { LoadingComponent } from '../common';
-import { useSimpleFetch } from '../../hooks/useSimpleFetch';
+import {
+  useAppDispatch,
+  useAppSelector,
+  fetchUsers,
+  selectUsers,
+  selectUserLoading,
+  fetchUserRooms,
+  updateUserRooms,
+  selectUserRooms
+} from '../../app/index';
 
 const AssignmentComponent = ({ type, id, onSuccess }) => {
+  const dispatch = useAppDispatch();
   const [targetKeys, setTargetKeys] = useState([]);
   const [initialAssignments, setInitialAssignments] = useState([]);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const fetchAvailableItems = useCallback(async () => {
+  const users = useAppSelector(selectUsers);
+  const userRooms = useAppSelector(selectUserRooms);
+  const loading = useAppSelector(selectUserLoading);
+
+  useEffect(() => {
     if (type === 'room') {
-      return await userService.getAllUsers();
+      dispatch(fetchUsers());
+      if (id) {
+        dispatch(fetchUserRooms(id));
+      }
     }
-    return null;
-  }, [type]);
-
-  const { data: availableItemsData, loading: loadingAvailable } = useSimpleFetch(
-    fetchAvailableItems,
-    [fetchAvailableItems],
-    { errorMessage: `Failed to load available ${type === 'room' ? 'users' : 'items'}` }
-  );
-
-  const fetchAssignedItems = useCallback(async () => {
-    if (!id) return null;
-    if (type === 'room') {
-      return await roomService.getUsersInRoom(id);
-    }
-    return null;
-  }, [id, type]);
-
-  const { data: assignedItemsData, loading: loadingAssigned, refresh: refreshAssigned } = useSimpleFetch(
-    fetchAssignedItems,
-    [fetchAssignedItems],
-    { errorMessage: `Failed to load assigned ${type === 'room' ? 'users' : 'items'}` }
-  );
+  }, [dispatch, type, id]);
 
   const availableItems = useMemo(() => {
-    const users = availableItemsData?.users || availableItemsData?.data?.users || availableItemsData?.data || availableItemsData || [];
-    return users.map(user => ({
+    return (users || []).map(user => ({
       key: user.id.toString(),
       title: `${user.firstName || ''} ${user.lastName || ''} (${user.username || 'User'})`.trim(),
       description: user.email || '',
-    })) || [];
-  }, [availableItemsData]);
+    }));
+  }, [users]);
 
   useEffect(() => {
-    if (assignedItemsData) {
-      const assignedKeys = (assignedItemsData || []).map(item => item.id.toString());
+    if (userRooms) {
+      const assignedKeys = (userRooms || []).map(item => item.id.toString());
       setTargetKeys(assignedKeys);
       setInitialAssignments(assignedKeys);
     }
-  }, [assignedItemsData]);
-
-  const loading = loadingAvailable || loadingAssigned;
+  }, [userRooms]);
 
   const handleChange = (newTargetKeys) => {
     setTargetKeys(newTargetKeys);
@@ -68,14 +59,8 @@ const AssignmentComponent = ({ type, id, onSuccess }) => {
 
       let success = true;
       if (type === 'room') {
-        const promises = [];
-        if (itemsToAdd.length > 0) {
-          promises.push(roomService.assignUsersToRoom(id, itemsToAdd));
-        }
-        if (itemsToRemove.length > 0) {
-          promises.push(roomService.unassignUsersFromRoom(id, itemsToRemove));
-        }
-        await Promise.all(promises);
+        await dispatch(updateUserRooms({ roomId: id, addUsers: itemsToAdd, removeUsers: itemsToRemove })).unwrap();
+        await dispatch(fetchUserRooms(id));
       } else {
         success = false;
         message.warn(`Save logic for type '${type}' not implemented.`);
@@ -83,12 +68,7 @@ const AssignmentComponent = ({ type, id, onSuccess }) => {
 
       if (success) {
         message.success('Assignments updated successfully');
-        const refreshedAssigned = await refreshAssigned();
-        const refreshedKeys = (refreshedAssigned || []).map(item => item.id.toString());
-        setInitialAssignments(refreshedKeys);
-        setTargetKeys(refreshedKeys);
-
-        if (onSuccess) onSuccess(refreshedAssigned || []);
+        if (onSuccess) onSuccess(userRooms || []);
       }
     } catch (error) {
       message.error('Failed to update assignments');

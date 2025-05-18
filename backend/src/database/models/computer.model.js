@@ -20,7 +20,7 @@ module.exports = (sequelize, DataTypes) => {
     ip_address: {
       type: DataTypes.STRING(50)
     },
-    unique_agent_id: {
+    agent_id: {
       type: DataTypes.STRING(255),
       allowNull: false,
       unique: true

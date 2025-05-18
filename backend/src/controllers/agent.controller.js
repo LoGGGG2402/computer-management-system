@@ -19,7 +19,6 @@ class AgentController {
    * @param {string} req.body.positionInfo.roomName - Name of the room where the agent is located
    * @param {number} req.body.positionInfo.posX - X position in the room grid
    * @param {number} req.body.positionInfo.posY - Y position in the room grid
-   * @param {boolean} [req.body.forceRenewToken] - Whether to force token renewal
    * @param {Object} res - Express response object
    * @param {Function} next - Express next middleware function
    * @returns {Object} JSON response with one of the following formats:
@@ -30,110 +29,93 @@ class AgentController {
    *   - If position is invalid:
    *     - status {string} - 'position_error'
    *     - message {string} - Detailed error message about position
-   *   - If token renewal is requested:
-   *     - status {string} - 'success'
-   *     - agentToken {string} - New plain text token for agent authentication
    *   - If error occurs:
    *     - status {string} - 'error'
    *     - message {string} - Error message
    */
   async handleIdentifyRequest(req, res, next) {
-    const { agentId, positionInfo, forceRenewToken } = req.body;
+    const { agentId, positionInfo } = req.body;
+
+    // Validate agent ID
+    if (!agentId) {
+      logger.warn('Agent identification attempt without agent ID', { ip: req.ip });
+      return res.status(400).json({
+        status: "error",
+        message: "Missing required fields"
+      });
+    }
 
     try {
-      if (!agentId) {
-        logger.warn('Agent identification attempt without agent ID', { ip: req.ip });
-        return res.status(400).json({
-          status: "error",
-          message: "Agent ID is required"
-        });
-      }
-
+      // Check if agent is already registered
       const computer = await computerService.findComputerByAgentId(agentId);
-
-      if (forceRenewToken && computer) {
-        if (computer.room.name === positionInfo.roomName &&
-          computer.pos_x === positionInfo.posX &&
-          computer.pos_y === positionInfo.posY) {
-          try {
-            const { plainToken } = await computerService.generateAndAssignAgentToken(
-              agentId,
-              null,
-              computer
-            );
-            logger.info(`Token renewed for agent: ${agentId}, Computer ID: ${computer.id}`);
-            return res.status(200).json({
-              status: "success",
-              agentToken: plainToken,
-            });
-          } catch (tokenError) {
-            logger.error(`Failed to renew token for agent ${agentId}:`, {
-              error: tokenError.message,
-              stack: tokenError.stack,
-              computerId: computer.id
-            });
-            next(tokenError);
-            return;
-          }
-        }
-      }
-
-      if (computer && computer.agent_token_hash) {
+      if (computer?.agent_token_hash) {
         logger.debug(`Agent already registered: ${agentId}, Computer ID: ${computer.id}`);
-        return res.status(200).json({
+        // Return the agent token as required by API spec
+        return res.status(200).json({ 
           status: "success",
+          agentToken: computer.agent_token 
+        });
+      }
+      
+      // Validate position information
+      const isValidPosition = positionInfo && 
+                             positionInfo.roomName && 
+                             positionInfo.posX !== undefined && 
+                             positionInfo.posY !== undefined;
+      
+      if (!isValidPosition) {
+        logger.warn('Agent identification attempt with invalid position info', { 
+          ip: req.ip, agentId, positionInfo 
+        });
+        return res.status(400).json({
+          status: "position_error",
+          message: "Valid position information is required"
         });
       }
 
-      try {
-        const result = await roomService.isPositionAvailable(
-          positionInfo.roomName,
-          positionInfo.posX,
-          positionInfo.posY
-        );
-
-        if (result.valid) {
-          const mfaCode = mfaService.generateAndStoreMfa(
-            agentId,
-            {
-              roomId: result.room.id,
-              posX: positionInfo.posX,
-              posY: positionInfo.posY,
-            }
-          );
-          websocketService.notifyAdminsNewMfa(
-            mfaCode,
-            positionInfo
-          );
-          logger.info(`MFA required for new agent: ${agentId}, Room: ${positionInfo.roomName} (${positionInfo.posX},${positionInfo.posY})`);
-          return res.status(200).json({
-            status: "mfa_required",
-          });
-        } else {
-          logger.warn(`Invalid position for agent: ${agentId}, Room: ${positionInfo.roomName} (${positionInfo.posX},${positionInfo.posY})`, {
-            reason: result.message
-          });
-          return res.status(400).json({
-            status: "position_error",
-            message: result.message,
-          });
-        }
-      } catch (positionError) {
-        logger.error(`Error checking position for agent ${agentId}:`, {
-          error: positionError.message,
-          stack: positionError.stack,
-          room: positionInfo.roomName,
-          position: `(${positionInfo.posX},${positionInfo.posY})`
+      // Destructure position info for cleaner code
+      const { roomName, posX, posY } = positionInfo;
+      
+      // Check if position is available in the room
+      const result = await roomService.isPositionAvailable(roomName, posX, posY);
+      
+      if (!result.valid) {
+        logger.warn(`Invalid position for agent: ${agentId}, Room: ${roomName} (${posX},${posY})`, {
+          reason: result.message
         });
-        next(positionError);
-        return;
+        return res.status(400).json({
+          status: "position_error",
+          message: result.message,
+        });
       }
-    } catch (error) {
-      logger.error(`Error in agent identification request:`, {
-        error: error.message,
-        stack: error.stack,
-        agentId: agentId
+      
+      // Position is valid, generate MFA and notify admins
+      const mfaCode = mfaService.generateAndStoreMfa(agentId, {
+        roomId: result.room.id,
+        posX,
+        posY,
       });
+      
+      websocketService.notifyAdminsNewMfa(mfaCode, positionInfo);
+      
+      logger.info(`MFA required for new agent: ${agentId}, Room: ${roomName} (${posX},${posY})`);
+      return res.status(200).json({ status: "mfa_required" });
+    } catch (error) {
+      if (positionInfo) {
+        const { roomName, posX, posY } = positionInfo;
+        logger.error(`Error checking position for agent ${agentId}:`, {
+          error: error.message,
+          stack: error.stack,
+          room: roomName,
+          position: `(${posX},${posY})`
+        });
+      } else {
+        logger.error(`Error in agent identification request:`, {
+          error: error.message,
+          stack: error.stack,
+          agentId
+        });
+      }
       next(error);
     }
   }
@@ -166,7 +148,16 @@ class AgentController {
         });
         return res.status(400).json({
           status: "error",
-          message: "Agent ID and MFA code are required",
+          message: "Missing required fields",
+        });
+      }
+
+      // Check if agent ID exists in the system
+      const existingComputer = await computerService.findComputerByAgentId(agentId);
+      if (!existingComputer && !mfaService.hasPendingMfa(agentId)) {
+        return res.status(404).json({
+          status: "error",
+          message: "Agent ID not found",
         });
       }
 
@@ -196,8 +187,10 @@ class AgentController {
             stack: tokenError.stack,
             position: positionInfo
           });
-          next(tokenError);
-          return;
+          return res.status(500).json({
+            status: "error",
+            message: "Failed to verify MFA code"
+          });
         }
       } else {
         logger.warn(`Invalid MFA verification attempt for agent: ${agentId}`);
@@ -222,61 +215,168 @@ class AgentController {
    * @param {Object} req.computer - Computer object from authentication middleware
    * @param {number} req.computer.id - Computer ID in the database
    * @param {Object} req.body - Request body with hardware information
-   * @param {number} [req.body.total_disk_space] - Total disk space in GB
-   * @param {Object} [req.body.gpu_info] - Information about GPU
-   * @param {Object} [req.body.cpu_info] - Information about CPU
-   * @param {number} [req.body.total_ram] - Total RAM in GB
-   * @param {Object} [req.body.os_info] - Information about operating system
+   * @param {number} req.body.total_disk_space - Total disk space in MB (required)
+   * @param {string} [req.body.gpu_info] - Information about GPU (0-500 characters)
+   * @param {string} [req.body.cpu_info] - Information about CPU (0-500 characters)
+   * @param {number} [req.body.total_ram] - Total RAM in MB
+   * @param {string} [req.body.os_info] - Information about operating system (0-200 characters)
    * @param {Object} res - Express response object
    * @param {Function} next - Express next middleware function
    * @returns {Object} Empty response with 204 status code on success,
    *                  or error response with message on failure
    */
   async handleHardwareInfo(req, res, next) {
-    try {
-      const computerId = req.computerId;
-      const agentId = req.agentId;
-      const { total_disk_space, gpu_info, cpu_info, total_ram, os_info } = req.body;
+    const computerId = req.computerId;
+    const agentId = req.agentId;
+    const { total_disk_space, gpu_info, cpu_info, total_ram, os_info } = req.body;
 
-      if (!total_disk_space) {
-        logger.warn(`Hardware info update missing total_disk_space for computer ${computerId}`);
+    // Validate required fields before proceeding
+    if (!total_disk_space) {
+      logger.warn(`Hardware info update missing total_disk_space for computer ${computerId}`);
+      return res.status(400).json({
+        status: "error",
+        message: "Total disk space is required",
+      });
+    }
+
+    try {
+      // Field validation according to API constraints
+      if (gpu_info && typeof gpu_info === 'string' && gpu_info.length > 500) {
         return res.status(400).json({
           status: "error",
-          message: "Total disk space is required",
+          message: "GPU info exceeds maximum length (500 characters)"
+        });
+      }
+      
+      if (cpu_info && typeof cpu_info === 'string' && cpu_info.length > 500) {
+        return res.status(400).json({
+          status: "error", 
+          message: "CPU info exceeds maximum length (500 characters)"
+        });
+      }
+      
+      if (os_info && typeof os_info === 'string' && os_info.length > 200) {
+        return res.status(400).json({
+          status: "error",
+          message: "OS info exceeds maximum length (200 characters)"
         });
       }
 
-      try {
-        await computerService.updateComputer(computerId, {
-          os_info: os_info || null,
-          total_disk_space: total_disk_space || null,
-          gpu_info: gpu_info || null,
-          cpu_info: cpu_info || null,
-          total_ram: total_ram || null,
-        });
-        logger.info(`Hardware info updated for computer ${computerId}`, {
-          agentId,
-          os: os_info?.name,
-          cpu: cpu_info?.model,
-          ram: total_ram
-        });
-        return res.sendStatus(204);
-      } catch (updateError) {
-        logger.error(`Failed to update hardware info for computer ${computerId}:`, {
-          error: updateError.message,
-          stack: updateError.stack,
-          agentId
-        });
-        next(updateError);
-        return;
-      }
+      // Prepare hardware info data with optional fields
+      const hardwareData = {
+        os_info: os_info || null,
+        total_disk_space: total_disk_space || null,
+        gpu_info: gpu_info || null,
+        cpu_info: cpu_info || null,
+        total_ram: total_ram || null,
+      };
+
+      // Update computer information in database
+      await computerService.updateComputer(computerId, hardwareData);
+      
+      // Log successful update
+      logger.info(`Hardware info updated for computer ${computerId}`, {
+        agentId,
+        os: os_info,
+        cpu: cpu_info,
+        ram: total_ram
+      });
+      
+      return res.sendStatus(204);
     } catch (error) {
-      logger.error(`Error handling hardware info update:`, {
+      // Log error with appropriate context
+      logger.error(`Failed to update hardware info for computer ${computerId}:`, {
         error: error.message,
         stack: error.stack,
-        computerId: req.computerId,
-        agentId: req.agentId
+        agentId,
+        computerId
       });
+      
+      next(error);
+    }
+  }
+
+
+  /**
+   * Handle error report from agent
+   * @param {Object} req - Express request object
+   * @param {string} req.agentId - Agent ID (attached by authAgentToken middleware)
+   * @param {number} req.computerId - Computer ID (attached by authAgentToken middleware)
+   * @param {Object} req.body - Request body with error details
+   * @param {string} req.body.type - Type of error (2-50 characters)
+   * @param {string} req.body.message - Error message (5-255 characters)
+   * @param {Object} req.body.details - Additional error details (optional, max 2KB)
+   * @param {Object} res - Express response object
+   * @param {Function} next - Express next middleware function
+   * @returns {Object} Empty response with 204 status code on success
+   */
+  async handleErrorReport(req, res, next) {
+    const computerId = req.computerId;
+    const agentId = req.agentId;
+    const { type, message, details } = req.body;
+
+    // Validate required fields
+    if (!type || !message) {
+      logger.warn(`Error report missing required fields from agent: ${agentId}, Computer: ${computerId}`);
+      return res.status(400).json({
+        status: "error",
+        message: "Error type and message are required"
+      });
+    }
+    
+    // Validate field constraints based on API docs
+    if (typeof type !== 'string' || type.length < 2 || type.length > 50) {
+      return res.status(400).json({
+        status: "error",
+        message: "Error type must be between 2-50 characters"
+      });
+    }
+    
+    if (typeof message !== 'string' || message.length < 5 || message.length > 255) {
+      return res.status(400).json({
+        status: "error",
+        message: "Error message must be between 5-255 characters"
+      });
+    }
+    
+    if (details) {
+      // Check details size (2KB max)
+      const detailsSize = Buffer.byteLength(JSON.stringify(details), 'utf8');
+      if (detailsSize > 2048) { // 2KB in bytes
+        return res.status(400).json({
+          status: "error",
+          message: "Details object exceeds maximum size of 2KB"
+        });
+      }
+    }
+
+    // Prepare error data
+    const errorData = {
+      error_type: type, // Map to computer service expected format
+      error_message: message,
+      error_details: details || {}
+    };
+
+    try {
+      // Save error report to database
+      const result = await computerService.reportComputerError(computerId, errorData);
+      
+      // Log successful report
+      logger.info(`Error reported for computer ${computerId}: ${type}`, {
+        errorId: result.error.id,
+        agentId
+      });
+      
+      return res.status(204).end();
+    } catch (error) {
+      // Log error with context
+      logger.error(`Failed to save error report for computer ${computerId}:`, {
+        error: error.message,
+        stack: error.stack,
+        agentId,
+        errorType: type
+      });
+      
       next(error);
     }
   }
@@ -299,104 +399,53 @@ class AgentController {
    *   - notes {string|null} - Release notes describing changes and features in this version
    */
   async handleCheckUpdate(req, res, next) {
-    try {
-      const { current_version } = req.query;
-
-      try {
-        const updateInfo = await agentService.getLatestStableVersionInfo(current_version);
-
-        if (!updateInfo) {
-          logger.debug(`No update available for agent: ${req.agentId}, Current version: ${current_version || 'unknown'}`);
-          return res.status(204).end(); // 204 No Content
-        }
-        logger.info(`Update available for agent: ${req.agentId}, Current: ${current_version || 'unknown'}, Latest: ${updateInfo.version}`);
-        return res.status(200).json({
-          status: "success",
-          update_available: true,
-          version: updateInfo.version,
-          download_url: updateInfo.download_url,
-          checksum_sha256: updateInfo.checksum_sha256,
-          notes: updateInfo.notes
-        });
-        
-      } catch (versionError) {
-        logger.error(`Failed to check for agent updates:`, {
-          error: versionError.message,
-          stack: versionError.stack,
-          agentId: req.agentId,
-          computerId: req.computerId,
-          currentVersion: current_version
-        });
-        console.error(`Error checking for updates for agent ${req.agentId}:`, versionError);
-        next(versionError);
-        return;
-      }
-    } catch (error) {
-      logger.error(`Error handling check update request from agent ${req.agentId}:`, {
-        error: error.message,
-        stack: error.stack
+    const { current_version } = req.query;
+    const agentId = req.agentId;
+    const computerId = req.computerId;
+    
+    // Validate required query parameter
+    if (!current_version) {
+      logger.warn(`Update check missing current_version from agent: ${agentId}, Computer: ${computerId}`);
+      return res.status(400).json({
+        status: "error",
+        message: "Current version parameter is required"
       });
-      next(error);
     }
-  }
 
-  /**
-   * Handle error report from agent
-   * @param {Object} req - Express request object
-   * @param {string} req.agentId - Agent ID (attached by authAgentToken middleware)
-   * @param {number} req.computerId - Computer ID (attached by authAgentToken middleware)
-   * @param {Object} req.body - Request body with error details
-   * @param {string} req.body.error_type - Type of error
-   * @param {string} req.body.error_message - Error message
-   * @param {Object} req.body.error_details - Additional error details including stack trace and agent version
-   * @param {string} [req.body.timestamp] - When the report was sent (used internally)
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   * @returns {Object} Empty response with 204 status code on success
-   */
-  async handleErrorReport(req, res, next) {
     try {
-      const computerId = req.computerId;
-      const { error_type, error_message, error_details } = req.body;
+      // Get latest version information
+      const updateInfo = await agentService.getLatestStableVersionInfo(current_version);
 
-      if (!error_message) {
-        logger.warn(`Error report missing required fields from agent: ${req.agentId}, Computer: ${computerId}`);
-        return res.status(400).json({
-          status: "error",
-          message: "Error type and message are required"
-        });
+      // No update available
+      if (!updateInfo) {
+        logger.debug(`No update available for agent: ${agentId}, Current version: ${current_version}`);
+        return res.status(204).end(); // 204 No Content
       }
-
-      // Extract data directly from the received format
-      const errorData = {
-        error_type: error_type || 'unknown',
-        error_message,
-        error_details: error_details || {}
-      };
-
-      try {
-        const result = await computerService.reportComputerError(computerId, errorData);
-        logger.info(`Error reported for computer ${computerId}: ${error_type}`, {
-          errorId: result.error.id,
-          agentId: req.agentId
-        });
-        return res.status(204).end();
-      } catch (reportError) {
-        logger.error(`Failed to save error report for computer ${computerId}:`, {
-          error: reportError.message,
-          stack: reportError.stack,
-          agentId: req.agentId,
-          errorType: error_type
-        });
-        next(reportError);
-        return;
-      }
-    } catch (error) {
-      logger.error(`Error handling error report request from agent ${req.agentId}:`, {
-        error: error.message,
-        stack: error.stack
+      
+      // Update available - log and respond with update info
+      logger.info(`Update available for agent: ${agentId}, Current: ${current_version}, Latest: ${updateInfo.version}`);
+      return res.status(200).json({
+        status: "success",
+        update_available: true,
+        version: updateInfo.version,
+        download_url: updateInfo.download_url,
+        checksum_sha256: updateInfo.checksum_sha256,
+        notes: updateInfo.notes || ""
       });
-      next(error);
+    } catch (error) {
+      // Log detailed error for troubleshooting
+      logger.error(`Failed to check for agent updates:`, {
+        error: error.message,
+        stack: error.stack,
+        agentId,
+        computerId,
+        currentVersion: current_version
+      });
+      
+      return res.status(500).json({
+        status: "error",
+        message: "Failed to check for agent updates"
+      });
     }
   }
 
@@ -411,40 +460,74 @@ class AgentController {
    * @returns {Object} File stream or error response
    */
   handleAgentPackageDownload(req, res) {
-    try {
-      const filename = req.params.filename;
-      if (!filename) {
-        logger.warn(`Download attempt without filename by agent ${req.agentId}`);
-        return res.status(404).json({ status: 'error', message: 'File not found' });
-      }
+    const agentId = req.agentId;
+    const computerId = req.computerId;
+    const { filename } = req.params;
+    
+    // Validate filename parameter
+    if (!filename) {
+      logger.warn(`Download attempt without filename by agent ${agentId}`);
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Invalid filename format' 
+      });
+    }
+    
+    // Simple filename format validation (improve this based on your filename conventions)
+    const validFilenamePattern = /^[a-zA-Z0-9._-]+$/;
+    if (!validFilenamePattern.test(filename)) {
+      logger.warn(`Invalid filename format requested by agent ${agentId}: ${filename}`);
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid filename format'
+      });
+    }
 
+    try {
+      // Configure file path
       const AGENT_PACKAGES_DIR = path.join(__dirname, '../../uploads/agent-packages');
       const filePath = path.join(AGENT_PACKAGES_DIR, filename);
 
-      logger.info(`Agent ${req.agentId} downloading package: ${filename}`, {
-        computerId: req.computerId
+      // Log download attempt
+      logger.info(`Agent ${agentId} downloading package: ${filename}`, {
+        computerId
       });
 
       // Send the file securely (only to authenticated agents)
       res.sendFile(filePath, (err) => {
-        if (err) {
-          logger.error(`Error serving agent package ${filename}:`, {
-            error: err.message,
-            computerId: req.computerId,
-            agentId: req.agentId
+        if (!err) return; // File sent successfully
+        
+        // Handle file sending errors
+        const errorDetails = {
+          error: err.message,
+          computerId,
+          agentId
+        };
+        
+        logger.error(`Error serving agent package ${filename}:`, errorDetails);
+        
+        // Return appropriate error response based on error type
+        if (err.code === 'ENOENT') {
+          return res.status(404).json({ 
+            status: 'error', 
+            message: 'File not found' 
           });
-          if (err.code === 'ENOENT') {
-            return res.status(404).json({ status: 'error', message: 'File not found' });
-          }
-          return res.status(500).json({ status: 'error', message: 'Error serving file' });
         }
+        
+        return res.status(500).json({ 
+          status: 'error', 
+          message: 'Error serving file' 
+        });
       });
     } catch (error) {
+      // Handle unexpected errors
       logger.error(`Error serving agent package:`, {
         error: error.message,
         stack: error.stack,
-        agentId: req.agentId
+        agentId,
+        filename
       });
+      
       return res.status(500).json({
         status: 'error',
         message: 'Error serving file'

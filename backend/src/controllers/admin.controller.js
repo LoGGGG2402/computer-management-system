@@ -81,8 +81,8 @@ class AdminController {
    *     - is_stable {boolean} - Flag indicating if this is a stable production release (initially false)
    *     - file_path {string} - Server filesystem path where the agent package is stored
    *     - file_size {number} - Size of the agent package file in bytes
-   *     - created_at {Date} - Timestamp when this version was created
-   *     - updated_at {Date} - Timestamp when this version was last modified
+   *     - created_at {string} - Timestamp when this version was created (ISO-8601 format)
+   *     - updated_at {string} - Timestamp when this version was last modified (ISO-8601 format)
    */
   async handleAgentUpload(req, res, next) {
     try {
@@ -185,8 +185,8 @@ class AdminController {
    *     - is_stable {boolean} - Flag indicating if this is a stable release (updated value)
    *     - file_path {string} - Server filesystem path where the package is stored
    *     - file_size {number} - Size of the agent package file in bytes
-   *     - created_at {Date} - Timestamp when this version was created
-   *     - updated_at {Date} - Timestamp when this version was last modified
+   *     - created_at {string} - Timestamp when this version was created (ISO-8601 format)
+   *     - updated_at {string} - Timestamp when this version was last modified (ISO-8601 format)
    *   Note: When marked as stable, all other versions are automatically marked as not stable
    */
   async setAgentVersionStability(req, res, next) {
@@ -267,8 +267,8 @@ class AdminController {
    *     - is_stable {boolean} - Flag indicating if this is a stable production release
    *     - file_path {string} - Server filesystem path where the agent package is stored
    *     - file_size {number} - Size of the agent package file in bytes
-   *     - created_at {Date} - Timestamp when this version was created
-   *     - updated_at {Date} - Timestamp when this version was last modified
+   *     - created_at {string} - Timestamp when this version was created (ISO-8601 format)
+   *     - updated_at {string} - Timestamp when this version was last modified (ISO-8601 format)
    *   Results are ordered with stable versions first, then by creation date (newest first)
    */
   async getAgentVersions(req, res, next) {

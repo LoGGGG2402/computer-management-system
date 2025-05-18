@@ -8,8 +8,14 @@
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import { LoadingComponent } from '../components/common';
+import {
+  useAppDispatch,
+  useAppSelector,
+  login,
+  selectAuthLoading,
+  selectAuthError
+} from '../app/index';
 
 /**
  * Login Page Component
@@ -29,11 +35,11 @@ const LoginPage = () => {
     username: '',
     password: ''
   });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   
-  const { loginAction } = useAuth();
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const loading = useAppSelector(selectAuthLoading);
+  const error = useAppSelector(selectAuthError);
 
   /**
    * Handles form input changes
@@ -58,16 +64,12 @@ const LoginPage = () => {
    */
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
     
     try {
-      await loginAction(formData.username, formData.password);
+      await dispatch(login(formData)).unwrap();
       navigate('/dashboard');
-    } catch (err) {
-      setError(err.message || 'Login failed. Please check your credentials.');
-    } finally {
-      setLoading(false);
+    } catch {
+      // Error is handled by Redux
     }
   };
 

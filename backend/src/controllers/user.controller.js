@@ -26,8 +26,8 @@ class UserController {
    *       - username {string} - Username
    *       - role {string} - User role (admin/user)
    *       - is_active {boolean} - Whether user is active
-   *       - created_at {Date} - When user was created
-   *       - updated_at {Date} - When user was last updated
+   *       - created_at {string} - When user was created (ISO-8601 format)
+   *       - updated_at {string} - When user was last updated (ISO-8601 format)
    *   - message {string} - Error message (only if status is 'error')
    */
   async getAllUsers(req, res) {
@@ -79,8 +79,8 @@ class UserController {
    *     - username {string} - Username
    *     - role {string} - User role (admin/user)
    *     - is_active {boolean} - Whether user is active
-   *     - created_at {Date} - When user was created
-   *     - updated_at {Date} - When user was last updated
+   *     - created_at {string} - When user was created (ISO-8601 format)
+   *     - updated_at {string} - When user was last updated (ISO-8601 format)
    *   - message {string} - Error message (only if status is 'error')
    */
   async getUserById(req, res) {
@@ -121,7 +121,7 @@ class UserController {
    * @param {Object} req.body - Request body
    * @param {string} req.body.username - Username for the new user
    * @param {string} req.body.password - Password for the new user
-   * @param {string} [req.body.role='user'] - Role for the new user
+   * @param {string} [req.body.role='user'] - Role for the new user (admin/user)
    * @param {boolean} [req.body.is_active=true] - Whether the new user is active
    * @param {Object} res - Express response object
    * @returns {Object} JSON response with:
@@ -131,8 +131,8 @@ class UserController {
    *     - username {string} - Username
    *     - role {string} - User role (admin/user)
    *     - is_active {boolean} - Whether user is active
-   *     - created_at {Date} - When user was created
-   *     - updated_at {Date} - When user was last updated
+   *     - created_at {string} - When user was created (ISO-8601 format)
+   *     - updated_at {string} - When user was last updated (ISO-8601 format)
    *   - message {string} - Success or error message
    */
   async createUser(req, res) {
@@ -196,8 +196,8 @@ class UserController {
    *     - username {string} - Username
    *     - role {string} - User role (admin/user)
    *     - is_active {boolean} - Whether user is active
-   *     - created_at {Date} - When user was created
-   *     - updated_at {Date} - When user was last updated
+   *     - created_at {string} - When user was created (ISO-8601 format)
+   *     - updated_at {string} - When user was last updated (ISO-8601 format)
    *   - message {string} - Success or error message
    */
   async updateUser(req, res) {
@@ -308,8 +308,8 @@ class UserController {
    *     - username {string} - Username
    *     - role {string} - User role (admin/user)
    *     - is_active {boolean} - Whether user is active (true after reactivation)
-   *     - created_at {Date} - When user was created
-   *     - updated_at {Date} - When user was last updated
+   *     - created_at {string} - When user was created (ISO-8601 format)
+   *     - updated_at {string} - When user was last updated (ISO-8601 format)
    *   - message {string} - Success or error message
    */
   async reactivateUser(req, res) {

@@ -12,6 +12,7 @@ const dotenv = require('dotenv');
 const { httpServer } = require('./app');
 const db = require('./database/models');
 const logger = require('./utils/logger');
+const { initializeTokenCleanupScheduler } = require('./scheduler');
 
 dotenv.config();
 
@@ -41,6 +42,9 @@ async function startServer() {
       if (process.env.CLIENT_URL) {
           logger.info(`Expected frontend client URL: ${process.env.CLIENT_URL}`);
       }
+      
+      // Initialize the token cleanup scheduler using node-cron
+      initializeTokenCleanupScheduler();
     });
 
     // 4. Graceful Shutdown Handling

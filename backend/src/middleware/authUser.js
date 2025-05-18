@@ -23,7 +23,7 @@ const verifyToken = (req, res, next) => {
     });
   }
 
-  jwt.verify(token, config.secret, (err, decoded) => {
+  jwt.verify(token, config.accessToken.secret, (err, decoded) => {
     if (err) {
       logger.warn('Invalid JWT token', { 
         error: err.message, 

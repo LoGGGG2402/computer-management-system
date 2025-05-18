@@ -6,7 +6,7 @@
  * 
  * @module AdminDashboard
  */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Card, Typography, Row, Col, Statistic, List, Tag, Tooltip } from 'antd';
 import { 
   DesktopOutlined, 
@@ -17,10 +17,9 @@ import {
   ApiOutlined,
   InfoCircleOutlined
 } from '@ant-design/icons';
-import adminService from '../../services/admin.service';
+import { useAppDispatch, useAppSelector, useFormatting } from '../../app/index';
+import { fetchSystemStats, selectSystemStats, selectAdminLoading } from '../../app/index';
 import { LoadingComponent } from '../../components/common';
-import { useSimpleFetch } from '../../hooks/useSimpleFetch';
-import { useFormatting } from '../../hooks/useFormatting';
 
 const { Title, Text } = Typography;
 
@@ -36,13 +35,14 @@ const { Title, Text } = Typography;
  * @returns {React.ReactElement} The rendered AdminDashboard component
  */
 const AdminDashboard = () => {
-  // Use hooks for fetching and formatting
-  const { data: stats, loading } = useSimpleFetch(
-    adminService.getSystemStats,
-    [], // Fetch on mount
-    { errorMessage: 'Failed to fetch statistics' }
-  );
+  const dispatch = useAppDispatch();
+  const stats = useAppSelector(selectSystemStats);
+  const loading = useAppSelector(selectAdminLoading);
   const { formatTimestamp, getTimeAgo } = useFormatting();
+
+  useEffect(() => {
+    dispatch(fetchSystemStats());
+  }, [dispatch]);
 
   // Default stats structure
   const defaultStats = {

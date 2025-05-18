@@ -16,26 +16,23 @@ const initializeWebSocket = (io) => {
   io.on('connection', (socket) => {
     const clientId = socket.id;
     const clientIp = socket.handshake.address;
-    const headerType = socket.handshake.headers['x-client-type'];
-    const clientType = (headerType || 'unknown').toLowerCase();
-    logger.info(`New client connected: ${clientId} (IP: ${clientIp}, Type: ${clientType})`);
-    socket.data.type = clientType;
 
-    if (clientType === 'agent') {
+    logger.info(`New client connected: ${clientId} (IP: ${clientIp}, Type: ${socket.data.type})`);
+
+    if (socket.data.type === 'agent') {
       logger.debug(`Setting up agent handlers for socket ${clientId}`);
-      setupAgentHandlers(io, socket);
-    } else if (clientType === 'frontend') {
+      setupAgentHandlers(socket);
+    } else if (socket.data.type === 'frontend') {
       logger.debug(`Setting up frontend handlers for socket ${clientId}`);
       setupFrontendHandlers(socket);
     } else {
-      logger.warn(`Unknown client type '${clientType}' for socket ${clientId}. Disconnecting.`);
-      socket.emit('error', { message: 'Unknown client type' });
+      logger.warn(`Unknown client type '${socket.data.type}' for socket ${clientId}. Disconnecting.`);
       socket.disconnect(true);
       return;
     }
 
     socket.on('disconnect', (reason) => {
-      logger.info(`Client disconnected: ${clientId} (Type: ${clientType}), Reason: ${reason}`);
+      logger.info(`Client disconnected: ${clientId} (Type: ${socket.data.type}), Reason: ${reason}`);
       handleDisconnect(socket, reason);
     });
 
@@ -48,19 +45,44 @@ const initializeWebSocket = (io) => {
   });
 
   io.use((socket, next) => {
+    // Extract and validate required headers
+    const clientType = socket.handshake.headers['x-client-type']?.toLowerCase();
     const authHeader = socket.handshake.headers.authorization;
-    const agentIdHeader = socket.handshake.headers['x-agent-id'];
-
+    
+    // Validate client type
+    if (!clientType) {
+      logger.warn(`Connection attempt without X-Client-Type header, ID: ${socket.id}`);
+      return next(new Error('Authentication failed: Missing X-Client-Type header'));
+    }
+    
+    socket.data.type = clientType;
+    
+    // Agent-specific validation
+    if (clientType === 'agent') {
+      const agentId = socket.handshake.headers['x-agent-id'];
+      
+      // Validate agent ID
+      if (!agentId) {
+        logger.warn(`Agent connection attempt without X-Agent-ID header, ID: ${socket.id}`);
+        return next(new Error('Authentication failed: Missing required headers'));
+      }
+      socket.data.agentId = agentId;
+      
+      // Validate authorization header
+      if (!authHeader?.startsWith('Bearer ')) {
+        logger.warn(`Agent connection attempt without Bearer token, Agent ID: ${agentId}, Socket ID: ${socket.id}`);
+        return next(new Error('Authentication failed: Missing required headers'));
+      }
+    }
+    
+    // Extract token from Authorization header
     if (authHeader?.startsWith('Bearer ')) {
       socket.data.authToken = authHeader.substring(7);
-      logger.debug(`Auth token found for socket ${socket.id}`);
+    } else if (clientType !== 'agent') {
+      // For non-agent clients, authorization may be supplied later
+      logger.debug(`Client connection without Authorization header, Type: ${clientType}, ID: ${socket.id}`);
     }
-
-    if (agentIdHeader) {
-      socket.data.agentId = agentIdHeader;
-      logger.debug(`Agent ID header found for socket ${socket.id}: ${agentIdHeader}`);
-    }
-
+    
     next();
   });
 
