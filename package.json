@@ -1,0 +1,22 @@
+{
+  "name": "computer-management-system",
+  "version": "1.0.0",
+  "description": "Dự án này nhằm mục đích tạo ra một ứng dụng web để quản lý và giám sát các máy tính trong công ty, được tổ chức theo phòng (Room), với khả năng gửi lệnh (qua WebSocket), theo dõi trạng thái real-time (online/offline xác định qua WS, %CPU/%RAM Agent gửi qua HTTP), hiển thị vị trí trực quan, hệ thống phân quyền người dùng (Admin, User), cơ chế đăng ký Agent an toàn (MFA/Token), chức năng báo cáo và xử lý lỗi máy tính, và khả năng lọc dữ liệu trên các API danh sách. Agent sẽ được phát triển bằng Python.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "install": "cd backend && npm install && cd ../frontend && npm install",
+    "frontend": "cd frontend && npm run dev --host",
+    "backend": "cd backend && npm run dev",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "build": "cd frontend && npm run build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
