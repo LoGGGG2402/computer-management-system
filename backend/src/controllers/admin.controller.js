@@ -36,7 +36,7 @@ class AdminController {
           onlineComputers: stats.onlineComputers,
           computersWithErrors: stats.computersWithErrors,
         },
-        userId: req.user?.id
+        userId: req.user?.id,
       });
 
       return res.status(200).json({
@@ -90,119 +90,128 @@ class AdminController {
       const errors = [];
 
       if (!req.file) {
-        logger.warn('Agent upload attempt without file', { 
-          userId: req.user?.id,
-          ip: req.ip 
-        });
-        
-        return res.status(400).json({
-          status: "error",
-          message: "No agent package file uploaded"
-        });
-      }
-
-      // Validate file extension and size (if not handled by Multer)
-      const allowedExt = ['.zip', '.gz', '.tar'];
-      const maxSize = 50 * 1024 * 1024; // 50MB
-      const fileExt = req.file.originalname ? req.file.originalname.slice(req.file.originalname.lastIndexOf('.')).toLowerCase() : '';
-      if (!allowedExt.includes(fileExt)) {
-        errors.push({ field: 'file', message: 'File must be .zip, .gz, or .tar' });
-      }
-      if (req.file.size > maxSize) {
-        errors.push({ field: 'file', message: 'File size must not exceed 50MB' });
-      }
-
-      // Validate version
-      if (!req.body.version) {
-        logger.warn('Agent upload attempt without version', { 
+        logger.warn("Agent upload attempt without file", {
           userId: req.user?.id,
           ip: req.ip,
-          filename: req.file.filename
+        });
+
+        return res.status(400).json({
+          status: "error",
+          message: "No agent package file uploaded",
+        });
+      }
+
+      const maxSize = 50 * 1024 * 1024;
+      const regex = /^eag-agent-v\d+\.\d+\.\d+\.(zip|gz|tar|tar\.gz)$/;
+      if (!regex.test(req.file.originalname)) {
+        errors.push({
+          field: "file",
+          message: "File must be .zip, .gz, or .tar",
+        });
+      }
+      if (req.file.size > maxSize) {
+        errors.push({
+          field: "file",
+          message: "File size must not exceed 50MB",
+        });
+      }
+
+      if (!req.body.version) {
+        logger.warn("Agent upload attempt without version", {
+          userId: req.user?.id,
+          ip: req.ip,
+          filename: req.file.filename,
         });
         return res.status(400).json({
           status: "error",
-          message: "Version is required"
+          message: "Version is required",
         });
       }
-      const versionError = validationUtils.validateSemanticVersion(req.body.version);
+      const versionError = validationUtils.validateSemanticVersion(
+        req.body.version
+      );
       if (versionError) {
-        errors.push({ field: 'version', message: versionError });
+        errors.push({ field: "version", message: versionError });
       }
 
-      // Validate notes (optional)
       if (req.body.notes !== undefined) {
-        const notesError = validationUtils.validateAgentVersionNotes(req.body.notes);
+        const notesError = validationUtils.validateAgentVersionNotes(
+          req.body.notes
+        );
         if (notesError) {
-          errors.push({ field: 'notes', message: notesError });
+          errors.push({ field: "notes", message: notesError });
         }
       }
 
-      // Validate checksum (optional)
       if (req.body.checksum) {
-        const checksumError = validationUtils.validateSha256Checksum(req.body.checksum);
+        const checksumError = validationUtils.validateSha256Checksum(
+          req.body.checksum
+        );
         if (checksumError) {
-          errors.push({ field: 'checksum', message: checksumError });
+          errors.push({ field: "checksum", message: checksumError });
         }
       }
 
-      // Nếu có lỗi, trả về 400
       if (errors.length > 0) {
         return res.status(400).json({
-          status: 'error',
-          message: 'Validation failed',
-          errors
+          status: "error",
+          message: "Validation failed",
+          errors,
         });
       }
 
-      // Create versionData from request body
       const versionData = {
         version: req.body.version,
-        notes: req.body.notes || '',
-        client_checksum: req.body.checksum // Pass checksum from client to service
+        notes: req.body.notes || "",
+        client_checksum: req.body.checksum,
       };
 
       try {
-        const createdVersion = await AdminService.processAgentUpload(req.file, versionData);
-        
-        logger.info(`Agent version ${versionData.version} uploaded successfully`, {
-          userId: req.user?.id,
-          versionId: createdVersion.id,
-          checksum: createdVersion.checksum_sha256.substring(0, 8) + '...',
-        });
-        
+        const createdVersion = await AdminService.processAgentUpload(
+          req.file,
+          versionData
+        );
+
+        logger.info(
+          `Agent version ${versionData.version} uploaded successfully`,
+          {
+            userId: req.user?.id,
+            versionId: createdVersion.id,
+            checksum: createdVersion.checksum_sha256.substring(0, 8) + "...",
+          }
+        );
+
         return res.status(201).json({
           status: "success",
           message: `Agent version ${versionData.version} uploaded successfully`,
-          data: createdVersion
+          data: createdVersion,
         });
       } catch (uploadError) {
-        // If file exists but agent version creation failed, clean up the file
         if (req.file?.path && fs.existsSync(req.file.path)) {
           try {
             fs.unlinkSync(req.file.path);
           } catch (cleanupError) {
-            // Include cleanup error info in the main error log
             uploadError.cleanupError = cleanupError.message;
           }
         }
-        
-        logger.error('Error handling agent upload:', {
+
+        logger.error("Error handling agent upload:", {
           error: uploadError.message,
           stack: uploadError.stack,
           cleanupError: uploadError.cleanupError,
           userId: req.user?.id,
-          version: req.body.version
+          version: req.body.version,
         });
-        
+
         next(uploadError);
       }
     } catch (error) {
-      logger.error('Error handling agent upload:', {
+      logger.error("Error handling agent upload:", {
         error: error.message,
         stack: error.stack,
-        userId: req.user?.id
+        userId: req.user?.id,
       });
-      
+
       next(error);
     }
   }
@@ -237,79 +246,83 @@ class AdminController {
       const { versionId } = req.params;
       const { is_stable } = req.body;
       const errors = [];
-      
-      // Validate versionId
+
       const versionIdError = validationUtils.validateUuid(versionId);
       if (versionIdError) {
-        errors.push({ field: 'versionId', message: versionIdError });
+        errors.push({ field: "versionId", message: versionIdError });
       }
-      // Validate is_stable
       const isStableError = validationUtils.validateIsActiveFlag(is_stable);
       if (isStableError) {
-        errors.push({ field: 'is_stable', message: isStableError });
+        errors.push({ field: "is_stable", message: isStableError });
       }
-      // Nếu có lỗi, trả về 400
       if (errors.length > 0) {
         return res.status(400).json({
-          status: 'error',
-          message: 'Validation failed',
-          errors
+          status: "error",
+          message: "Validation failed",
+          errors,
         });
       }
-      
+
       if (is_stable === undefined) {
-        logger.warn('Stability update attempt without is_stable parameter', { 
+        logger.warn("Stability update attempt without is_stable parameter", {
           userId: req.user?.id,
-          versionId
+          versionId,
         });
-        
+
         return res.status(400).json({
           status: "error",
-          message: "is_stable parameter is required"
+          message: "is_stable parameter is required",
         });
       }
 
       try {
-        const updatedVersion = await AdminService.updateStabilityFlag(versionId, is_stable === true);
-        
-        // If marked as stable, notify connected agents
+        const updatedVersion = await AdminService.updateStabilityFlag(
+          versionId,
+          is_stable === true
+        );
+
         let logInfo = {
           userId: req.user?.id,
           versionId: updatedVersion.id,
           version: updatedVersion.version,
-          isStable: is_stable
+          isStable: is_stable,
         };
-        
+
         if (is_stable) {
           websocketService.notifyAgentsOfNewVersion(updatedVersion);
           logInfo.agentsNotified = true;
         }
-        
-        logger.info(`Agent version ${updatedVersion.version} stability updated to ${is_stable ? 'stable' : 'not stable'}`, logInfo);
-        
+
+        logger.info(
+          `Agent version ${updatedVersion.version} stability updated to ${
+            is_stable ? "stable" : "not stable"
+          }`,
+          logInfo
+        );
+
         return res.status(200).json({
           status: "success",
           message: `Agent version ${updatedVersion.version} stability updated`,
-          data: updatedVersion
+          data: updatedVersion,
         });
       } catch (stabilityError) {
-        logger.error('Error setting agent version stability:', {
+        logger.error("Error setting agent version stability:", {
           error: stabilityError.message,
           stack: stabilityError.stack,
           userId: req.user?.id,
-          versionId
+          versionId,
         });
-        
+
         next(stabilityError);
       }
     } catch (error) {
-      logger.error('Error setting agent version stability:', {
+      logger.error("Error setting agent version stability:", {
         error: error.message,
         stack: error.stack,
         userId: req.user?.id,
-        versionId: req.params.versionId
+        versionId: req.params.versionId,
       });
-      
+
       next(error);
     }
   }
@@ -337,23 +350,23 @@ class AdminController {
   async getAgentVersions(req, res, next) {
     try {
       const versions = await AdminService.getAllVersions();
-      
+
       logger.debug(`Retrieved ${versions.length} agent versions`, {
         userId: req.user?.id,
-        stableVersions: versions.filter(v => v.is_stable).length
+        stableVersions: versions.filter((v) => v.is_stable).length,
       });
-      
+
       return res.status(200).json({
         status: "success",
-        data: versions
+        data: versions,
       });
     } catch (error) {
-      logger.error('Error getting agent versions:', {
+      logger.error("Error getting agent versions:", {
         error: error.message,
         stack: error.stack,
-        userId: req.user?.id
+        userId: req.user?.id,
       });
-      
+
       next(error);
     }
   }

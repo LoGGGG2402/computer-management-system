@@ -1,35 +1,8 @@
 # Computer Management System - Flow Diagrams
 
-<style>
-.mermaid {
-    display: flex;
-    justify-content: center;
-    margin: 20px 0;
-}
-</style>
-
 ## 1. User Authentication Flow (Frontend Login)
 
 ```mermaid
-%%{init: {
-    'theme': 'base',
-    'themeVariables': {
-        'primaryColor': '#4a90e2',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#2171c7',
-        'secondaryColor': '#82b1ff',
-        'tertiaryColor': '#b6e3ff',
-        'noteTextColor': '#333',
-        'noteBkgColor': '#fff9c4',
-        'noteBorderColor': '#f9a825',
-        'actorBkg': '#e3f2fd',
-        'actorBorder': '#2171c7',
-        'sequenceNumberColor': '#333'
-    },
-    'fontFamily': 'Arial',
-    'fontSize': '14px'
-}}%%
-
 sequenceDiagram
     actor FrontendUser as 👤 Frontend User
     participant FE as 💻 Frontend UI
@@ -42,24 +15,24 @@ sequenceDiagram
 
     FrontendUser->>FE: Enter Username & Password
     Note over FE: Validate input format
-    
+
     FE->>BE_AuthRoutes: POST /api/auth/login
     Note over BE_AuthRoutes: {username, password}
-    
+
     BE_AuthRoutes->>AuthController: handleLogin(req, res)
     AuthController->>AuthService: login(username, password)
-    
+
     AuthService->>UserDB: Find user (username, is_active=true)
     UserDB-->>AuthService: Return user data
-    
+
     Note over AuthService: Compare password hash<br/>Generate tokens
     AuthService->>RefreshTokenDB: Store refresh token
     RefreshTokenDB-->>AuthService: Token stored
-    
+
     AuthService-->>AuthController: Return user & tokens
     AuthController-->>BE_AuthRoutes: Response 200 OK
     BE_AuthRoutes-->>FE: {user, accessToken}
-    
+
     Note over FE: Store tokens & user data
     FE-->>FrontendUser: Login successful
 ```
@@ -68,18 +41,18 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor FrontendUser as Frontend User
-    participant FE as Frontend UI
-    participant APIInterceptor as API Interceptor (axios)
-    participant BE_AuthRoutes as Backend Auth Routes (/api/auth)
-    participant AuthController as Auth Controller
-    participant AuthService as Auth Service
-    participant RefreshTokenDB as Refresh Token Database
+    actor FrontendUser as 👤 Frontend User
+    participant FE as 💻 Frontend UI
+    participant APIInterceptor as 🔄 API Interceptor
+    participant BE_AuthRoutes as 🔒 Auth Routes
+    participant AuthController as 🎮 Auth Controller
+    participant AuthService as ⚙️ Auth Service
+    participant RefreshTokenDB as 🔑 Token Database
 
     %% Access token expired scenario
     FE->>BE_AuthRoutes: API Request with expired access token
     BE_AuthRoutes-->>FE: 401 Unauthorized
-    
+
     %% Automatic token refresh
     FE->>APIInterceptor: Catch 401 error
     APIInterceptor->>BE_AuthRoutes: POST /api/auth/refresh-token
@@ -87,7 +60,7 @@ sequenceDiagram
     BE_AuthRoutes->>AuthController: handleRefreshToken(req, res)
     AuthController->>AuthService: refreshToken(refreshToken from cookie)
     AuthService->>RefreshTokenDB: Find and validate token
-    
+
     alt Valid Refresh Token
         RefreshTokenDB-->>AuthService: Token is valid
         AuthService->>RefreshTokenDB: Delete used token (token rotation)
@@ -123,12 +96,12 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor FrontendUser as Frontend User
-    participant FE as Frontend UI
-    participant BE_AuthRoutes as Backend Auth Routes (/api/auth)
-    participant AuthController as Auth Controller
-    participant AuthService as Auth Service
-    participant RefreshTokenDB as Refresh Token Database
+    actor FrontendUser as 👤 Frontend User
+    participant FE as 💻 Frontend UI
+    participant BE_AuthRoutes as 🔒 Auth Routes
+    participant AuthController as 🎮 Auth Controller
+    participant AuthService as ⚙️ Auth Service
+    participant RefreshTokenDB as 🔑 Token Database
 
     FrontendUser->>FE: Click Logout
     FE->>BE_AuthRoutes: POST /api/auth/logout
@@ -148,24 +121,6 @@ sequenceDiagram
 ## 2. New Agent Registration Flow (Identify & MFA Verify)
 
 ```mermaid
-%%{init: {
-    'theme': 'base',
-    'themeVariables': {
-        'primaryColor': '#4a90e2',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#2171c7',
-        'secondaryColor': '#82b1ff',
-        'tertiaryColor': '#b6e3ff',
-        'noteTextColor': '#333',
-        'noteBkgColor': '#fff9c4',
-        'noteBorderColor': '#f9a825',
-        'actorBkg': '#e3f2fd',
-        'actorBorder': '#2171c7'
-    },
-    'fontFamily': 'Arial',
-    'fontSize': '14px'
-}}%%
-
 sequenceDiagram
     participant AgentApp as 🤖 Agent App
     participant BE_AgentRoutes as 📡 Agent Routes
@@ -175,17 +130,17 @@ sequenceDiagram
     participant MfaService as 🔐 MFA Service
     participant WebSocketService as ⚡ WebSocket Service
     participant AdminFE as 👤 Admin Frontend
-    participant ComputerDB as 💾 Computer DB
+    participant ComputerDB as 📊 Computer DB
     participant RoomDB as 🏗️ Room DB
     participant MFACache as 🔒 MFA Cache
 
     AgentApp->>BE_AgentRoutes: POST /api/agent/identify
     Note over BE_AgentRoutes: {agentId, roomName, posX, posY}
-    
+
     BE_AgentRoutes->>AgentController: handleIdentifyRequest
     AgentController->>ComputerService: findComputerByAgentId
     ComputerService->>ComputerDB: Query computer
-    
+
     alt Computer exists with token
         ComputerDB-->>ComputerService: Return computer
         ComputerService-->>AgentController: Return computer
@@ -195,13 +150,13 @@ sequenceDiagram
         ComputerService->>RoomService: validateRoomPosition
         RoomService->>RoomDB: Check room & position
         RoomDB-->>RoomService: Position valid
-        
+
         AgentController->>MfaService: generateMFACode
         MfaService->>MFACache: Store code temporarily
-        
+
         AgentController->>WebSocketService: notifyAdminsNewAgent
         WebSocketService->>AdminFE: Display MFA code
-        
+
         AgentController-->>BE_AgentRoutes: 200 OK {status: "mfa_required"}
         BE_AgentRoutes-->>AgentApp: Prompt for MFA code
     end
@@ -211,12 +166,12 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant AgentApp as Agent Application
-    participant BE_AgentRoutes as Backend Agent Routes (/api/agent)
-    participant AgentAuthMiddleware as Agent Auth Middleware (authAgentToken.js)
-    participant AgentController as Agent Controller
-    participant ComputerService as Computer Service
-    participant ComputerDB as Computer Database
+    participant AgentApp as 🤖 Agent Application
+    participant BE_AgentRoutes as 📡 Agent Routes
+    participant AgentAuthMiddleware as 🛡️ Agent Auth Middleware
+    participant AgentController as 🎮 Agent Controller
+    participant ComputerService as 💻 Computer Service
+    participant ComputerDB as 📊 Computer Database
 
     AgentApp->>BE_AgentRoutes: POST /api/agent/hardware-info (hardwareData: {os_info, cpu_info, ...})
     note right of AgentApp: Sent with headers 'X-Agent-ID' and 'Authorization: Bearer <agent_token>'
@@ -245,12 +200,12 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant AgentApp as Agent Application
-    participant BE_AgentRoutes as Backend Agent Routes (/api/agent)
-    participant AgentAuthMiddleware as Agent Auth Middleware
-    participant AgentController as Agent Controller
-    participant ComputerService as Computer Service
-    participant ComputerDB as Computer Database
+    participant AgentApp as 🤖 Agent Application
+    participant BE_AgentRoutes as 📡 Agent Routes
+    participant AgentAuthMiddleware as 🛡️ Agent Auth Middleware
+    participant AgentController as 🎮 Agent Controller
+    participant ComputerService as 💻 Computer Service
+    participant ComputerDB as 📊 Computer Database
 
     AgentApp->>BE_AgentRoutes: POST /api/agent/report-error (errorData: {type, message, details})
     note right of AgentApp: Sent with headers 'X-Agent-ID' and 'Authorization: Bearer <agent_token>'
@@ -270,24 +225,6 @@ sequenceDiagram
 ## 3. WebSocket Connection and Authentication Flow
 
 ```mermaid
-%%{init: {
-    'theme': 'base',
-    'themeVariables': {
-        'primaryColor': '#4a90e2',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#2171c7',
-        'secondaryColor': '#82b1ff',
-        'tertiaryColor': '#b6e3ff',
-        'noteTextColor': '#333',
-        'noteBkgColor': '#fff9c4',
-        'noteBorderColor': '#f9a825',
-        'actorBkg': '#e3f2fd',
-        'actorBorder': '#2171c7'
-    },
-    'fontFamily': 'Arial',
-    'fontSize': '14px'
-}}%%
-
 sequenceDiagram
     participant Client as 👥 Client
     participant BE_SocketIO as ⚡ Socket.IO Server
@@ -301,25 +238,25 @@ sequenceDiagram
 
     BE_SocketIO->>SocketMiddleware: Authenticate connection
     Note over SocketMiddleware: Extract & validate token
-    
+
     alt Valid Frontend Client
         SocketMiddleware->>FrontendHandler: Setup handlers
         FrontendHandler->>WebSocketService: Join user room
         Note over WebSocketService: Add to user_[userId]
-        
+
         alt Is Admin
             FrontendHandler->>WebSocketService: Join admin room
             Note over WebSocketService: Add to admin_room
         end
-        
+
         FrontendHandler-->>Client: Connection accepted
-        
+
     else Valid Agent Client
         SocketMiddleware->>AgentHandler: Setup handlers
         AgentHandler->>WebSocketService: Join agent room
         Note over WebSocketService: Add to agent_[computerId]
         AgentHandler-->>Client: Connection accepted
-        
+
     else Invalid Client
         SocketMiddleware-->>Client: Connection rejected
     end
@@ -329,14 +266,14 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor User as Frontend User
-    participant FE as Frontend UI
-    participant BE_SocketIO as Backend Socket.IO Server
-    participant FrontendHandler as Frontend WS Handler
-    participant WebSocketService as WebSocket Service
-    participant ComputerService as Computer Service
-    participant AgentApp as Agent Application (on computer)
-    participant AgentHandler as Agent WS Handler
+    actor User as 👤 Frontend User
+    participant FE as 💻 Frontend UI
+    participant BE_SocketIO as ⚡ Socket.IO Server
+    participant FrontendHandler as 🎮 Frontend WS Handler
+    participant WebSocketService as 🔌 WebSocket Service
+    participant ComputerService as 💻 Computer Service
+    participant AgentApp as 🤖 Agent Application
+    participant AgentHandler as 🎮 Agent WS Handler
 
     User->>FE: Perform command sending action (e.g., restart PC for computerId X)
     FE->>BE_SocketIO: Emit 'frontend:send_command' ({computerId, command, commandType}), ack_callback
@@ -374,11 +311,11 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant FE as Frontend UI
-    participant BE_SocketIO as Backend Socket.IO Server
-    participant FrontendHandler as Frontend WS Handler
-    participant WebSocketService as WebSocket Service
-    participant ComputerService as Computer Service
+    participant FE as 💻 Frontend UI
+    participant BE_SocketIO as ⚡ Socket.IO Server
+    participant FrontendHandler as 🎮 Frontend WS Handler
+    participant WebSocketService as 🔌 WebSocket Service
+    participant ComputerService as 💻 Computer Service
 
     FE->>BE_SocketIO: Emit 'frontend:subscribe' ({computerId})
     BE_SocketIO->>FrontendHandler: handleComputerSubscription(socket, data)
@@ -402,24 +339,6 @@ sequenceDiagram
 ## 4. Agent Status Update Flow (WebSocket)
 
 ```mermaid
-%%{init: {
-    'theme': 'base',
-    'themeVariables': {
-        'primaryColor': '#4a90e2',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#2171c7',
-        'secondaryColor': '#82b1ff',
-        'tertiaryColor': '#b6e3ff',
-        'noteTextColor': '#333',
-        'noteBkgColor': '#fff9c4',
-        'noteBorderColor': '#f9a825',
-        'actorBkg': '#e3f2fd',
-        'actorBorder': '#2171c7'
-    },
-    'fontFamily': 'Arial',
-    'fontSize': '14px'
-}}%%
-
 sequenceDiagram
     participant AgentApp as 🤖 Agent
     participant BE_SocketIO as ⚡ Socket.IO
@@ -429,14 +348,14 @@ sequenceDiagram
 
     loop Every 30 seconds
         Note over AgentApp: Collect system metrics<br/>(CPU, RAM, Disk)
-        
+
         AgentApp->>BE_SocketIO: agent:status_update
         Note over BE_SocketIO: {cpuUsage, ramUsage, diskUsage}
-        
+
         BE_SocketIO->>AgentHandler: Handle status update
         AgentHandler->>WebSocketService: Update cache
         Note over WebSocketService: Store in agentRealtimeStatus
-        
+
         WebSocketService->>FE_Subscribers: Broadcast update
         Note over FE_Subscribers: Update UI with new metrics
     end
@@ -444,9 +363,9 @@ sequenceDiagram
     Note over AgentApp,FE_Subscribers: Disconnection Handling
     AgentApp--xBE_SocketIO: Connection lost
     BE_SocketIO->>AgentHandler: Handle disconnect
-    
+
     Note over AgentHandler: Wait for reconnect<br/>(30 second timeout)
-    
+
     alt No reconnect
         AgentHandler->>WebSocketService: Mark offline
         WebSocketService->>FE_Subscribers: Broadcast offline status
@@ -459,12 +378,12 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant AgentApp as Agent Application
-    participant BE_SocketIO as Backend Socket.IO Server
-    participant SocketIndex as sockets/index.js
-    participant AgentHandler as Agent WS Handler
-    participant WebSocketService as WebSocket Service
-    participant FE_Subscribers as Frontend UI (Subscribers)
+    participant AgentApp as 🤖 Agent Application
+    participant BE_SocketIO as ⚡ Socket.IO Server
+    participant SocketIndex as 📡 sockets/index.js
+    participant AgentHandler as 🎮 Agent WS Handler
+    participant WebSocketService as 🔌 WebSocket Service
+    participant FE_Subscribers as 👥 Frontend UI
 
     AgentApp--xBE_SocketIO: WebSocket disconnection
     BE_SocketIO->>SocketIndex: Handle 'disconnect' event for agent socket
@@ -472,7 +391,7 @@ sequenceDiagram
     AgentHandler->>WebSocketService: handleAgentDisconnect(socket)
     WebSocketService->>WebSocketService: setTimeout(..., AGENT_OFFLINE_CHECK_DELAY_MS)
     note right of WebSocketService: Wait for a delay to see if agent reconnects
-    
+
     alt After AGENT_OFFLINE_CHECK_DELAY_MS
         WebSocketService->>WebSocketService: isAgentConnected(computerId) (check socket count in room agent_<computerId>)
         alt Agent has no other connections (isAgentConnected = false)
@@ -488,17 +407,17 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor AdminUser as Admin
-    participant AdminFE as Admin Frontend
-    participant BE_AdminRoutes as Backend Admin Routes (/api/admin/agents/versions)
-    participant AuthMiddleware as Auth Middleware (authUser.js + authAccess.js)
-    participant UploadMiddleware as Upload File Middleware (uploadAgentPackage)
-    participant AdminController as Admin Controller
-    participant AdminService as Admin Service
-    participant AgentVersionDB as AgentVersion Database
-    participant FileSystem as Server File System
-    participant WebSocketService as WebSocket Service
-    participant AllConnectedAgents as All Connected Agents (via WebSocket)
+    actor AdminUser as 👤 Admin
+    participant AdminFE as 💻 Admin Frontend
+    participant BE_AdminRoutes as 📡 Admin Routes
+    participant AuthMiddleware as 🛡️ Auth Middleware
+    participant UploadMiddleware as 📤 Upload File Middleware
+    participant AdminController as 🎮 Admin Controller
+    participant AdminService as ⚙️ Admin Service
+    participant AgentVersionDB as 📊 AgentVersion Database
+    participant FileSystem as 💾 Server File System
+    participant WebSocketService as 🔌 WebSocket Service
+    participant AllConnectedAgents as 🤖 All Connected Agents
 
     %% Upload new version
     AdminUser->>AdminFE: Select agent file, enter version, notes, (optional: client_checksum)
@@ -522,7 +441,7 @@ sequenceDiagram
         AdminController-->>BE_AdminRoutes: Response 201 Created (agentVersion)
         BE_AdminRoutes-->>AdminFE: Success notification, display new version
     end
-    
+
     %% Set version as stable
     AdminUser->>AdminFE: Select version X, click "Set Stable"
     AdminFE->>BE_AdminRoutes: PUT /versions/:versionId ({is_stable: true})
@@ -568,13 +487,13 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant AgentApp as Agent Application
-    participant BE_AgentRoutes as Backend Agent Routes (/api/agent)
-    participant AgentAuthMiddleware as Agent Auth Middleware
-    participant AgentController as Agent Controller
-    participant AgentService as Agent Service
-    participant AgentVersionDB as AgentVersion Database
-    participant FileSystem as Server File System
+    participant AgentApp as 🤖 Agent Application
+    participant BE_AgentRoutes as 📡 Agent Routes
+    participant AgentAuthMiddleware as 🛡️ Agent Auth Middleware
+    participant AgentController as 🎮 Agent Controller
+    participant AgentService as ⚙️ Agent Service
+    participant AgentVersionDB as 📊 AgentVersion Database
+    participant FileSystem as 💾 Server File System
 
     %% Check for updates
     AgentApp->>BE_AgentRoutes: GET /check-update?current_version=1.0.0
@@ -623,13 +542,13 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor AdminUser as Admin
-    participant AdminFE as Admin Frontend
-    participant BE_UserRoutes as Backend User Routes (/api/users)
-    participant AuthMiddleware as Auth Middleware (authUser.js + authAccess.js)
-    participant UserController as User Controller
-    participant UserService as User Service
-    participant UserDB as User Database
+    actor AdminUser as 👤 Admin
+    participant AdminFE as 💻 Admin Frontend
+    participant BE_UserRoutes as 📡 User Routes
+    participant AuthMiddleware as 🛡️ Auth Middleware
+    participant UserController as 🎮 User Controller
+    participant UserService as ⚙️ User Service
+    participant UserDB as 📊 User Database
 
     AdminUser->>AdminFE: Request to view user list (may include filter, pagination)
     AdminFE->>BE_UserRoutes: GET /api/users?page=1&limit=10&username=abc&role=user
@@ -660,15 +579,15 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor User as User (Admin/Regular)
-    participant FE as Frontend UI
-    participant BE_RoomRoutes as Backend Room Routes (/api/rooms)
-    participant AuthMiddleware as Auth Middleware (authUser.js + authAccess.js)
-    participant RoomController as Room Controller
-    participant RoomService as Room Service
-    participant RoomDB as Room Database
-    participant ComputerDB as Computer Database (via RoomService)
-    participant UserRoomAssignmentDB as UserRoomAssignment Database (via authAccess)
+    actor User as 👤 User (Admin/Regular)
+    participant FE as 💻 Frontend UI
+    participant BE_RoomRoutes as 📡 Room Routes
+    participant AuthMiddleware as 🛡️ Auth Middleware
+    participant RoomController as 🎮 Room Controller
+    participant RoomService as ⚙️ Room Service
+    participant RoomDB as 📊 Room Database
+    participant ComputerDB as 💻 Computer Database
+    participant UserRoomAssignmentDB as 🔑 UserRoomAssignment Database
 
     User->>FE: Request to view room X details (roomId)
     FE->>BE_RoomRoutes: GET /api/rooms/:roomId
@@ -706,14 +625,14 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor User as User (Admin/Regular)
-    participant FE as Frontend UI
-    participant BE_ComputerRoutes as Backend Computer Routes (/api/computers)
-    participant AuthMiddleware as Auth Middleware (authUser.js + authAccess.js)
-    participant ComputerController as Computer Controller
-    participant ComputerService as Computer Service
-    participant ComputerDB as Computer Database
-    participant UserRoomAssignmentDB as UserRoomAssignment Database (via authAccess)
+    actor User as 👤 User (Admin/Regular)
+    participant FE as 💻 Frontend UI
+    participant BE_ComputerRoutes as 📡 Computer Routes
+    participant AuthMiddleware as 🛡️ Auth Middleware
+    participant ComputerController as 🎮 Computer Controller
+    participant ComputerService as ⚙️ Computer Service
+    participant ComputerDB as 📊 Computer Database
+    participant UserRoomAssignmentDB as 🔑 UserRoomAssignment Database
 
     %% Report new error
     User->>FE: Report error for computer X (computerId), enter error_type, error_message, error_details

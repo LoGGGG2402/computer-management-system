@@ -9,6 +9,7 @@
 ![Socket.io](https://img.shields.io/badge/Socket.io-010101?style=for-the-badge&logo=socket.io&logoColor=white)
 
 A robust backend system for comprehensive computer management across multiple locations
+
 </div>
 
 ## 📋 Table of Contents
@@ -68,26 +69,26 @@ flowchart TD
 
     %% Transport Layer
     transport["HTTP & WebSocket Transport"] --> gateway
-    
+
     %% API Gateway Layer
     gateway["API Gateway<br>(Routes, Auth, Validation)"] --> controllers
-    
+
     %% Controller Layer
     controllers["Controllers<br>(Request Handlers)"] --> services
-    
+
     %% Service Layer
     services["Services<br>(Business Logic)"] --> data
-    
+
     %% Data Access Layer
     data["Data Access Layer<br>(ORM Models)"] --> db
-    
+
     %% Database Layer
     db[(PostgreSQL<br>Database)]
-    
+
     %% WebSocket Connection
     transport -.-> wsService["WebSocket<br>Service"]
     wsService -.-> services
-    
+
     %% Improved styling with better contrast and text visibility
     classDef clientStyle fill:#e1f5fe,stroke:#000,stroke-width:2px,color:#000,font-weight:bold
     classDef transportStyle fill:#e8eaf6,stroke:#000,stroke-width:2px,color:#000,font-weight:bold
@@ -96,7 +97,7 @@ flowchart TD
     classDef serviceStyle fill:#fff8e1,stroke:#000,stroke-width:2px,color:#000,font-weight:bold
     classDef dataStyle fill:#fbe9e7,stroke:#000,stroke-width:2px,color:#000,font-weight:bold
     classDef dbStyle fill:#f5f5f5,stroke:#000,stroke-width:2px,color:#000,font-weight:bold
-    
+
     class clients clientStyle
     class transport transportStyle
     class gateway gatewayStyle
@@ -119,17 +120,17 @@ flowchart TD
 flowchart TD
     %% Main principles
     principles((("Architecture<br>Principles")))
-    
+
     %% Four main categories with examples inline
     principles --> modularity["Modularity<br><small>Separation of Concerns</small>"]
     principles --> security["Security<br><small>JWT, RT Rotation, RBAC, MFA</small>"]
     principles --> maintain["Maintainability<br><small>Clean Code, Consistency</small>"]
     principles --> comm["Communication<br><small>REST & WebSockets</small>"]
-    
+
     %% Styling
     classDef principleMain fill:#f8f8f8,stroke:#000,stroke-width:2px,color:#000,font-weight:bold
     classDef categoryStyle fill:#e3f2fd,stroke:#000,stroke-width:2px,color:#000,font-weight:bold
-    
+
     class principles principleMain
     class modularity,security,maintain,comm categoryStyle
 
@@ -147,40 +148,40 @@ graph TD
     backend["CMS Backend System"] --> foundation --> api --> data
     backend --> security
     backend --> realtime
-    
+
     %% Main Layers
     subgraph foundation ["Core Foundation"]
         nodejs["Node.js<br>Express.js"]
     end
-    
+
     subgraph api ["API Layer"]
         rest["REST APIs<br>Controllers & Services"]
     end
-    
+
     subgraph data ["Data Layer"]
         orm["Sequelize ORM"]
         db[(PostgreSQL)]
     end
-    
+
     subgraph security ["Security"]
         auth["JWT & BCrypt<br>MFA & Helmet"]
     end
-    
+
     subgraph realtime ["Real-time"]
         socketio["Socket.IO"]
     end
-    
+
     %% Simple connections
     socketio -.-> api
     orm --> db
-    
+
     %% Styling
     classDef foundStyle fill:#e3f2fd,stroke:#000,stroke-width:2px,color:#000,font-weight:bold
     classDef apiStyle fill:#e8f5e9,stroke:#000,stroke-width:2px,color:#000,font-weight:bold
     classDef dataStyle fill:#ffebee,stroke:#000,stroke-width:2px,color:#000,font-weight:bold
     classDef secStyle fill:#f3e5f5,stroke:#000,stroke-width:2px,color:#000,font-weight:bold
     classDef rtStyle fill:#fff8e1,stroke:#000,stroke-width:2px,color:#000,font-weight:bold
-    
+
     class foundation foundStyle
     class api apiStyle
     class data dataStyle
@@ -198,13 +199,13 @@ graph TD
 
 </div>
 
-| Group | Key Technologies | Role |
-|------|-----------------|---------|
-| **Foundation** | Node.js, Express.js, PM2 | JavaScript runtime, Web framework, Process manager |
-| **Database** | PostgreSQL, Sequelize | Relational database, ORM with migrations and models |
+| Group                         | Key Technologies                               | Role                                                                                         |
+| ----------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **Foundation**                | Node.js, Express.js, PM2                       | JavaScript runtime, Web framework, Process manager                                           |
+| **Database**                  | PostgreSQL, Sequelize                          | Relational database, ORM with migrations and models                                          |
 | **Authentication & Security** | JWT, Selector/Verifier RT, BCrypt, Helmet, OTP | Token authentication, Secure refresh token rotation, Password encryption, HTTP security, MFA |
-| **Real-time** | Socket.IO | Bidirectional real-time communication |
-| **Utilities** | Winston, Dotenv, Node-Cache | Logging, Environment configuration, In-memory cache |
+| **Real-time**                 | Socket.IO                                      | Bidirectional real-time communication                                                        |
+| **Utilities**                 | Winston, Dotenv, Node-Cache                    | Logging, Environment configuration, In-memory cache                                          |
 
 <div align="center">
 
@@ -222,14 +223,14 @@ The system is organized in a clear multi-layered architecture:
 
 ### Core Components
 
-| Component | Implementation | Purpose |
-|-----------|----------------|---------|
-| **API Routes** | `src/routes/` | Define endpoints and connect to controllers |
-| **Controllers** | `src/controllers/` | Handle requests and delegate to services |
-| **Services** | `src/services/` | Implement business logic |
-| **Models** | `src/database/models/` | Define data structure and database access |
-| **WebSockets** | `src/sockets/` | Handle real-time communication |
-| **Middleware** | `src/middleware/` | Implement authentication and validation |
+| Component       | Implementation         | Purpose                                     |
+| --------------- | ---------------------- | ------------------------------------------- |
+| **API Routes**  | `src/routes/`          | Define endpoints and connect to controllers |
+| **Controllers** | `src/controllers/`     | Handle requests and delegate to services    |
+| **Services**    | `src/services/`        | Implement business logic                    |
+| **Models**      | `src/database/models/` | Define data structure and database access   |
+| **WebSockets**  | `src/sockets/`         | Handle real-time communication              |
+| **Middleware**  | `src/middleware/`      | Implement authentication and validation     |
 
 ### Basic Request Flow
 
@@ -241,7 +242,7 @@ sequenceDiagram
     participant API
     participant Service
     participant Database
-    
+
     Client->>API: HTTP Request
     API->>API: Authenticate & Validate
     API->>Service: Process Request
@@ -264,10 +265,10 @@ sequenceDiagram
     participant Client
     participant Socket
     participant Service
-    
+
     Client->>Socket: Connect with auth token
     Note over Socket: Validate & join rooms
-    
+
     Client->>Socket: Send event/command
     Socket->>Service: Process event
     Service-->>Socket: Result
@@ -301,7 +302,7 @@ sequenceDiagram
     AG->>B: Send hardware info
     AG->>B: Report status/errors
     B->>AG: Send commands
-    
+
     B-->F: WebSocket: status updates, notifications
     B-->AG: WebSocket: commands
     AG-->B: WebSocket: status, command results
@@ -311,10 +312,12 @@ sequenceDiagram
 
 </div>
 
-1. **User (Admin/User) interacts with Frontend:** 
+1. **User (Admin/User) interacts with Frontend:**
+
    - The frontend sends HTTP API (RESTful) requests to the backend to perform actions such as logging in, managing users, rooms, viewing computer information, or sending commands.
 
 2. **Backend processes API requests:**
+
    - Authentication middleware (JWT) checks the validity of the request
    - Access control middleware (RBAC) determines permission to perform the action
    - Controller receives, validates, and processes the request
@@ -322,6 +325,7 @@ sequenceDiagram
    - Controller returns HTTP (JSON) response to the frontend
 
 3. **Agent interacts with Backend:**
+
    - **Registration & Authentication:** New agents register via HTTP API with MFA
    - **Sending Information:** Agents periodically send hardware data, operational status, and error reports
    - **Receiving Commands:** Agents listen for WebSocket events to receive commands
@@ -345,18 +349,18 @@ This module is the security foundation of the system, ensuring that only valid u
 <summary><b>User Login - <code>/api/auth/login</code></b></summary>
 
 - **Purpose:** Authenticate users (admin/regular user)
-- **Flow:** 
+- **Flow:**
   - User sends `username` and `password`
   - Backend validates against Users table with hashed password comparison
   - If successful:
     - Generates JWT access token with user data and expiration
     - Creates refresh token using Selector/Verifier pattern and stores in HttpOnly cookie
     - Securely saves hashed verifier part in database for validation
-- **Security:** 
+- **Security:**
   - Passwords stored with bcrypt hashing, never in plain text
   - Refresh tokens stored in HttpOnly cookies (inaccessible to JavaScript)
   - Only token selectors stored in database, verifier parts are hashed with bcrypt
-</details>
+  </details>
 
 <details>
 <summary><b>Get Current User Info - <code>/api/auth/me</code></b></summary>
@@ -365,7 +369,7 @@ This module is the security foundation of the system, ensuring that only valid u
 - **Flow:**
   - Request includes JWT in header
   - Backend decodes token, retrieves user information
-</details>
+  </details>
 
 <details>
 <summary><b>Refresh Token Management - <code>/api/auth/refresh-token</code></b></summary>
@@ -377,7 +381,7 @@ This module is the security foundation of the system, ensuring that only valid u
     - `selector`: Indexed in database for fast lookup
     - `secretPart`: Hashed with bcrypt as `hashed_verifier` in database
     - Client receives full token as `selector.secretPart` in HttpOnly cookie
-  - **Token Rotation:** 
+  - **Token Rotation:**
     - Each refresh token is one-time use only
     - When used, old token is invalidated and new refresh token is issued
     - Mitigates risk if token is compromised, as it can only be used once
@@ -392,29 +396,29 @@ This module is the security foundation of the system, ensuring that only valid u
   - secretPart compared against hashed_verifier using bcrypt
   - If valid, generates new access token and refresh token
   - Old refresh token is deleted from database
-</details>
+  </details>
 
 <details>
 <summary><b>Token Authentication Middleware</b></summary>
 
-- **Frontend Access Token (`verifyToken`):** 
+- **Frontend Access Token (`verifyToken`):**
   - Validates JWT access token from Authorization header
   - Short-lived token (15min-1hr) used for API request authentication
   - When expired, client uses refresh token to obtain a new access token
-- **Agent Token (`verifyAgentToken`):** 
+- **Agent Token (`verifyAgentToken`):**
   - Validates permanent agent tokens after registration/MFA
   - Different security model than user tokens (no expiration/refresh mechanism)
-</details>
+  </details>
 
 <details>
 <summary><b>Access Control - <code>authAccess</code> Middleware</b></summary>
 
 - **Purpose:** Enforces role-based and resource-based authorization
 - **Flow:** Checks user roles or resource ownership rights
-- **Examples:** 
+- **Examples:**
   - Only admins can access certain endpoints
   - Users can only view rooms they're assigned to
-</details>
+  </details>
 
 <details>
 <summary><b>Logout & Token Revocation - <code>/api/auth/logout</code></b></summary>
@@ -429,7 +433,7 @@ This module is the security foundation of the system, ensuring that only valid u
   - Immediate invalidation of tokens in database
   - Multiple device logout capability (admin can invalidate all user tokens)
   - Automatic token invalidation on password change
-</details>
+  </details>
 
 ### 2. User Management - `/api/users`
 
@@ -481,20 +485,16 @@ This is the core module, handling all interactions related to agents on computer
 - **Register Agent (`/identify`):**
   - New agent sends UUID and position information
   - Backend validates position and triggers MFA process
-  
 - **Verify MFA (`/verify-mfa`):**
   - Validates MFA code and generates agent token
   - Creates computer record in database
-  
 - **Update Hardware Info (`/hardware-info`):**
   - Agents send system specifications and status
-  
 - **Report Error (`/report-error`):**
   - Error reporting and tracking system
-  
 - **Check for Updates (`/check-update`):**
   - Version control and update notification system
-</details>
+  </details>
 
 <details>
 <summary><b>HTTP API for Frontend - <code>/api/computers</code></b></summary>
@@ -530,11 +530,10 @@ The WebSocket module is the heart of real-time interactions.
   - Admin room: `admin_room`
   - Agent rooms: `agent_<computerId>`
   - Subscriber rooms: `computer_<computerId>_subscribers`
-  
 - **Authentication:**
   - Frontend uses JWT token
   - Agents use agent token and ID
-</details>
+  </details>
 
 <details>
 <summary><b>Event Systems</b></summary>
@@ -543,15 +542,13 @@ The WebSocket module is the heart of real-time interactions.
   - `frontend:subscribe`: Join subscriber room
   - `frontend:unsubscribe`: Leave subscriber room
   - `frontend:send_command`: Send command to agent
-  
 - **Agent Events:**
   - `agent:status_update`: Send system metrics
   - `agent:command_result`: Return command execution results
-  
 - **Disconnect Handling:**
   - Timeout-based connection management
   - Status updates on connection changes
-</details>
+  </details>
 
 ### 7. System Statistics (Admin) - `/api/admin/stats`
 
@@ -575,11 +572,9 @@ Winston is configured to provide a flexible and robust logging system.
 - **Transports:**
   - Console: Development environment with color coding
   - File-based: Error-specific, combined, and debug logs
-  
 - **Formats:**
   - Console: Human-readable timestamped format
   - Files: JSON format for analysis tools
-  
 - **Metadata:** Context-rich logging with request details
 </details>
 
@@ -625,12 +620,14 @@ The system uses PostgreSQL as its database, managed via the Sequelize ORM.
 ## Installation and Setup
 
 1. **Clone the repository:**
+
    ```bash
    git clone <repository_url>
    cd backend
    ```
 
 2. **Install dependencies:**
+
    ```bash
    npm install
    ```
@@ -638,6 +635,7 @@ The system uses PostgreSQL as its database, managed via the Sequelize ORM.
 3. **Set up environment variables:**
 
    Create a `.env` file in the `backend` root directory:
+
    ```env
    PORT=3000
    DB_USER=myuser
@@ -670,9 +668,11 @@ The system uses PostgreSQL as its database, managed via the Sequelize ORM.
 ## Running the Application
 
 - **Development Mode:**
+
   ```bash
   npm run dev
   ```
+
   Server will auto-reload on code changes
 
 - **Production Mode:**
@@ -683,6 +683,7 @@ The system uses PostgreSQL as its database, managed via the Sequelize ORM.
 ## API Documentation
 
 Detailed API documentation is available in the `docs` directory:
+
 - [`docs/api_document.md`](docs/api_document.md): Comprehensive documentation
 - [`docs/frontend_api.md`](docs/frontend_api.md): Frontend API reference
 - [`docs/agent_api.md`](docs/agent_api.md): Agent API reference

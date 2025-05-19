@@ -1,5 +1,5 @@
-const { AgentVersion } = require('../database/models');
-const semver = require('semver');
+const { AgentVersion } = require("../database/models");
+const semver = require("semver");
 
 /**
  * Service for agent-related operations, including version management
@@ -19,26 +19,28 @@ class AgentService {
     try {
       const latestStableVersion = await AgentVersion.findOne({
         where: { is_stable: true },
-        order: [['created_at', 'DESC']]
+        order: [["created_at", "DESC"]],
       });
 
       if (!latestStableVersion) {
         return null;
       }
 
-      // If no current version provided or if latest version is newer
-      if (!currentVersion || semver.gt(latestStableVersion.version, currentVersion)) {
+      if (
+        !currentVersion ||
+        semver.gt(latestStableVersion.version, currentVersion)
+      ) {
         return {
           version: latestStableVersion.version,
           download_url: latestStableVersion.download_url,
           checksum_sha256: latestStableVersion.checksum_sha256,
-          notes: latestStableVersion.notes
+          notes: latestStableVersion.notes,
         };
       }
 
       return null;
     } catch (error) {
-      throw error; // Pass through the original error
+      throw error; 
     }
   }
 
@@ -60,12 +62,12 @@ class AgentService {
   async getAllVersions() {
     try {
       const versions = await AgentVersion.findAll({
-        order: [['created_at', 'DESC']]
+        order: [["created_at", "DESC"]],
       });
-      
+
       return versions;
     } catch (error) {
-      throw error; // Pass through the original error
+      throw error;
     }
   }
 }

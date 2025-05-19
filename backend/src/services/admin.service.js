@@ -1,8 +1,8 @@
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
-const db = require('../database/models');
-const websocketService = require('./websocket.service');
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const db = require("../database/models");
+const websocketService = require("./websocket.service");
 const { User, Room, Computer, AgentVersion } = db;
 
 class AdminService {
@@ -43,19 +43,19 @@ class AdminService {
         Computer.count(),
         Computer.findAll({
           where: { have_active_errors: true },
-          attributes: ['id', 'name', 'errors'] 
+          attributes: ["id", "name", "errors"],
         }),
       ]);
 
       const unresolvedErrors = [];
-      computersWithErrorRecords.forEach(computer => {
+      computersWithErrorRecords.forEach((computer) => {
         const errors = Array.isArray(computer.errors) ? computer.errors : [];
-        errors.forEach(error => {
+        errors.forEach((error) => {
           if (!error.resolved) {
             unresolvedErrors.push({
               computerId: computer.id,
               computerName: computer.name,
-              errorId: error.id, 
+              errorId: error.id,
               error_type: error.error_type,
               error_message: error.error_message,
               error_details: error.error_details,
@@ -74,7 +74,7 @@ class AdminService {
         totalComputers,
         onlineComputers,
         offlineComputers: totalComputers - onlineComputers,
-        computersWithErrors: computersWithErrorsCount, 
+        computersWithErrors: computersWithErrorsCount,
         unresolvedErrors,
       };
     } catch (error) {
@@ -107,57 +107,50 @@ class AdminService {
   async processAgentUpload(file, versionData) {
     try {
       if (!file || !file.path) {
-        throw new Error('No valid file provided');
+        throw new Error("No valid file provided");
       }
 
       if (!versionData.version) {
-        throw new Error('Version is required');
+        throw new Error("Version is required");
       }
 
-      // Calculate SHA-256 checksum
       const fileBuffer = fs.readFileSync(file.path);
-      const hashSum = crypto.createHash('sha256');
+      const hashSum = crypto.createHash("sha256");
       hashSum.update(fileBuffer);
-      const serverChecksum = hashSum.digest('hex');
+      const serverChecksum = hashSum.digest("hex");
 
-      // Check file integrity if client sent checksum
-      if (versionData.client_checksum && versionData.client_checksum !== serverChecksum) {
-        // Delete file if checksum doesn't match
+      if (
+        versionData.client_checksum &&
+        versionData.client_checksum !== serverChecksum
+      ) {
         if (fs.existsSync(file.path)) {
           fs.unlinkSync(file.path);
         }
-        throw new Error('File integrity check failed: checksums do not match');
+        throw new Error("File integrity check failed: checksums do not match");
       }
 
-      // Create download URL path (relative to API base)
       const filename = path.basename(file.path);
       const downloadUrl = `/agent-packages/${filename}`;
-      
+
       const releaseDate = new Date();
 
-      // Create agent version record
       const agentVersion = await AgentVersion.create({
         version: versionData.version,
         checksum_sha256: serverChecksum,
         download_url: downloadUrl,
-        notes: versionData.notes || '',
-        is_stable: false, // Default to not stable (must be explicitly set later)
+        notes: versionData.notes || "",
+        is_stable: false,
         file_path: file.path,
-        file_size: file.size
+        file_size: file.size,
       });
 
       return agentVersion;
     } catch (error) {
-      // If file exists but agent version creation failed, clean up the file
       if (file && file.path && fs.existsSync(file.path)) {
-        try {
-          fs.unlinkSync(file.path);
-        } catch (cleanupError) {
-          // Let the controller handle the logging
-        }
+        fs.unlinkSync(file.path);
       }
-      
-      throw error; // Pass through the original error
+
+      throw error;
     }
   }
 
@@ -190,16 +183,15 @@ class AdminService {
         // If setting to stable, mark all other versions as not stable
         await AgentVersion.update(
           { is_stable: false },
-          { where: { id: { [require('sequelize').Op.ne]: versionId } } }
+          { where: { id: { [require("sequelize").Op.ne]: versionId } } }
         );
       }
 
-      // Update the version
       await agentVersion.update({ is_stable: isStable });
 
       return agentVersion;
     } catch (error) {
-      throw error; // Pass through the original error
+      throw error;
     }
   }
 
@@ -208,7 +200,7 @@ class AdminService {
    * @returns {Promise<Array<Object>>} List of all agent versions ordered by stability and creation date
    * @returns {Promise<Array<AgentVersion>>} List of all agent versions with the following properties for each:
    *   - id {string} - Unique UUID identifier for the agent version
-   *   - version {string} - Semantic version string (e.g., '1.0.0') 
+   *   - version {string} - Semantic version string (e.g., '1.0.0')
    *   - checksum_sha256 {string} - SHA-256 hash of the agent package
    *   - download_url {string} - URL path where agents can download this version
    *   - notes {string|null} - Release notes describing changes and features
@@ -222,14 +214,14 @@ class AdminService {
     try {
       const versions = await AgentVersion.findAll({
         order: [
-          ['is_stable', 'DESC'],
-          ['created_at', 'DESC']
-        ]
+          ["is_stable", "DESC"],
+          ["created_at", "DESC"],
+        ],
       });
-      
+
       return versions;
     } catch (error) {
-      throw error; // Pass through the original error
+      throw error;
     }
   }
 }

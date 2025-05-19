@@ -1,5 +1,5 @@
-const db = require('../database/models');
-const authService = require('./auth.service');
+const db = require("../database/models");
+const authService = require("./auth.service");
 
 const User = db.User;
 const RefreshToken = db.RefreshToken;
@@ -27,37 +27,43 @@ class UserService {
    *     - created_at {Date} - When the user was created
    *     - updated_at {Date} - When the user was last updated
    */
-  async getAllUsers(page = 1, limit = 10, search = '', role = null, is_active = null) {
+  async getAllUsers(
+    page = 1,
+    limit = 10,
+    search = "",
+    role = null,
+    is_active = null
+  ) {
     try {
       const offset = (page - 1) * limit;
-      
+
       const whereClause = {};
-      
+
       if (search) {
         whereClause.username = { [db.Sequelize.Op.iLike]: `%${search}%` };
       }
-      
-      if (role && ['admin', 'user'].includes(role)) {
+
+      if (role && ["admin", "user"].includes(role)) {
         whereClause.role = role;
       }
-      
+
       if (is_active !== null) {
-        whereClause.is_active = is_active === 'true' || is_active === true;
+        whereClause.is_active = is_active === "true" || is_active === true;
       }
-      
+
       const { count, rows } = await User.findAndCountAll({
         where: whereClause,
         limit,
         offset,
-        order: [['id', 'ASC']],
-        attributes: { exclude: ['password_hash'] }
+        order: [["id", "ASC"]],
+        attributes: { exclude: ["password_hash"] },
       });
-      
+
       return {
         total: count,
         currentPage: page,
         totalPages: Math.ceil(count / limit),
-        users: rows
+        users: rows,
       };
     } catch (error) {
       throw error;
@@ -79,13 +85,13 @@ class UserService {
   async getUserById(id) {
     try {
       const user = await User.findByPk(id, {
-        attributes: { exclude: ['password_hash'] }
+        attributes: { exclude: ["password_hash"] },
       });
-      
+
       if (!user) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
-      
+
       return user;
     } catch (error) {
       throw error;
@@ -111,20 +117,20 @@ class UserService {
   async createUser(userData) {
     try {
       const existingUser = await User.findOne({
-        where: { username: userData.username }
+        where: { username: userData.username },
       });
-      
+
       if (existingUser) {
-        throw new Error('Username already exists');
+        throw new Error("Username already exists");
       }
-      
+
       const user = await User.create({
         username: userData.username,
         password_hash: userData.password,
-        role: userData.role || 'user',
-        is_active: userData.is_active !== undefined ? userData.is_active : true
+        role: userData.role || "user",
+        is_active: userData.is_active !== undefined ? userData.is_active : true,
       });
-      
+
       const { password_hash, ...userWithoutPassword } = user.toJSON();
       return userWithoutPassword;
     } catch (error) {
@@ -152,43 +158,44 @@ class UserService {
   async updateUser(id, userData) {
     try {
       const user = await User.findByPk(id);
-      
+
       if (!user) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
-      
+
       if (userData.username && userData.username !== user.username) {
         const existingUser = await User.findOne({
-          where: { username: userData.username }
+          where: { username: userData.username },
         });
-        
+
         if (existingUser) {
-          throw new Error('Username already exists');
+          throw new Error("Username already exists");
         }
       }
-      
+
       const updateData = {};
-      
+
       if (userData.username) updateData.username = userData.username;
       if (userData.password) updateData.password_hash = userData.password;
       if (userData.role) updateData.role = userData.role;
-      if (userData.is_active !== undefined) updateData.is_active = userData.is_active;
-      
+      if (userData.is_active !== undefined)
+        updateData.is_active = userData.is_active;
+
       // Check if password is being updated
       const isPasswordChange = !!userData.password;
-      
+
       await user.update(updateData);
-      
+
       // If password was changed, invalidate all refresh tokens for security
       if (isPasswordChange) {
         // Invalidate all tokens for this user
         await RefreshToken.destroy({ where: { user_id: id } });
       }
-      
+
       const updatedUser = await User.findByPk(id, {
-        attributes: { exclude: ['password_hash'] }
+        attributes: { exclude: ["password_hash"] },
       });
-      
+
       return updatedUser;
     } catch (error) {
       throw error;
@@ -204,13 +211,13 @@ class UserService {
   async deleteUser(id) {
     try {
       const user = await User.findByPk(id);
-      
+
       if (!user) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
-      
+
       await user.update({ is_active: false });
-      
+
       return true;
     } catch (error) {
       throw error;
@@ -231,17 +238,17 @@ class UserService {
    */
   async reactivateUser(id) {
     const user = await User.findByPk(id);
-    
+
     if (!user) {
-      throw new Error('User not found');
+      throw new Error("User not found");
     }
-    
+
     if (user.is_active) {
-      throw new Error('User is already active');
+      throw new Error("User is already active");
     }
-    
+
     await user.update({ is_active: true });
-    
+
     const { password, ...userData } = user.toJSON();
     return userData;
   }

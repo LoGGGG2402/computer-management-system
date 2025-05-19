@@ -1,13 +1,5 @@
 # Computer Management System - Flow Diagrams
 
-<style>
-.mermaid {
-    display: flex;
-    justify-content: center;
-    margin: 20px 0;
-}
-</style>
-
 ## 1. User Authentication Flow
 
 ```mermaid
@@ -313,7 +305,7 @@ graph TD
     Database --> |"Version Created"| Backend
     Backend --> |"WS agent:new_version_available"| WebSocket["⚡ WebSocket"]
     WebSocket --> |"New Version"| Agents["🤖 Agents"]
-    
+
     %% Update Flow
     Agents --> |"GET /api/agent/check-update"| Backend
     Backend --> |"Compare Version"| Database
@@ -370,13 +362,13 @@ graph TD
     Agent["🤖 Agent"] --> |"Report Error"| Backend["⚙️ Backend"]
     User["👤 User"] --> |"Report Error"| Frontend["💻 Frontend"]
     Frontend --> |"POST /api/errors"| Backend
-    
+
     %% Error Processing
     Backend --> |"Store Error"| Database["📊 Database"]
     Backend --> |"Notify"| WebSocket["⚡ WebSocket"]
     WebSocket --> |"Alert"| Frontend
     Frontend --> |"Show Alert"| Admin["👤 Admin"]
-    
+
     %% Error Resolution
     Admin --> |"View & Resolve"| Frontend
     Frontend --> |"PUT /api/errors/:id/resolve"| Backend
@@ -430,14 +422,14 @@ graph TD
     User["👤 User"] --> |"View Room"| Frontend["💻 Frontend"]
     Frontend --> |"GET /api/rooms/:id"| Backend["⚙️ Backend"]
     Backend --> |"Auth Check"| Auth["🔒 Auth"]
-    
+
     %% Admin Path
     Auth --> |"Admin Access"| Backend
     Backend --> |"Get Room Details"| Database["📊 Database"]
     Database --> |"Room Data"| Backend
     Backend --> |"Room Info"| Frontend
     Frontend --> |"Display Room"| User
-    
+
     %% User Path
     Auth --> |"Check Assignment"| Database
     Database --> |"Has Access"| Auth

@@ -16,6 +16,7 @@ Throughout this document authentication tokens are referenced:
 - **Token Revocation**: Administrator users can manually revoke agent tokens through the admin interface if an agent is compromised or needs to be redeployed.
 
 ## Table of Contents
+
 - [CMS API Documentation](#cms-api-documentation)
   - [Authentication Token Information](#authentication-token-information)
   - [Agent Token Security](#agent-token-security)
@@ -40,7 +41,9 @@ Throughout this document authentication tokens are referenced:
 - [Server Broadcast Events](#server-broadcast-events)
   - [Execute Command](#execute-command)
   - [New Version Available Notification](#new-version-available-notification)
+
 ---
+
 # Agent Interfaces
 
 This section describes the interfaces used by agent software running on managed computers.
@@ -52,6 +55,7 @@ This section describes the interfaces used by agent software running on managed 
 **Authentication Note:** All agent API endpoints that require authentication will use the token obtained from the `/api/agent/identify` or `/api/agent/verify-mfa` endpoints. This token should be included in the `Authorization: Bearer <agent_token>` header along with the `X-Agent-ID: string (agentId)` header.
 
 **Client-Side Implementation Guidance:**
+
 - Agent tokens should be stored securely on the device.
 - The agent should include the token in all authenticated requests.
 - If a request returns a 401 Unauthorized error, the agent should attempt to re-identify using the stored agentId.
@@ -276,14 +280,14 @@ Verifies the agent's identity and permissions when establishing a WebSocket conn
 - **Note:** Authentication is handled entirely through WebSocket connection headers when establishing the connection.
 - **Connection Authentication Result:**
   - On success: Agent receives the standard Socket.io `connect` event
-  - On failure: Agent receives a `connect_error` event with an error message
+  - On failure: Agent receives a `auth_error` event with an error message
   - Example error object:
     ```javascript
     {
       message: "Authentication failed: Invalid agent credentials";
     }
     ```
-  - Possible `connect_error` Messages:
+  - Possible `auth_error` Messages:
     ```json
     [
       { "message": "Authentication failed: Invalid agent credentials" },

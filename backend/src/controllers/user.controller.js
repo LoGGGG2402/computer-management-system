@@ -1,6 +1,6 @@
-const userService = require('../services/user.service');
-const logger = require('../utils/logger');
-const validationUtils = require('../utils/validation');
+const userService = require("../services/user.service");
+const logger = require("../utils/logger");
+const validationUtils = require("../utils/validation");
 
 /**
  * Controller for user management operations
@@ -35,80 +35,100 @@ class UserController {
     try {
       const errors = [];
 
-      // Validate page parameter
-      const pageError = validationUtils.validatePageQueryParam(req.query.page);
-      if (pageError) {
-        errors.push({ field: 'page', message: pageError });
-      }
-
-      // Validate limit parameter
-      const limitError = validationUtils.validateLimitQueryParam(req.query.limit);
-      if (limitError) {
-        errors.push({ field: 'limit', message: limitError });
-      }
-
-      // Validate username search parameter
-      if (req.query.username) {
-        const usernameSearchError = validationUtils.validateUsernameSearchQuery(req.query.username);
-        if (usernameSearchError) {
-          errors.push({ field: 'username', message: usernameSearchError });
+      if (req.query.page !== undefined) {
+        const pageError = validationUtils.validatePageQueryParam(
+          req.query.page
+        );
+        if (pageError) {
+          errors.push({ field: "page", message: pageError });
         }
       }
 
-      // Validate role parameter
+      if (req.query.limit !== undefined) {
+        const limitError = validationUtils.validateLimitQueryParam(
+          req.query.limit
+        );
+        if (limitError) {
+          errors.push({ field: "limit", message: limitError });
+        }
+      }
+
+      if (req.query.username) {
+        const usernameSearchError = validationUtils.validateUsernameSearchQuery(
+          req.query.username
+        );
+        if (usernameSearchError) {
+          errors.push({ field: "username", message: usernameSearchError });
+        }
+      }
+
       if (req.query.role) {
         const roleError = validationUtils.validateUserRole(req.query.role);
         if (roleError) {
-          errors.push({ field: 'role', message: roleError });
+          errors.push({ field: "role", message: roleError });
         }
       }
 
-      // Validate is_active parameter
       if (req.query.is_active !== undefined) {
-        if (!['true', 'false'].includes(req.query.is_active.toLowerCase())) {
-          errors.push({ field: 'is_active', message: 'is_active must be "true" or "false".' });
+        if (!["true", "false"].includes(req.query.is_active.toLowerCase())) {
+          errors.push({
+            field: "is_active",
+            message: 'is_active must be "true" or "false".',
+          });
         }
       }
 
-      // If there are any validation errors, return them
       if (errors.length > 0) {
+        console.log("errors", errors);
         return res.status(400).json({
-          status: 'error',
-          message: 'Validation failed',
-          errors
+          status: "error",
+          message: "Validation failed",
+          errors,
         });
       }
 
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
-      const search = req.query.username || '';
+      const search = req.query.username || "";
       const role = req.query.role || null;
-      const is_active = req.query.is_active !== undefined ? req.query.is_active === 'true' : null;
-      
-      const result = await userService.getAllUsers(page, limit, search, role, is_active);
-      
-      logger.debug(`Retrieved ${result.users.length} users (total: ${result.total}) with filters:`, {
+      const is_active =
+        req.query.is_active !== undefined
+          ? req.query.is_active === "true"
+          : null;
+
+      const result = await userService.getAllUsers(
         page,
         limit,
         search,
         role,
-        is_active,
-        requestedBy: req.user?.id
-      });
-      
+        is_active
+      );
+
+      logger.debug(
+        `Retrieved ${result.users.length} users (total: ${result.total}) with filters:`,
+        {
+          page,
+          limit,
+          search,
+          role,
+          is_active,
+          requestedBy: req.user?.id,
+        }
+      );
+
       return res.status(200).json({
-        status: 'success',
-        data: result
+        status: "success",
+        data: result,
       });
     } catch (error) {
-      logger.error('Failed to fetch users:', {
+      logger.error("Failed to fetch users:", {
         error: error.message,
-        stack: error.stack
+        stack: error.stack,
       });
-      
+
       return res.status(500).json({
-        status: 'error',
-        message: error.message || 'Failed to fetch users'
+        status: "error",
+        message: error.message || "Failed to fetch users",
       });
     }
   }
@@ -133,31 +153,31 @@ class UserController {
   async getUserById(req, res) {
     try {
       const id = parseInt(req.params.userId);
-      
+
       if (!id) {
-        logger.debug('Invalid user ID provided:', { id: req.params.userId });
+        logger.debug("Invalid user ID provided:", { id: req.params.userId });
         return res.status(400).json({
-          status: 'error',
-          message: 'User ID is required'
+          status: "error",
+          message: "User ID is required",
         });
       }
-      
+
       logger.debug(`Fetching user with ID: ${id}`);
       const user = await userService.getUserById(id);
-      
+
       return res.status(200).json({
-        status: 'success',
-        data: user
+        status: "success",
+        data: user,
       });
     } catch (error) {
       logger.error(`Failed to get user with ID ${req.params.userId}:`, {
         error: error.message,
-        stack: error.stack
+        stack: error.stack,
       });
-      
+
       return res.status(404).json({
-        status: 'error',
-        message: error.message || 'User not found'
+        status: "error",
+        message: error.message || "User not found",
       });
     }
   }
@@ -186,81 +206,78 @@ class UserController {
     try {
       const { username, password, role, is_active } = req.body;
       const errors = [];
-      
+
       if (!username || !password) {
-        logger.debug('Missing required user creation fields:', { 
-          hasUsername: !!username, 
-          hasPassword: !!password 
+        logger.debug("Missing required user creation fields:", {
+          hasUsername: !!username,
+          hasPassword: !!password,
         });
-        
+
         return res.status(400).json({
-          status: 'error',
-          message: 'Username and password are required'
+          status: "error",
+          message: "Username and password are required",
         });
       }
 
-      // Validate username
       const usernameError = validationUtils.validateUsername(username);
       if (usernameError) {
-        errors.push({ field: 'username', message: usernameError });
+        errors.push({ field: "username", message: usernameError });
       }
 
-      // Validate password
       const passwordError = validationUtils.validatePassword(password);
       if (passwordError) {
-        errors.push({ field: 'password', message: passwordError });
+        errors.push({ field: "password", message: passwordError });
       }
 
-      // Validate role if provided
       if (role) {
         const roleError = validationUtils.validateUserRole(role);
         if (roleError) {
-          errors.push({ field: 'role', message: roleError });
+          errors.push({ field: "role", message: roleError });
         }
       }
 
-      // Validate is_active if provided
       if (is_active !== undefined) {
         const isActiveError = validationUtils.validateIsActiveFlag(is_active);
         if (isActiveError) {
-          errors.push({ field: 'is_active', message: isActiveError });
+          errors.push({ field: "is_active", message: isActiveError });
         }
       }
 
-      // If there are any validation errors, return them
       if (errors.length > 0) {
         return res.status(400).json({
-          status: 'error',
-          message: 'Validation failed',
-          errors
+          status: "error",
+          message: "Validation failed",
+          errors,
         });
       }
-      
+
       const userData = {
         username,
         password,
         role,
-        is_active
+        is_active,
       };
       const user = await userService.createUser(userData);
-      
-      logger.info(`User created successfully: ID ${user.id}, username: ${user.username}`);
-      
+
+      logger.info(
+        `User created successfully: ID ${user.id}, username: ${user.username}`
+      );
+
       return res.status(201).json({
-        status: 'success',
+        status: "success",
         data: user,
-        message: 'User created successfully'
+        message: "User created successfully",
       });
     } catch (error) {
-      logger.error('Failed to create user:', {
-        error: error.message, 
+      logger.error("Failed to create user:", {
+        error: error.message,
         stack: error.stack,
-        username: req.body.username
+        username: req.body.username,
       });
-      
+
       return res.status(400).json({
-        status: 'error',
-        message: error.message || 'Failed to create user'
+        status: "error",
+        message: error.message || "Failed to create user",
       });
     }
   }
@@ -290,75 +307,77 @@ class UserController {
       const id = parseInt(req.params.userId);
       const { role, is_active } = req.body;
       const errors = [];
-      
+
       if (!id) {
-        logger.debug('Invalid user ID provided for update:', { id: req.params.userId });
-        return res.status(400).json({
-          status: 'error',
-          message: 'User ID is required'
+        logger.debug("Invalid user ID provided for update:", {
+          id: req.params.userId,
         });
-      }
-      
-      if (req.body.username || req.body.password) {
-        logger.warn('Attempt to update username/password via unauthorized endpoint:', {
-          userId: id,
-          attemptedBy: req.user?.id
-        });
-        
         return res.status(400).json({
-          status: 'error',
-          message: 'Username and password cannot be updated via this endpoint'
+          status: "error",
+          message: "User ID is required",
         });
       }
 
-      // Validate role if provided
+      if (req.body.username || req.body.password) {
+        logger.warn(
+          "Attempt to update username/password via unauthorized endpoint:",
+          {
+            userId: id,
+            attemptedBy: req.user?.id,
+          }
+        );
+
+        return res.status(400).json({
+          status: "error",
+          message: "Username and password cannot be updated via this endpoint",
+        });
+      }
+
       if (role !== undefined) {
         const roleError = validationUtils.validateUserRole(role);
         if (roleError) {
-          errors.push({ field: 'role', message: roleError });
+          errors.push({ field: "role", message: roleError });
         }
       }
 
-      // Validate is_active if provided
       if (is_active !== undefined) {
         const isActiveError = validationUtils.validateIsActiveFlag(is_active);
         if (isActiveError) {
-          errors.push({ field: 'is_active', message: isActiveError });
+          errors.push({ field: "is_active", message: isActiveError });
         }
       }
 
-      // If there are any validation errors, return them
       if (errors.length > 0) {
         return res.status(400).json({
-          status: 'error',
-          message: 'Validation failed',
-          errors
+          status: "error",
+          message: "Validation failed",
+          errors,
         });
       }
-      
+
       const userData = {};
-      
+
       if (role !== undefined) userData.role = role;
       if (is_active !== undefined) userData.is_active = is_active;
-      
+
       const user = await userService.updateUser(id, userData);
-      
+
       logger.info(`User ID ${id} updated successfully`);
-      
+
       return res.status(200).json({
-        status: 'success',
+        status: "success",
         data: user,
-        message: 'User updated successfully'
+        message: "User updated successfully",
       });
     } catch (error) {
       logger.error(`Failed to update user ID ${req.params.userId}:`, {
         error: error.message,
-        stack: error.stack
+        stack: error.stack,
       });
-      
+
       return res.status(400).json({
-        status: 'error',
-        message: error.message || 'Failed to update user'
+        status: "error",
+        message: error.message || "Failed to update user",
       });
     }
   }
@@ -376,32 +395,34 @@ class UserController {
   async deleteUser(req, res) {
     try {
       const id = parseInt(req.params.userId);
-      
+
       if (!id) {
-        logger.debug('Invalid user ID provided for deletion:', { id: req.params.userId });
+        logger.debug("Invalid user ID provided for deletion:", {
+          id: req.params.userId,
+        });
         return res.status(400).json({
-          status: 'error',
-          message: 'User ID is required'
+          status: "error",
+          message: "User ID is required",
         });
       }
-      
+
       await userService.deleteUser(id);
-      
+
       logger.info(`User ID ${id} inactivated successfully`);
-      
+
       return res.status(200).json({
-        status: 'success',
-        message: 'User inactivated successfully'
+        status: "success",
+        message: "User inactivated successfully",
       });
     } catch (error) {
       logger.error(`Failed to inactivate user ID ${req.params.userId}:`, {
         error: error.message,
-        stack: error.stack
+        stack: error.stack,
       });
-      
+
       return res.status(404).json({
-        status: 'error',
-        message: error.message || 'User not found'
+        status: "error",
+        message: error.message || "User not found",
       });
     }
   }
@@ -426,33 +447,35 @@ class UserController {
   async reactivateUser(req, res) {
     try {
       const id = parseInt(req.params.userId);
-      
+
       if (!id) {
-        logger.debug('Invalid user ID provided for reactivation:', { id: req.params.userId });
+        logger.debug("Invalid user ID provided for reactivation:", {
+          id: req.params.userId,
+        });
         return res.status(400).json({
-          status: 'error',
-          message: 'User ID is required'
+          status: "error",
+          message: "User ID is required",
         });
       }
 
       const user = await userService.reactivateUser(id);
-      
+
       logger.info(`User ID ${id} reactivated successfully`);
-      
+
       return res.status(200).json({
-        status: 'success',
+        status: "success",
         data: user,
-        message: 'User reactivated successfully'
+        message: "User reactivated successfully",
       });
     } catch (error) {
       logger.error(`Failed to reactivate user ID ${req.params.userId}:`, {
         error: error.message,
-        stack: error.stack
+        stack: error.stack,
       });
-      
+
       return res.status(404).json({
-        status: 'error',
-        message: error.message || 'User not found'
+        status: "error",
+        message: error.message || "User not found",
       });
     }
   }

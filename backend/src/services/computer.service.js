@@ -47,7 +47,7 @@ class ComputerService {
           },
         ],
       });
-      
+
       return computer || null;
     } catch (error) {
       throw error;

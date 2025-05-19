@@ -3,9 +3,9 @@ const mfaService = require("../services/mfa.service");
 const websocketService = require("../services/websocket.service");
 const roomService = require("../services/room.service");
 const agentService = require("../services/agent.service");
-const logger = require('../utils/logger');
-const path = require('path');
-const validationUtils = require('../utils/validation.utils');
+const logger = require("../utils/logger");
+const path = require("path");
+const validationUtils = require("../utils/validation");
 
 /**
  * Controller for agent communication
@@ -38,101 +38,114 @@ class AgentController {
     const { agentId, positionInfo } = req.body;
     const errors = [];
 
-    // Validate agent ID
     if (!agentId) {
-      logger.warn('Agent identification attempt without agent ID', { ip: req.ip });
+      logger.warn("Agent identification attempt without agent ID", {
+        ip: req.ip,
+      });
       return res.status(400).json({
         status: "error",
-        message: "Missing required fields"
+        message: "Missing required fields",
       });
     }
 
-    // Validate agent ID using validation utils
     const agentIdError = validationUtils.validateAgentId(agentId);
     if (agentIdError) {
-      errors.push({ field: 'agentId', message: agentIdError });
+      errors.push({ field: "agentId", message: agentIdError });
     }
 
     try {
-      // Check if agent is already registered
       const computer = await computerService.findComputerByAgentId(agentId);
       if (computer?.agent_token_hash) {
-        logger.debug(`Agent already registered: ${agentId}, Computer ID: ${computer.id}`);
-        // Return the agent token as required by API spec
-        return res.status(200).json({ 
+        logger.debug(
+          `Agent already registered: ${agentId}, Computer ID: ${computer.id}`
+        );
+        return res.status(200).json({
           status: "success",
-          agentToken: computer.agent_token 
+          agentToken: computer.agent_token,
         });
       }
-      
-      // Validate position information
-      const isValidPosition = positionInfo && 
-                             positionInfo.roomName && 
-                             positionInfo.posX !== undefined && 
-                             positionInfo.posY !== undefined;
-      
+
+      const isValidPosition =
+        positionInfo &&
+        positionInfo.roomName &&
+        positionInfo.posX !== undefined &&
+        positionInfo.posY !== undefined;
+
       if (!isValidPosition) {
-        logger.warn('Agent identification attempt with invalid position info', { 
-          ip: req.ip, agentId, positionInfo 
+        logger.warn("Agent identification attempt with invalid position info", {
+          ip: req.ip,
+          agentId,
+          positionInfo,
         });
         return res.status(400).json({
           status: "position_error",
-          message: "Valid position information is required"
+          message: "Valid position information is required",
         });
       }
 
-      // Validate room name using validation utils
-      const roomNameError = validationUtils.validateRoomName(positionInfo.roomName);
+      const roomNameError = validationUtils.validateRoomName(
+        positionInfo.roomName
+      );
       if (roomNameError) {
-        errors.push({ field: 'positionInfo.roomName', message: roomNameError });
+        errors.push({ field: "positionInfo.roomName", message: roomNameError });
       }
 
-      // Validate position coordinates using validation utils
-      const posXError = validationUtils.validatePositionCoordinate(positionInfo.posX, 'posX');
+      const posXError = validationUtils.validatePositionCoordinate(
+        positionInfo.posX,
+        "posX"
+      );
       if (posXError) {
-        errors.push({ field: 'positionInfo.posX', message: posXError });
+        errors.push({ field: "positionInfo.posX", message: posXError });
       }
 
-      const posYError = validationUtils.validatePositionCoordinate(positionInfo.posY, 'posY');
+      const posYError = validationUtils.validatePositionCoordinate(
+        positionInfo.posY,
+        "posY"
+      );
       if (posYError) {
-        errors.push({ field: 'positionInfo.posY', message: posYError });
+        errors.push({ field: "positionInfo.posY", message: posYError });
       }
 
-      // If there are any validation errors, return them
       if (errors.length > 0) {
         return res.status(400).json({
           status: "position_error",
           message: "Validation failed",
-          errors
+          errors,
         });
       }
 
-      // Destructure position info for cleaner code
       const { roomName, posX, posY } = positionInfo;
-      
-      // Check if position is available in the room
-      const result = await roomService.isPositionAvailable(roomName, posX, posY);
-      
+
+      const result = await roomService.isPositionAvailable(
+        roomName,
+        posX,
+        posY
+      );
+
       if (!result.valid) {
-        logger.warn(`Invalid position for agent: ${agentId}, Room: ${roomName} (${posX},${posY})`, {
-          reason: result.message
-        });
+        logger.warn(
+          `Invalid position for agent: ${agentId}, Room: ${roomName} (${posX},${posY})`,
+          {
+            reason: result.message,
+          }
+        );
         return res.status(400).json({
           status: "position_error",
           message: result.message,
         });
       }
-      
-      // Position is valid, generate MFA and notify admins
+
       const mfaCode = mfaService.generateAndStoreMfa(agentId, {
         roomId: result.room.id,
         posX,
         posY,
       });
-      
+
       websocketService.notifyAdminsNewMfa(mfaCode, positionInfo);
-      
-      logger.info(`MFA required for new agent: ${agentId}, Room: ${roomName} (${posX},${posY})`);
+
+      logger.info(
+        `MFA required for new agent: ${agentId}, Room: ${roomName} (${posX},${posY})`
+      );
       return res.status(200).json({ status: "mfa_required" });
     } catch (error) {
       if (positionInfo) {
@@ -141,13 +154,13 @@ class AgentController {
           error: error.message,
           stack: error.stack,
           room: roomName,
-          position: `(${posX},${posY})`
+          position: `(${posX},${posY})`,
         });
       } else {
         logger.error(`Error in agent identification request:`, {
           error: error.message,
           stack: error.stack,
-          agentId
+          agentId,
         });
       }
       next(error);
@@ -176,10 +189,10 @@ class AgentController {
       const errors = [];
 
       if (!agentId || !mfaCode) {
-        logger.warn('MFA verification attempt with missing data', {
+        logger.warn("MFA verification attempt with missing data", {
           hasAgentId: !!agentId,
           hasMfaCode: !!mfaCode,
-          ip: req.ip
+          ip: req.ip,
         });
         return res.status(400).json({
           status: "error",
@@ -187,29 +200,27 @@ class AgentController {
         });
       }
 
-      // Validate agent ID using validation utils
       const agentIdError = validationUtils.validateAgentId(agentId);
       if (agentIdError) {
-        errors.push({ field: 'agentId', message: agentIdError });
+        errors.push({ field: "agentId", message: agentIdError });
       }
 
-      // Validate MFA code using validation utils
       const mfaCodeError = validationUtils.validateMfaCode(mfaCode);
       if (mfaCodeError) {
-        errors.push({ field: 'mfaCode', message: mfaCodeError });
+        errors.push({ field: "mfaCode", message: mfaCodeError });
       }
 
-      // If there are any validation errors, return them
       if (errors.length > 0) {
         return res.status(400).json({
           status: "error",
           message: "Validation failed",
-          errors
+          errors,
         });
       }
 
-      // Check if agent ID exists in the system
-      const existingComputer = await computerService.findComputerByAgentId(agentId);
+      const existingComputer = await computerService.findComputerByAgentId(
+        agentId
+      );
       if (!existingComputer && !mfaService.hasPendingMfa(agentId)) {
         return res.status(404).json({
           status: "error",
@@ -217,35 +228,38 @@ class AgentController {
         });
       }
 
-      const { valid, positionInfo } = mfaService.verifyMfa(
-        agentId,
-        mfaCode
-      );
+      const { valid, positionInfo } = mfaService.verifyMfa(agentId, mfaCode);
 
       if (valid) {
         try {
-          const { computer, plainToken } = await computerService.generateAndAssignAgentToken(
-            agentId,
-            positionInfo
-          );
+          const { computer, plainToken } =
+            await computerService.generateAndAssignAgentToken(
+              agentId,
+              positionInfo
+            );
           websocketService.notifyAdminsAgentRegistered(
             computer.id,
             positionInfo
           );
-          logger.info(`Agent ${agentId} registered successfully with MFA, Computer ID: ${computer.id}`);
+          logger.info(
+            `Agent ${agentId} registered successfully with MFA, Computer ID: ${computer.id}`
+          );
           return res.status(200).json({
             status: "success",
             agentToken: plainToken,
           });
         } catch (tokenError) {
-          logger.error(`Failed to generate token after MFA verification for agent ${agentId}:`, {
-            error: tokenError.message,
-            stack: tokenError.stack,
-            position: positionInfo
-          });
+          logger.error(
+            `Failed to generate token after MFA verification for agent ${agentId}:`,
+            {
+              error: tokenError.message,
+              stack: tokenError.stack,
+              position: positionInfo,
+            }
+          );
           return res.status(500).json({
             status: "error",
-            message: "Failed to verify MFA code"
+            message: "Failed to verify MFA code",
           });
         }
       } else {
@@ -259,7 +273,7 @@ class AgentController {
       logger.error(`Error in MFA verification:`, {
         error: error.message,
         stack: error.stack,
-        agentId: req.body.agentId
+        agentId: req.body.agentId,
       });
       next(error);
     }
@@ -284,67 +298,80 @@ class AgentController {
   async handleHardwareInfo(req, res, next) {
     const computerId = req.computerId;
     const agentId = req.agentId;
-    const { total_disk_space, gpu_info, cpu_info, total_ram, os_info } = req.body;
+    const { total_disk_space, gpu_info, cpu_info, total_ram, os_info } =
+      req.body;
     const errors = [];
 
-    // Validate required fields before proceeding
     if (!total_disk_space) {
-      logger.warn(`Hardware info update missing total_disk_space for computer ${computerId}`);
+      logger.warn(
+        `Hardware info update missing total_disk_space for computer ${computerId}`
+      );
       return res.status(400).json({
         status: "error",
         message: "Total disk space is required",
       });
     }
 
-    // Validate total_disk_space using validation utils
-    const diskSpaceError = validationUtils.validatePositiveInteger(total_disk_space, 'Total Disk Space');
+    const diskSpaceError = validationUtils.validatePositiveInteger(
+      total_disk_space,
+      "Total Disk Space"
+    );
     if (diskSpaceError) {
-      errors.push({ field: 'total_disk_space', message: diskSpaceError });
+      errors.push({ field: "total_disk_space", message: diskSpaceError });
     }
 
-    // Validate total_ram if provided
     if (total_ram !== undefined) {
-      const totalRamError = validationUtils.validatePositiveInteger(total_ram, 'Total RAM');
+      const totalRamError = validationUtils.validatePositiveInteger(
+        total_ram,
+        "Total RAM"
+      );
       if (totalRamError) {
-        errors.push({ field: 'total_ram', message: totalRamError });
+        errors.push({ field: "total_ram", message: totalRamError });
       }
     }
 
-    // Validate gpu_info if provided
     if (gpu_info !== undefined) {
-      const gpuInfoError = validationUtils.validateMaxLength(gpu_info, validationUtils.constants.GPU_INFO_MAX_LENGTH, 'GPU Info');
+      const gpuInfoError = validationUtils.validateMaxLength(
+        gpu_info,
+        validationUtils.constants.GPU_INFO_MAX_LENGTH,
+        "GPU Info"
+      );
       if (gpuInfoError) {
-        errors.push({ field: 'gpu_info', message: gpuInfoError });
+        errors.push({ field: "gpu_info", message: gpuInfoError });
       }
     }
 
-    // Validate cpu_info if provided
     if (cpu_info !== undefined) {
-      const cpuInfoError = validationUtils.validateMaxLength(cpu_info, validationUtils.constants.CPU_INFO_MAX_LENGTH, 'CPU Info');
+      const cpuInfoError = validationUtils.validateMaxLength(
+        cpu_info,
+        validationUtils.constants.CPU_INFO_MAX_LENGTH,
+        "CPU Info"
+      );
       if (cpuInfoError) {
-        errors.push({ field: 'cpu_info', message: cpuInfoError });
+        errors.push({ field: "cpu_info", message: cpuInfoError });
       }
     }
 
-    // Validate os_info if provided
     if (os_info !== undefined) {
-      const osInfoError = validationUtils.validateMaxLength(os_info, validationUtils.constants.OS_INFO_MAX_LENGTH, 'OS Info');
+      const osInfoError = validationUtils.validateMaxLength(
+        os_info,
+        validationUtils.constants.OS_INFO_MAX_LENGTH,
+        "OS Info"
+      );
       if (osInfoError) {
-        errors.push({ field: 'os_info', message: osInfoError });
+        errors.push({ field: "os_info", message: osInfoError });
       }
     }
 
-    // If there are any validation errors, return them
     if (errors.length > 0) {
       return res.status(400).json({
         status: "error",
         message: "Validation failed",
-        errors
+        errors,
       });
     }
 
     try {
-      // Prepare hardware info data with optional fields
       const hardwareData = {
         os_info: os_info || null,
         total_disk_space: total_disk_space || null,
@@ -353,31 +380,30 @@ class AgentController {
         total_ram: total_ram || null,
       };
 
-      // Update computer information in database
       await computerService.updateComputer(computerId, hardwareData);
-      
-      // Log successful update
+
       logger.info(`Hardware info updated for computer ${computerId}`, {
         agentId,
         os: os_info,
         cpu: cpu_info,
-        ram: total_ram
+        ram: total_ram,
       });
-      
+
       return res.sendStatus(204);
     } catch (error) {
-      // Log error with appropriate context
-      logger.error(`Failed to update hardware info for computer ${computerId}:`, {
-        error: error.message,
-        stack: error.stack,
-        agentId,
-        computerId
-      });
-      
+      logger.error(
+        `Failed to update hardware info for computer ${computerId}:`,
+        {
+          error: error.message,
+          stack: error.stack,
+          agentId,
+          computerId,
+        }
+      );
+
       next(error);
     }
   }
-
 
   /**
    * Handle error report from agent
@@ -398,81 +424,79 @@ class AgentController {
     const { type, message, details } = req.body;
     const errors = [];
 
-    // Validate required fields
     if (!type || !message) {
-      logger.warn(`Error report missing required fields from agent: ${agentId}, Computer: ${computerId}`);
+      logger.warn(
+        `Error report missing required fields from agent: ${agentId}, Computer: ${computerId}`
+      );
       return res.status(400).json({
         status: "error",
-        message: "Error type and message are required"
+        message: "Error type and message are required",
       });
     }
-    
-    // Validate error type using validation utils
+
     const errorTypeError = validationUtils.validateAgentErrorType(type);
     if (errorTypeError) {
-      errors.push({ field: 'type', message: errorTypeError });
+      errors.push({ field: "type", message: errorTypeError });
     }
 
-    // Check if it's an update error and validate against allowed types
-    if (type.startsWith('Update')) {
+    if (type.startsWith("Update")) {
       if (!validationUtils.constants.AGENT_UPDATE_ERROR_TYPES.includes(type)) {
-        errors.push({ 
-          field: 'type', 
-          message: `Invalid error type for update. Must be one of: ${validationUtils.constants.AGENT_UPDATE_ERROR_TYPES.join(', ')}` 
+        errors.push({
+          field: "type",
+          message: `Invalid error type for update. Must be one of: ${validationUtils.constants.AGENT_UPDATE_ERROR_TYPES.join(
+            ", "
+          )}`,
         });
       }
     }
-    
-    // Validate error message using validation utils
-    const errorMessageError = validationUtils.validateAgentErrorMessage(message);
+
+    const errorMessageError =
+      validationUtils.validateAgentErrorMessage(message);
     if (errorMessageError) {
-      errors.push({ field: 'message', message: errorMessageError });
+      errors.push({ field: "message", message: errorMessageError });
     }
-    
-    // Validate error details if provided
+
     if (details !== undefined) {
       const detailsError = validationUtils.validateErrorDetailsSize(details);
       if (detailsError) {
-        errors.push({ field: 'details', message: detailsError });
+        errors.push({ field: "details", message: detailsError });
       }
     }
 
-    // If there are any validation errors, return them
     if (errors.length > 0) {
       return res.status(400).json({
         status: "error",
         message: "Validation failed",
-        errors
+        errors,
       });
     }
 
-    // Prepare error data
     const errorData = {
       error_type: type,
       error_message: message,
-      error_details: details || {}
+      error_details: details || {},
     };
 
     try {
-      // Save error report to database
-      const result = await computerService.reportComputerError(computerId, errorData);
-      
-      // Log successful report
+      const result = await computerService.reportComputerError(
+        computerId,
+        errorData
+      );
+
       logger.info(`Error reported for computer ${computerId}: ${type}`, {
         errorId: result.error.id,
-        agentId
+        agentId,
       });
-      
+
       return res.status(204).end();
     } catch (error) {
-      // Log error with context
       logger.error(`Failed to save error report for computer ${computerId}:`, {
         error: error.message,
         stack: error.stack,
         agentId,
-        errorType: type
+        errorType: type,
       });
-      
+
       next(error);
     }
   }
@@ -499,64 +523,66 @@ class AgentController {
     const agentId = req.agentId;
     const computerId = req.computerId;
     const errors = [];
-    
-    // Validate required query parameter
+
     if (!current_version) {
-      logger.warn(`Update check missing current_version from agent: ${agentId}, Computer: ${computerId}`);
+      logger.warn(
+        `Update check missing current_version from agent: ${agentId}, Computer: ${computerId}`
+      );
       return res.status(400).json({
         status: "error",
-        message: "Current version parameter is required"
+        message: "Current version parameter is required",
       });
     }
 
-    // Validate semantic version using validation utils
-    const versionError = validationUtils.validateSemanticVersion(current_version);
+    const versionError =
+      validationUtils.validateSemanticVersion(current_version);
     if (versionError) {
-      errors.push({ field: 'current_version', message: versionError });
+      errors.push({ field: "current_version", message: versionError });
     }
 
-    // If there are any validation errors, return them
     if (errors.length > 0) {
       return res.status(400).json({
         status: "error",
         message: "Validation failed",
-        errors
+        errors,
       });
     }
 
     try {
-      // Get latest version information
-      const updateInfo = await agentService.getLatestStableVersionInfo(current_version);
+      const updateInfo = await agentService.getLatestStableVersionInfo(
+        current_version
+      );
 
-      // No update available
       if (!updateInfo) {
-        logger.debug(`No update available for agent: ${agentId}, Current version: ${current_version}`);
-        return res.status(204).end(); // 204 No Content
+        logger.debug(
+          `No update available for agent: ${agentId}, Current version: ${current_version}`
+        );
+        return res.status(204).end();
       }
-      
-      // Update available - log and respond with update info
-      logger.info(`Update available for agent: ${agentId}, Current: ${current_version}, Latest: ${updateInfo.version}`);
+
+      logger.info(
+        `Update available for agent: ${agentId}, Current: ${current_version}, Latest: ${updateInfo.version}`
+      );
       return res.status(200).json({
         status: "success",
         update_available: true,
         version: updateInfo.version,
         download_url: updateInfo.download_url,
         checksum_sha256: updateInfo.checksum_sha256,
-        notes: updateInfo.notes || ""
+        notes: updateInfo.notes || "",
       });
     } catch (error) {
-      // Log detailed error for troubleshooting
       logger.error(`Failed to check for agent updates:`, {
         error: error.message,
         stack: error.stack,
         agentId,
         computerId,
-        currentVersion: current_version
+        currentVersion: current_version,
       });
-      
+
       return res.status(500).json({
         status: "error",
-        message: "Failed to check for agent updates"
+        message: "Failed to check for agent updates",
       });
     }
   }
@@ -576,79 +602,73 @@ class AgentController {
     const computerId = req.computerId;
     const { filename } = req.params;
     const errors = [];
-    
-    // Validate filename parameter
+
     if (!filename) {
       logger.warn(`Download attempt without filename by agent ${agentId}`);
-      return res.status(400).json({ 
-        status: 'error', 
-        message: 'Invalid filename format' 
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid filename format",
       });
     }
-    
-    // Validate filename using validation utils
+
     const filenameError = validationUtils.validateFilename(filename);
     if (filenameError) {
-      errors.push({ field: 'filename', message: filenameError });
+      errors.push({ field: "filename", message: filenameError });
     }
 
-    // If there are any validation errors, return them
     if (errors.length > 0) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Validation failed',
-        errors
+        status: "error",
+        message: "Validation failed",
+        errors,
       });
     }
 
     try {
-      // Configure file path
-      const AGENT_PACKAGES_DIR = path.join(__dirname, '../../uploads/agent-packages');
+      const AGENT_PACKAGES_DIR = path.join(
+        __dirname,
+        "../../uploads/agent-packages"
+      );
       const filePath = path.join(AGENT_PACKAGES_DIR, filename);
 
-      // Log download attempt
       logger.info(`Agent ${agentId} downloading package: ${filename}`, {
-        computerId
+        computerId,
       });
 
-      // Send the file securely (only to authenticated agents)
       res.sendFile(filePath, (err) => {
-        if (!err) return; // File sent successfully
-        
-        // Handle file sending errors
+        if (!err) return;
+
         const errorDetails = {
           error: err.message,
           computerId,
-          agentId
+          agentId,
         };
-        
+
         logger.error(`Error serving agent package ${filename}:`, errorDetails);
-        
-        // Return appropriate error response based on error type
-        if (err.code === 'ENOENT') {
-          return res.status(404).json({ 
-            status: 'error', 
-            message: 'File not found' 
+
+        if (err.code === "ENOENT") {
+          return res.status(404).json({
+            status: "error",
+            message: "File not found",
           });
         }
-        
-        return res.status(500).json({ 
-          status: 'error', 
-          message: 'Error serving file' 
+
+        return res.status(500).json({
+          status: "error",
+          message: "Error serving file",
         });
       });
     } catch (error) {
-      // Handle unexpected errors
       logger.error(`Error serving agent package:`, {
         error: error.message,
         stack: error.stack,
         agentId,
-        filename
+        filename,
       });
-      
+
       return res.status(500).json({
-        status: 'error',
-        message: 'Error serving file'
+        status: "error",
+        message: "Error serving file",
       });
     }
   }

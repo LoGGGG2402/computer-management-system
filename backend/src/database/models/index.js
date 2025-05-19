@@ -1,11 +1,11 @@
-const fs = require('fs');
-const path = require('path');
-const Sequelize = require('sequelize');
-const process = require('process');
-const dbConfig = require('../../config/db.config');
+const fs = require("fs");
+const path = require("path");
+const Sequelize = require("sequelize");
+const process = require("process");
+const dbConfig = require("../../config/db.config");
 
 const basename = path.basename(__filename);
-const env = process.env.NODE_ENV || 'development';
+const env = process.env.NODE_ENV || "development";
 const config = dbConfig[env];
 
 const db = {};
@@ -22,23 +22,25 @@ if (config.use_env_variable) {
   );
 }
 
-// Import models
 fs.readdirSync(__dirname)
-  .filter(file => {
+  .filter((file) => {
     return (
-      file.indexOf('.') !== 0 &&
+      file.indexOf(".") !== 0 &&
       file !== basename &&
-      file.slice(-3) === '.js' &&
-      file.indexOf('.test.js') === -1
+      file.slice(-3) === ".js" &&
+      file.indexOf(".test.js") === -1
     );
   })
-  .forEach(file => {
-    const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes);
+  .forEach((file) => {
+    const model = require(path.join(__dirname, file))(
+      sequelize,
+      Sequelize.DataTypes
+    );
     db[model.name] = model;
   });
 
 // Set up associations
-Object.keys(db).forEach(modelName => {
+Object.keys(db).forEach((modelName) => {
   if (db[modelName].associate) {
     db[modelName].associate(db);
   }

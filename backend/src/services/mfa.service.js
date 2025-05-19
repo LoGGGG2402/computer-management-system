@@ -1,6 +1,6 @@
-const NodeCache = require('node-cache');
-const otpGenerator = require('otp-generator');
-const crypto = require('crypto');
+const NodeCache = require("node-cache");
+const otpGenerator = require("otp-generator");
+const crypto = require("crypto");
 
 /**
  * Service for MFA (Multi-factor authentication) operations
@@ -16,7 +16,7 @@ class MfaService {
   /**
    * Generate and store a new MFA code for an agent
    * @param {string} agentId - The unique agent ID to generate MFA for
-   * @param {Object} positionInfo - The room information 
+   * @param {Object} positionInfo - The room information
    * @param {number} [positionInfo.roomId] - The ID of the room where the agent is located
    * @param {number} [positionInfo.posX] - The X position in the room grid
    * @param {number} [positionInfo.posY] - The Y position in the room grid
@@ -26,24 +26,24 @@ class MfaService {
     if (this.mfaCache.has(agentId)) {
       this.mfaCache.del(agentId);
     }
-    
+
     const mfaCode = otpGenerator.generate(6, {
       digits: true,
       alphabets: false,
       upperCase: false,
-      specialChars: false
+      specialChars: false,
     });
 
     const uniqueHash = crypto
-    .createHash('sha256')
-    .update(`${agentId}-${mfaCode}-${Date.now()}`)
-    .digest('hex');
-    
+      .createHash("sha256")
+      .update(`${agentId}-${mfaCode}-${Date.now()}`)
+      .digest("hex");
+
     this.mfaCache.set(agentId, {
       code: mfaCode,
       hash: uniqueHash,
       generatedFor: agentId,
-      positionInfo: positionInfo
+      positionInfo: positionInfo,
     });
 
     return mfaCode;
@@ -62,7 +62,7 @@ class MfaService {
    */
   verifyMfa(agentId, code) {
     const storedMfaInfo = this.mfaCache.get(agentId);
-    
+
     if (!storedMfaInfo) {
       return { valid: false, positionInfo: null };
     }
@@ -78,7 +78,7 @@ class MfaService {
 
     return { valid: false, positionInfo: null };
   }
-  
+
   /**
    * Check if an agent has pending MFA verification
    * @param {string} agentId - The unique agent ID to check

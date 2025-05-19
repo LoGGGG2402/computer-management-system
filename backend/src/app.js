@@ -13,16 +13,16 @@
  * @requires helmet
  */
 
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const http = require('http');
-const cookieParser = require('cookie-parser');
-const { Server } = require('socket.io');
-const helmet = require('helmet');
-const routes = require('./routes');
-const logger = require('./utils/logger');
-const { initializeWebSocket } = require('./sockets');
+const express = require("express");
+const cors = require("cors");
+const path = require("path");
+const http = require("http");
+const cookieParser = require("cookie-parser");
+const { Server } = require("socket.io");
+const helmet = require("helmet");
+const routes = require("./routes");
+const logger = require("./utils/logger");
+const { initializeWebSocket } = require("./sockets");
 
 /**
  * @constant {object} corsConfig
@@ -31,10 +31,15 @@ const { initializeWebSocket } = require('./sockets');
  * Defines allowed methods, credentials policy, and allowed headers.
  */
 const corsConfig = {
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Thêm OPTIONS
-  credentials: true, // Nếu gửi cookie hoặc Authorization
-  allowedHeaders: ['Content-Type', 'Authorization'], // Thêm các header client sử dụng
+  origin: process.env.CLIENT_URL || "http://localhost:5173",
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true,
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Client-Type",
+    "X-Agent-Id",
+  ],
 };
 
 /**
@@ -58,44 +63,51 @@ function createApp() {
   app.use(cookieParser());
 
   // Development Request Logging
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === "development") {
     app.use((req, res, next) => {
       const start = Date.now();
       const { method, originalUrl } = req;
-      logger.http(`${method} ${originalUrl} - Status: ${res.statusCode} - ${start}ms`);
-      if (process.env.NODE_ENV === 'development' && method !== 'GET' && method !== 'POST' && req.body && Object.keys(req.body).length > 0) {
-        logger.debug('Request Body:', req.body );
+      if (
+        process.env.NODE_ENV === "development" &&
+        method !== "GET" &&
+        method !== "POST" &&
+        req.body &&
+        Object.keys(req.body).length > 0
+      ) {
+        logger.debug("Request Body:", req.body);
       }
-      res.on('finish', () => {
+      res.on("finish", () => {
         const duration = Date.now() - start;
-        logger.http(`${method} ${originalUrl} - Status: ${res.statusCode} - ${duration}ms`);
+        logger.http(
+          `${method} ${originalUrl} - Status: ${res.statusCode} - ${duration}ms`
+        );
       });
       next();
     });
   }
   // API Routes
-  app.use('/api', routes);
+  app.use("/api", routes);
 
   // Health Check Route
-  app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  app.get("/health", (req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
   // Static Files
-  app.use(express.static(path.join(__dirname, '../public')));
+  app.use(express.static(path.join(__dirname, "../public")));
 
   // Global Error Handler
   app.use((err, req, res, next) => {
-    logger.error('Unhandled Application Error:', {
+    logger.error("Unhandled Application Error:", {
       message: err.message,
       stack: err.stack,
       path: req.path,
-      method: req.method
+      method: req.method,
     });
     const errorResponse = {
       success: false,
-      message: err.message || 'Internal Server Error',
-      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+      message: err.message || "Internal Server Error",
+      ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
     };
     res.status(err.statusCode || 500).json(errorResponse);
   });
@@ -110,10 +122,11 @@ function createApp() {
 const httpServer = http.createServer(createApp());
 
 // Initialize Socket.IO server and WebSocket event handlers directly
-initializeWebSocket(new Server(httpServer, {
-  cors: corsConfig,
-}));
-
+initializeWebSocket(
+  new Server(httpServer, {
+    cors: corsConfig,
+  })
+);
 
 /**
  * @module app
@@ -122,5 +135,5 @@ initializeWebSocket(new Server(httpServer, {
  * @property {http.Server} httpServer - The initialized HTTP server.
  */
 module.exports = {
-  httpServer
+  httpServer,
 };

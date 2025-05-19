@@ -23,6 +23,7 @@ Throughout this document, authentication tokens are referenced:
 - **Password Change**: When a user changes their password, all their refresh tokens are immediately invalidated, forcing re-authentication on all devices.
 
 ## Table of Contents
+
 - [CMS API Documentation](#cms-api-documentation)
   - [Authentication Token Information](#authentication-token-information)
   - [Token Security and Database Management](#token-security-and-database-management)
@@ -74,6 +75,7 @@ Throughout this document, authentication tokens are referenced:
   - [Command Completed](#command-completed)
   - [New Agent MFA Notification](#new-agent-mfa-notification)
   - [Agent Registered Notification](#agent-registered-notification)
+
 ---
 
 # Frontend Interfaces
@@ -89,6 +91,7 @@ This section describes the interfaces used by the frontend application to intera
 When an Access Token expires, the frontend should automatically request a new one by calling the `/api/auth/refresh-token` endpoint, which uses the HttpOnly Refresh Token cookie to authenticate the request. The server implements a token rotation strategy, where each use of a Refresh Token invalidates it and issues a new one.
 
 **Client-Side Implementation Guidance:**
+
 - Access Tokens (AT) should be stored in memory (variables or state management) and never in localStorage or sessionStorage.
 - The frontend should implement interceptors for HTTP requests to automatically handle 401 errors by requesting a new AT using the RT cookie.
 - When multiple API calls fail simultaneously due to expired AT, only one refresh attempt should be made (using a queue or flag mechanism).
@@ -98,6 +101,7 @@ When an Access Token expires, the frontend should automatically request a new on
 #### Login
 
 Authenticates a user and returns an access token along with a refresh token cookie for subsequent API requests.
+
 - **Method:** `POST`
 - **Path:** `/api/auth/login`
 - **Headers:** `Content-Type: application/json`
@@ -326,7 +330,7 @@ Updates user information such as role, active status, username or password (admi
 - **Method:** `PUT`
 - **Path:** `/api/users/:id`
 - **Headers:**
-  - `Authorization: Bearer <admin_jwt_token_string>` 
+  - `Authorization: Bearer <admin_jwt_token_string>`
   - `Content-Type: application/json`
 - **Path Parameters:** `id` (ID of the user to update)
 - **Request Body:** (Only contains fields to update)
@@ -1064,14 +1068,14 @@ Verifies the user's identity and permissions when establishing a WebSocket conne
 - **Note:** Authentication is handled entirely through WebSocket connection headers when establishing the connection.
 - **Connection Authentication Result:**
   - On success: Client receives the standard Socket.io `connect` event
-  - On failure: Client receives a `connect_error` event with an error message
+  - On failure: Client receives a `auth_error` event with an error message
   - Example error object:
     ```javascript
     {
       message: "Authentication failed: Invalid token";
     }
     ```
-  - Possible `connect_error` Messages:
+  - Possible `auth_error` Messages:
     ```json
     [
       { "message": "Authentication failed: Invalid token" },
@@ -1119,8 +1123,16 @@ Registers the frontend client to receive real-time updates about a specific comp
   [
     { "status": "error", "message": "Not authenticated", "computerId": 123 },
     { "status": "error", "message": "Valid Computer ID is required" },
-    { "status": "error", "message": "Access denied to this computer", "computerId": 123 },
-    { "status": "error", "message": "Subscription failed due to server error", "computerId": 123 },
+    {
+      "status": "error",
+      "message": "Access denied to this computer",
+      "computerId": 123
+    },
+    {
+      "status": "error",
+      "message": "Subscription failed due to server error",
+      "computerId": 123
+    },
     { "status": "error", "message": "Computer not found", "computerId": 123 }
   ]
   ```
@@ -1153,7 +1165,11 @@ Stops receiving real-time updates about a specific computer that the client prev
 - **Error Responses:**
   ```json
   [
-    { "status": "error", "message": "Valid Computer ID is required", "computerId": null },
+    {
+      "status": "error",
+      "message": "Valid Computer ID is required",
+      "computerId": null
+    },
     { "status": "error", "message": "Unsubscription failed", "computerId": 123 }
   ]
   ```
@@ -1192,16 +1208,37 @@ Sends a remote command to a specific computer agent for execution and receives a
   [
     { "status": "error", "message": "Not authenticated" },
     { "status": "error", "message": "Valid Computer ID is required" },
-    { "status": "error", "message": "Command content is required", "computerId": 123 },
-    { "status": "error", "message": "Access denied to send commands to this computer", "computerId": 123 },
-    { "status": "error", "message": "Agent is not connected", "computerId": 123, "commandId": "550e8400-e29b-41d4-a716-446655440000", "commandType": "console" },
-    { "status": "error", "message": "Failed to send command due to server error", "computerId": 123 },
-    { "status": "error", "message": "Invalid command type specified", "computerId": 123 }
+    {
+      "status": "error",
+      "message": "Command content is required",
+      "computerId": 123
+    },
+    {
+      "status": "error",
+      "message": "Access denied to send commands to this computer",
+      "computerId": 123
+    },
+    {
+      "status": "error",
+      "message": "Agent is not connected",
+      "computerId": 123,
+      "commandId": "550e8400-e29b-41d4-a716-446655440000",
+      "commandType": "console"
+    },
+    {
+      "status": "error",
+      "message": "Failed to send command due to server error",
+      "computerId": 123
+    },
+    {
+      "status": "error",
+      "message": "Invalid command type specified",
+      "computerId": 123
+    }
   ]
   ```
 
 ---
-
 
 # Server Broadcast Events
 

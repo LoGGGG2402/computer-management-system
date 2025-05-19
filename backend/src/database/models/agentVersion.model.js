@@ -1,9 +1,9 @@
-const { v4: uuidv4 } = require('uuid');
+const { v4: uuidv4 } = require("uuid");
 
 /**
  * AgentVersion model represents a specific software version of the agent client.
  * It tracks version information, file metadata, and deployment status in the system.
- * 
+ *
  * @module AgentVersion
  * @typedef {Object} AgentVersion
  * @property {string} id - Unique UUID identifier for the agent version
@@ -18,55 +18,59 @@ const { v4: uuidv4 } = require('uuid');
  * @property {Date} updated_at - Timestamp when this version was last modified
  */
 module.exports = (sequelize, DataTypes) => {
-  const AgentVersion = sequelize.define('AgentVersion', {
-    id: {
-      type: DataTypes.UUID,
-      primaryKey: true,
-      defaultValue: () => uuidv4()
+  const AgentVersion = sequelize.define(
+    "AgentVersion",
+    {
+      id: {
+        type: DataTypes.UUID,
+        primaryKey: true,
+        defaultValue: () => uuidv4(),
+      },
+      version: {
+        type: DataTypes.STRING(50),
+        allowNull: false,
+        unique: true,
+        validate: {
+          notEmpty: true,
+        },
+      },
+      checksum_sha256: {
+        type: DataTypes.STRING(64),
+        allowNull: false,
+        validate: {
+          notEmpty: true,
+          is: /^[a-f0-9]{64}$/i, // SHA-256 is 64 hex characters
+        },
+      },
+      download_url: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+      },
+      notes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      is_stable: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      file_path: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+      },
+      file_size: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+      },
     },
-    version: {
-      type: DataTypes.STRING(50),
-      allowNull: false,
-      unique: true,
-      validate: {
-        notEmpty: true
-      }
-    },
-    checksum_sha256: {
-      type: DataTypes.STRING(64),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-        is: /^[a-f0-9]{64}$/i // SHA-256 is 64 hex characters
-      }
-    },
-    download_url: {
-      type: DataTypes.STRING(255),
-      allowNull: false
-    },
-    notes: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    is_stable: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false
-    },
-    file_path: {
-      type: DataTypes.STRING(255),
-      allowNull: false
-    },
-    file_size: {
-      type: DataTypes.INTEGER,
-      allowNull: false
+    {
+      tableName: "agent_versions",
+      timestamps: true,
+      underscored: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
     }
-  }, {
-    tableName: 'agent_versions',
-    timestamps: true,
-    underscored: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at'
-  });
+  );
 
   return AgentVersion;
 };

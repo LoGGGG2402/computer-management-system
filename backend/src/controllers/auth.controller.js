@@ -1,7 +1,7 @@
-const authService = require('../services/auth.service');
-const authConfig = require('../config/auth.config');
-const logger = require('../utils/logger');
-const validationUtils = require('../utils/validation.utils');
+const authService = require("../services/auth.service");
+const authConfig = require("../config/auth.config");
+const logger = require("../utils/logger");
+const validationUtils = require("../utils/validation");
 
 /**
  * Authentication controller for handling login and user verification
@@ -28,27 +28,29 @@ class AuthController {
   async handleLogin(req, res) {
     try {
       const { username, password } = req.body;
-      
+
       if (!username || !password) {
-        logger.debug('Login attempt with missing credentials', { 
-          hasUsername: !!username, 
+        logger.debug("Login attempt with missing credentials", {
+          hasUsername: !!username,
           hasPassword: !!password,
-          ip: req.ip
+          ip: req.ip,
         });
-        
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'Username and password are required' 
+
+        return res.status(400).json({
+          status: "error",
+          message: "Username and password are required",
         });
       }
-      
-      // Validate username format
+
       const usernameError = validationUtils.validateUsername(username);
       if (usernameError) {
-        logger.warn('Invalid username format during login attempt', { username, ip: req.ip });
+        logger.warn("Invalid username format during login attempt", {
+          username,
+          ip: req.ip,
+        });
         return res.status(400).json({
-          status: 'error',
-          message: usernameError
+          status: "error",
+          message: usernameError,
         });
       }
 
@@ -61,67 +63,71 @@ class AuthController {
       //     message: passwordError
       //   });
       // }
-      
+
       logger.debug(`Login attempt for username: ${username}`, { ip: req.ip });
       const userData = await authService.login(username, password);
-      
-      logger.info(`Successful login: ${userData.username} (ID: ${userData.id}, Role: ${userData.role})`, { 
-        userId: userData.id,
-        ip: req.ip
-      });
-      
-      // Set refresh token as HttpOnly cookie
+
+      logger.info(
+        `Successful login: ${userData.username} (ID: ${userData.id}, Role: ${userData.role})`,
+        {
+          userId: userData.id,
+          ip: req.ip,
+        }
+      );
+
       const cookieOptions = {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Strict',
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "Strict",
         maxAge: authConfig.refreshToken.cookieMaxAge,
-        path: '/'
+        path: "/",
       };
-      
-      res.cookie('refreshToken', userData.refreshToken, cookieOptions);
-      
-      // Remove the refresh token from the response body for security
+
+      res.cookie("refreshToken", userData.refreshToken, cookieOptions);
+
       const responseData = { ...userData };
       delete responseData.refreshToken;
-      
+
       return res.status(200).json({
-        status: 'success',
-        data: responseData
+        status: "success",
+        data: responseData,
       });
     } catch (error) {
-      logger.warn('Failed login attempt', { 
+      logger.warn("Failed login attempt", {
         username: req.body.username,
         error: error.message,
-        ip: req.ip
+        ip: req.ip,
       });
-      
-      // Handle specific error cases
-      if (error.message === 'Invalid credentials' || 
-          error.message.includes('User not found') || 
-          error.message.includes('Incorrect password') ||
-          error.message.includes('Invalid password')) {
+
+      if (
+        error.message === "Invalid credentials" ||
+        error.message.includes("User not found") ||
+        error.message.includes("Incorrect password") ||
+        error.message.includes("Invalid password")
+      ) {
         return res.status(401).json({
-          status: 'error',
-          message: 'Invalid credentials'
+          status: "error",
+          message: "Invalid credentials",
         });
       }
-      
-      if (error.message === 'User account is inactive' || 
-          error.message.includes('inactive')) {
+
+      if (
+        error.message === "User account is inactive" ||
+        error.message.includes("inactive")
+      ) {
         return res.status(401).json({
-          status: 'error',
-          message: 'User account is inactive'
+          status: "error",
+          message: "User account is inactive",
         });
       }
-      
-      return res.status(500).json({ 
-        status: 'error', 
-        message: 'Authentication failed' 
+
+      return res.status(500).json({
+        status: "error",
+        message: "Authentication failed",
       });
     }
   }
-  
+
   /**
    * Handle token refresh
    * @param {Object} req - Express request object
@@ -136,77 +142,82 @@ class AuthController {
   async handleRefreshToken(req, res) {
     try {
       const oldRefreshTokenString = req.cookies.refreshToken;
-      
+
       if (!oldRefreshTokenString) {
-        logger.warn('Refresh token attempt without token cookie', { ip: req.ip });
+        logger.warn("Refresh token attempt without token cookie", {
+          ip: req.ip,
+        });
         return res.status(401).json({
-          status: 'error',
-          message: 'Invalid or expired refresh token'
+          status: "error",
+          message: "Invalid or expired refresh token",
         });
       }
-      
-      // Attempt to refresh tokens
-      const refreshResult = await authService.refreshAuthToken(oldRefreshTokenString);
+
+      const refreshResult = await authService.refreshAuthToken(
+        oldRefreshTokenString
+      );
       const { newAccessToken, newRefreshToken, user } = refreshResult;
-      
-      // Set new refresh token as HttpOnly cookie
+
       const cookieOptions = {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Strict',
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "Strict",
         maxAge: authConfig.refreshToken.cookieMaxAge,
-        path: '/'
+        path: "/",
       };
-      
-      res.cookie('refreshToken', newRefreshToken.tokenForCookie, cookieOptions);
-      
-      logger.info('Token refreshed successfully', { userId: user.id, ip: req.ip });
-      
+
+      res.cookie("refreshToken", newRefreshToken.tokenForCookie, cookieOptions);
+
+      logger.info("Token refreshed successfully", {
+        userId: user.id,
+        ip: req.ip,
+      });
+
       return res.status(200).json({
-        status: 'success',
+        status: "success",
         data: {
           token: newAccessToken.token,
-          expires_at: newAccessToken.expires_at
-        }
+          expires_at: newAccessToken.expires_at,
+        },
       });
     } catch (error) {
-      logger.warn('Failed token refresh attempt', {
+      logger.warn("Failed token refresh attempt", {
         error: error.message,
-        ip: req.ip
+        ip: req.ip,
       });
-      
-      // Clear invalid refresh token
-      res.clearCookie('refreshToken', {
+
+      res.clearCookie("refreshToken", {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Strict',
-        path: '/'
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "Strict",
+        path: "/",
       });
-      
-      // More specific error handling
-      if (error.message === 'Invalid or expired refresh token' || 
-          error.message.includes('not found') || 
-          error.message.includes('expired')) {
+
+      if (
+        error.message === "Invalid or expired refresh token" ||
+        error.message.includes("not found") ||
+        error.message.includes("expired")
+      ) {
         return res.status(401).json({
-          status: 'error',
-          message: 'Invalid or expired refresh token'
+          status: "error",
+          message: "Invalid or expired refresh token",
         });
       }
-      
-      if (error.message === 'Refresh token reuse detected') {
+
+      if (error.message === "Refresh token reuse detected") {
         return res.status(403).json({
-          status: 'error',
-          message: 'Refresh token reuse detected'
+          status: "error",
+          message: "Refresh token reuse detected",
         });
       }
-      
+
       return res.status(500).json({
-        status: 'error',
-        message: 'Failed to refresh token'
+        status: "error",
+        message: "Failed to refresh token",
       });
     }
   }
-  
+
   /**
    * Handle user logout
    * @param {Object} req - Express request object
@@ -218,37 +229,42 @@ class AuthController {
   async handleLogout(req, res) {
     try {
       const refreshTokenString = req.cookies.refreshToken;
-      
+
       if (refreshTokenString) {
         await authService.revokeRefreshToken(refreshTokenString);
-        logger.info('User logged out and refresh token revoked', { userId: req.user?.id, ip: req.ip });
+        logger.info("User logged out and refresh token revoked", {
+          userId: req.user?.id,
+          ip: req.ip,
+        });
       } else {
-        logger.info('User logged out (no refresh token cookie found)', { userId: req.user?.id, ip: req.ip });
+        logger.info("User logged out (no refresh token cookie found)", {
+          userId: req.user?.id,
+          ip: req.ip,
+        });
       }
-      
-      // Clear the refresh token cookie
-      res.clearCookie('refreshToken', { 
+
+      res.clearCookie("refreshToken", {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Strict',
-        path: '/'
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "Strict",
+        path: "/",
       });
-      
+
       return res.status(200).json({
-        status: 'success',
-        message: 'Logged out successfully'
+        status: "success",
+        message: "Logged out successfully",
       });
     } catch (error) {
-      logger.error('Error during logout', {
+      logger.error("Error during logout", {
         error: error.message,
         stack: error.stack,
         userId: req.user?.id,
-        ip: req.ip
+        ip: req.ip,
       });
-      
+
       return res.status(500).json({
-        status: 'error',
-        message: 'An error occurred during logout'
+        status: "error",
+        message: "An error occurred during logout",
       });
     }
   }
@@ -272,49 +288,59 @@ class AuthController {
    */
   async handleGetMe(req, res) {
     try {
-      // Validate that req.user exists (should be set by authentication middleware)
       if (!req.user || !req.user.id) {
-        logger.warn('Attempt to get /me without authenticated user', { ip: req.ip });
+        logger.warn("Attempt to get /me without authenticated user", {
+          ip: req.ip,
+        });
         return res.status(401).json({
-            status: 'error',
-            message: 'Unauthorized'
+          status: "error",
+          message: "Unauthorized",
         });
       }
-      
-      logger.debug(`Fetching user data for ID: ${req.user.id}`, { requestedBy: req.user.id });
+
+      logger.debug(`Fetching user data for ID: ${req.user.id}`, {
+        requestedBy: req.user.id,
+      });
       const user = await authService.getUserById(req.user.id);
-      
+
       if (!user) {
-        // This shouldn't happen if token is valid and user exists
-        logger.error(`User not found for ID ${req.user.id} despite valid token`, { requestedBy: req.user.id });
+        logger.error(
+          `User not found for ID ${req.user.id} despite valid token`,
+          { requestedBy: req.user.id }
+        );
         return res.status(404).json({
-          status: 'error',
-          message: 'User not found'
+          status: "error",
+          message: "User not found",
         });
       }
-      
-      // Format dates to ensure ISO-8601 format
+
       return res.status(200).json({
-        status: 'success',
+        status: "success",
         data: {
           id: user.id,
           username: user.username,
           role: user.role,
           is_active: user.is_active,
-          created_at: user.created_at instanceof Date ? user.created_at.toISOString() : user.created_at,
-          updated_at: user.updated_at instanceof Date ? user.updated_at.toISOString() : user.updated_at
-        }
+          created_at:
+            user.created_at instanceof Date
+              ? user.created_at.toISOString()
+              : user.created_at,
+          updated_at:
+            user.updated_at instanceof Date
+              ? user.updated_at.toISOString()
+              : user.updated_at,
+        },
       });
     } catch (error) {
       logger.error(`Failed to get user data for ID ${req.user?.id}:`, {
         error: error.message,
         stack: error.stack,
-        requestedBy: req.user?.id
+        requestedBy: req.user?.id,
       });
-      
+
       return res.status(500).json({
-        status: 'error',
-        message: 'Failed to retrieve user information'
+        status: "error",
+        message: "Failed to retrieve user information",
       });
     }
   }

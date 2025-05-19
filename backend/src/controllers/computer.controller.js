@@ -1,6 +1,6 @@
-const computerService = require('../services/computer.service');
-const logger = require('../utils/logger');
-const validationUtils = require('../utils/validation');
+const computerService = require("../services/computer.service");
+const logger = require("../utils/logger");
+const validationUtils = require("../utils/validation");
 
 /**
  * Controller for computer management operations
@@ -49,91 +49,109 @@ class ComputerController {
     try {
       const errors = [];
 
-      // Validate page
-      const pageError = validationUtils.validatePageQueryParam(req.query.page);
-      if (pageError) {
-        errors.push({ field: 'page', message: pageError });
+      if (req.query.page !== undefined) {
+        const pageError = validationUtils.validatePageQueryParam(
+          req.query.page
+        );
+        if (pageError) {
+          errors.push({ field: "page", message: pageError });
+        }
       }
 
-      // Validate limit
-      const limitError = validationUtils.validateLimitQueryParam(req.query.limit);
-      if (limitError) {
-        errors.push({ field: 'limit', message: limitError });
+      if (req.query.limit !== undefined) {
+        const limitError = validationUtils.validateLimitQueryParam(
+          req.query.limit
+        );
+        if (limitError) {
+          errors.push({ field: "limit", message: limitError });
+        }
       }
 
-      // Validate name (computer name search)
       if (req.query.name) {
-        const nameError = validationUtils.validateComputerNameSearchQuery(req.query.name);
+        const nameError = validationUtils.validateComputerNameSearchQuery(
+          req.query.name
+        );
         if (nameError) {
-          errors.push({ field: 'name', message: nameError });
+          errors.push({ field: "name", message: nameError });
         }
       }
 
-      // Validate roomId
       if (req.query.roomId) {
-        const roomIdError = validationUtils.validatePositiveIntegerId(req.query.roomId, 'Room ID');
+        const roomIdError = validationUtils.validatePositiveIntegerId(
+          req.query.roomId,
+          "Room ID"
+        );
         if (roomIdError) {
-          errors.push({ field: 'roomId', message: roomIdError });
+          errors.push({ field: "roomId", message: roomIdError });
         }
       }
 
-      // Validate status
       if (req.query.status) {
-        const statusError = validationUtils.validateComputerStatusQuery(req.query.status);
+        const statusError = validationUtils.validateComputerStatusQuery(
+          req.query.status
+        );
         if (statusError) {
-          errors.push({ field: 'status', message: statusError });
+          errors.push({ field: "status", message: statusError });
         }
       }
 
-      // Validate has_errors
       if (req.query.has_errors) {
-        const hasErrorsError = validationUtils.validateHasErrorsQuery(req.query.has_errors);
+        const hasErrorsError = validationUtils.validateHasErrorsQuery(
+          req.query.has_errors
+        );
         if (hasErrorsError) {
-          errors.push({ field: 'has_errors', message: hasErrorsError });
+          errors.push({ field: "has_errors", message: hasErrorsError });
         }
       }
 
-      // Nếu có lỗi, trả về 400
       if (errors.length > 0) {
         return res.status(400).json({
-          status: 'error',
-          message: 'Validation failed',
-          errors
+          status: "error",
+          message: "Validation failed",
+          errors,
         });
       }
 
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
-      
+
       const filters = {
         name: req.query.name,
         roomId: req.query.roomId ? parseInt(req.query.roomId) : null,
         status: req.query.status,
-        has_errors: req.query.has_errors
+        has_errors: req.query.has_errors,
       };
-      
-      const result = await computerService.getAllComputers(page, limit, filters, req.user);
-      
-      logger.debug(`Retrieved ${result.computers.length} computers (page ${page}, total: ${result.total})`, {
-        userId: req.user?.id,
-        filters
-      });
-      
+
+      const result = await computerService.getAllComputers(
+        page,
+        limit,
+        filters,
+        req.user
+      );
+
+      logger.debug(
+        `Retrieved ${result.computers.length} computers (page ${page}, total: ${result.total})`,
+        {
+          userId: req.user?.id,
+          filters,
+        }
+      );
+
       return res.status(200).json({
-        status: 'success',
-        data: result
+        status: "success",
+        data: result,
       });
     } catch (error) {
-      logger.error('Failed to fetch computers:', {
+      logger.error("Failed to fetch computers:", {
         error: error.message,
         stack: error.stack,
         userId: req.user?.id,
-        query: req.query
+        query: req.query,
       });
-      
+
       return res.status(500).json({
-        status: 'error',
-        message: error.message || 'Failed to fetch computers'
+        status: "error",
+        message: error.message || "Failed to fetch computers",
       });
     }
   }
@@ -168,36 +186,38 @@ class ComputerController {
   async getComputerById(req, res) {
     try {
       const id = parseInt(req.params.computerId);
-      
+
       if (!id) {
-        logger.debug('Invalid computer ID provided', { id: req.params.computerId });
+        logger.debug("Invalid computer ID provided", {
+          id: req.params.computerId,
+        });
         return res.status(400).json({
-          status: 'error',
-          message: 'Computer ID is required'
+          status: "error",
+          message: "Computer ID is required",
         });
       }
-      
+
       const computer = await computerService.getComputerById(id);
 
       logger.debug(`Retrieved computer details for ID: ${id}`, {
         userId: req.user?.id,
-        computerName: computer.name
+        computerName: computer.name,
       });
-      
+
       return res.status(200).json({
-        status: 'success',
-        data: computer
+        status: "success",
+        data: computer,
       });
     } catch (error) {
       logger.error(`Failed to get computer with ID ${req.params.computerId}:`, {
         error: error.message,
         stack: error.stack,
-        userId: req.user?.id
+        userId: req.user?.id,
       });
-      
+
       return res.status(404).json({
-        status: 'error',
-        message: error.message || 'Computer not found'
+        status: "error",
+        message: error.message || "Computer not found",
       });
     }
   }
@@ -215,33 +235,35 @@ class ComputerController {
   async deleteComputer(req, res) {
     try {
       const id = parseInt(req.params.computerId);
-      
+
       if (!id) {
-        logger.debug('Invalid computer ID provided for deletion', { id: req.params.computerId });
+        logger.debug("Invalid computer ID provided for deletion", {
+          id: req.params.computerId,
+        });
         return res.status(400).json({
-          status: 'error',
-          message: 'Computer ID is required'
+          status: "error",
+          message: "Computer ID is required",
         });
       }
-      
+
       await computerService.deleteComputer(id);
-      
+
       logger.info(`Computer ID: ${id} deleted by user ID: ${req.user?.id}`);
-      
+
       return res.status(200).json({
-        status: 'success',
-        message: 'Computer deleted successfully'
+        status: "success",
+        message: "Computer deleted successfully",
       });
     } catch (error) {
       logger.error(`Failed to delete computer ID ${req.params.computerId}:`, {
         error: error.message,
         stack: error.stack,
-        userId: req.user?.id
+        userId: req.user?.id,
       });
-      
+
       return res.status(404).json({
-        status: 'error',
-        message: error.message || 'Computer not found'
+        status: "error",
+        message: error.message || "Computer not found",
       });
     }
   }
@@ -269,35 +291,40 @@ class ComputerController {
   async getComputerErrors(req, res) {
     try {
       const id = parseInt(req.params.computerId);
-      
+
       if (!id) {
-        logger.debug('Invalid computer ID provided for error lookup', { id: req.params.computerId });
+        logger.debug("Invalid computer ID provided for error lookup", {
+          id: req.params.computerId,
+        });
         return res.status(400).json({
-          status: 'error',
-          message: 'Computer ID is required'
+          status: "error",
+          message: "Computer ID is required",
         });
       }
-      
+
       const errors = await computerService.getComputerErrors(id);
-      
+
       logger.debug(`Retrieved ${errors.length} errors for computer ID: ${id}`, {
-        userId: req.user?.id
+        userId: req.user?.id,
       });
-      
+
       return res.status(200).json({
-        status: 'success',
-        data: { errors }
+        status: "success",
+        data: { errors },
       });
     } catch (error) {
-      logger.error(`Failed to get errors for computer ID ${req.params.computerId}:`, {
-        error: error.message,
-        stack: error.stack,
-        userId: req.user?.id
-      });
-      
+      logger.error(
+        `Failed to get errors for computer ID ${req.params.computerId}:`,
+        {
+          error: error.message,
+          stack: error.stack,
+          userId: req.user?.id,
+        }
+      );
+
       return res.status(404).json({
-        status: 'error',
-        message: error.message || 'Computer not found or no errors available'
+        status: "error",
+        message: error.message || "Computer not found or no errors available",
       });
     }
   }
@@ -330,82 +357,89 @@ class ComputerController {
       const id = parseInt(req.params.computerId);
       const { error_type, error_message, error_details } = req.body;
       const errors = [];
-      
+
       if (!id) {
-        logger.debug('Invalid computer ID provided for error reporting', { id: req.params.computerId });
-        return res.status(400).json({
-          status: 'error',
-          message: 'Computer ID is required'
+        logger.debug("Invalid computer ID provided for error reporting", {
+          id: req.params.computerId,
         });
-      }
-      
-      if (!error_type || !error_message) {
-        logger.debug('Missing required error fields', { 
-          hasErrorType: !!error_type, 
-          hasErrorMessage: !!error_message 
-        });
-        
         return res.status(400).json({
-          status: 'error',
-          message: 'Error type and message are required'
+          status: "error",
+          message: "Computer ID is required",
         });
       }
 
-      // Validate error_type
-      const errorTypeError = validationUtils.validateFrontendErrorType(error_type);
-      if (errorTypeError) {
-        errors.push({ field: 'error_type', message: errorTypeError });
-      }
-      // Validate error_message
-      const errorMessageError = validationUtils.validateAgentErrorMessage(error_message);
-      if (errorMessageError) {
-        errors.push({ field: 'error_message', message: errorMessageError });
-      }
-      // Validate error_details (optional)
-      if (error_details !== undefined) {
-        const errorDetailsError = validationUtils.validateErrorDetailsSize(error_details);
-        if (errorDetailsError) {
-          errors.push({ field: 'error_details', message: errorDetailsError });
-        }
-      }
-      // Nếu có lỗi, trả về 400
-      if (errors.length > 0) {
+      if (!error_type || !error_message) {
+        logger.debug("Missing required error fields", {
+          hasErrorType: !!error_type,
+          hasErrorMessage: !!error_message,
+        });
+
         return res.status(400).json({
-          status: 'error',
-          message: 'Validation failed',
-          errors
+          status: "error",
+          message: "Error type and message are required",
         });
       }
-      
+
+      const errorTypeError =
+        validationUtils.validateFrontendErrorType(error_type);
+      if (errorTypeError) {
+        errors.push({ field: "error_type", message: errorTypeError });
+      }
+      const errorMessageError =
+        validationUtils.validateAgentErrorMessage(error_message);
+      if (errorMessageError) {
+        errors.push({ field: "error_message", message: errorMessageError });
+      }
+      if (error_details !== undefined) {
+        const errorDetailsError =
+          validationUtils.validateErrorDetailsSize(error_details);
+        if (errorDetailsError) {
+          errors.push({ field: "error_details", message: errorDetailsError });
+        }
+      }
+      if (errors.length > 0) {
+        return res.status(400).json({
+          status: "error",
+          message: "Validation failed",
+          errors,
+        });
+      }
+
       const errorData = {
         error_type,
         error_message,
-        error_details: error_details || {}
+        error_details: error_details || {},
       };
-      
+
       const result = await computerService.reportComputerError(id, errorData);
-      
-      logger.info(`Error reported for computer ID ${id}: Error ID ${result.error.id}`, {
-        errorType: error_type,
-        userId: req.user?.id
-      });
-      
+
+      logger.info(
+        `Error reported for computer ID ${id}: Error ID ${result.error.id}`,
+        {
+          errorType: error_type,
+          userId: req.user?.id,
+        }
+      );
+
       return res.status(201).json({
-        status: 'success',
+        status: "success",
         data: result,
-        message: 'Error reported successfully'
+        message: "Error reported successfully",
       });
     } catch (error) {
-      logger.error(`Failed to report error for computer ID ${req.params.computerId}:`, {
-        error: error.message,
-        stack: error.stack,
-        userId: req.user?.id,
-        errorType: req.body.error_type
-      });
-      
+      logger.error(
+        `Failed to report error for computer ID ${req.params.computerId}:`,
+        {
+          error: error.message,
+          stack: error.stack,
+          userId: req.user?.id,
+          errorType: req.body.error_type,
+        }
+      );
+
       return res.status(400).json({
-        status: 'error',
-        message: error.message || 'Failed to report error'
+        status: "error",
+        message: error.message || "Failed to report error",
       });
     }
   }
@@ -440,56 +474,65 @@ class ComputerController {
       const errorId = parseInt(req.params.errorId);
       const { resolution_notes } = req.body;
       const errors = [];
-      
+
       if (!computerId || !errorId) {
-        logger.debug('Invalid IDs provided for error resolution', { 
-          computerId: req.params.computerId, 
-          errorId: req.params.errorId 
+        logger.debug("Invalid IDs provided for error resolution", {
+          computerId: req.params.computerId,
+          errorId: req.params.errorId,
         });
-        
+
         return res.status(400).json({
-          status: 'error',
-          message: 'Computer ID and Error ID are required'
+          status: "error",
+          message: "Computer ID and Error ID are required",
         });
       }
 
-      // Validate resolution_notes if provided
       if (resolution_notes !== undefined) {
-        const notesError = validationUtils.validateResolutionNotes(resolution_notes);
+        const notesError =
+          validationUtils.validateResolutionNotes(resolution_notes);
         if (notesError) {
-          errors.push({ field: 'resolution_notes', message: notesError });
+          errors.push({ field: "resolution_notes", message: notesError });
         }
       }
-      // Nếu có lỗi, trả về 400
       if (errors.length > 0) {
         return res.status(400).json({
-          status: 'error',
-          message: 'Validation failed',
-          errors
+          status: "error",
+          message: "Validation failed",
+          errors,
         });
       }
 
-      const result = await computerService.resolveComputerError(computerId, errorId, resolution_notes);
-      
-      logger.info(`Error ID: ${errorId} for computer ID: ${computerId} resolved by user ID: ${req.user?.id}`, {
-        hasNotes: !!resolution_notes
-      });
-      
+      const result = await computerService.resolveComputerError(
+        computerId,
+        errorId,
+        resolution_notes
+      );
+
+      logger.info(
+        `Error ID: ${errorId} for computer ID: ${computerId} resolved by user ID: ${req.user?.id}`,
+        {
+          hasNotes: !!resolution_notes,
+        }
+      );
+
       return res.status(200).json({
-        status: 'success',
+        status: "success",
         data: result,
-        message: 'Error resolved successfully'
+        message: "Error resolved successfully",
       });
     } catch (error) {
-      logger.error(`Failed to resolve error ID ${req.params.errorId} for computer ID ${req.params.computerId}:`, {
-        error: error.message,
-        stack: error.stack,
-        userId: req.user?.id
-      });
-      
+      logger.error(
+        `Failed to resolve error ID ${req.params.errorId} for computer ID ${req.params.computerId}:`,
+        {
+          error: error.message,
+          stack: error.stack,
+          userId: req.user?.id,
+        }
+      );
+
       return res.status(400).json({
-        status: 'error',
-        message: error.message || 'Failed to resolve error'
+        status: "error",
+        message: error.message || "Failed to resolve error",
       });
     }
   }

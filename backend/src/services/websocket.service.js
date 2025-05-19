@@ -3,10 +3,10 @@
  * Standardized based on agent's communication patterns.
  * Uses Map for realtime status and removes status on final disconnect.
  */
-const logger = require('../utils/logger');
+const logger = require("../utils/logger");
 
 const ROOM_PREFIXES = {
-  ADMIN: 'admin_room',
+  ADMIN: "admin_room",
   AGENT: (id) => `agent_${id}`,
   COMPUTER_SUBSCRIBERS: (id) => `computer_${id}`,
   USER: (id) => `user_${id}`,
@@ -14,31 +14,32 @@ const ROOM_PREFIXES = {
 
 const EVENTS = {
   // Admin events
-  ADMIN_NEW_AGENT_MFA: 'admin:new_agent_mfa',
-  ADMIN_AGENT_REGISTERED: 'admin:agent_registered',
-  
+  ADMIN_NEW_AGENT_MFA: "admin:new_agent_mfa",
+  ADMIN_AGENT_REGISTERED: "admin:agent_registered",
+
   // Command events
-  COMMAND_EXECUTE: 'command:execute',
-  COMMAND_COMPLETED: 'command:completed',
-  
+  COMMAND_EXECUTE: "command:execute",
+  COMMAND_COMPLETED: "command:completed",
+
   // Computer status events
-  COMPUTER_STATUS_UPDATED: 'computer:status_updated',
-  
+  COMPUTER_STATUS_UPDATED: "computer:status_updated",
+
   // Agent notification events
-  NEW_VERSION_AVAILABLE: 'agent:new_version_available',
+  NEW_VERSION_AVAILABLE: "agent:new_version_available",
 };
 
 const PENDING_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 const AGENT_OFFLINE_CHECK_DELAY_MS = 1500;
 
 class WebSocketService {
-
   constructor() {
     this.io = null;
     this.agentRealtimeStatus = new Map();
     this.pendingCommands = new Map();
 
-    logger.info('WebSocketService initialized (using Map for agent status, room-based connection check)');
+    logger.info(
+      "WebSocketService initialized (using Map for agent status, room-based connection check)"
+    );
   }
 
   /**
@@ -47,11 +48,11 @@ class WebSocketService {
    */
   setIo(io) {
     if (!io) {
-      logger.error('Attempted to set null or undefined Socket.IO instance');
+      logger.error("Attempted to set null or undefined Socket.IO instance");
       return;
     }
     this.io = io;
-    logger.info('Socket.IO instance has been set in WebSocketService');
+    logger.info("Socket.IO instance has been set in WebSocketService");
   }
 
   /**
@@ -64,14 +65,16 @@ class WebSocketService {
   _emitToRoom(room, eventName, data) {
     try {
       if (!this.io) {
-        const errorMsg = 'WebSocket IO not initialized. Call setIo() first.';
+        const errorMsg = "WebSocket IO not initialized. Call setIo() first.";
         logger.error(errorMsg);
         throw new Error(errorMsg);
       }
       this.io.to(room).emit(eventName, data);
       logger.debug(`Emitted event '${eventName}' to room '${room}'`);
     } catch (error) {
-      logger.error(`Failed to emit event '${eventName}' to room '${room}': ${error.message}`);
+      logger.error(
+        `Failed to emit event '${eventName}' to room '${room}': ${error.message}`
+      );
     }
   }
 
@@ -90,8 +93,16 @@ class WebSocketService {
       positionInfo,
       timestamp: new Date(),
     };
-    this._emitToRoom(ROOM_PREFIXES.ADMIN, EVENTS.ADMIN_NEW_AGENT_MFA, eventData);
-    logger.info(`MFA code notification sent to admin room for position: ${positionInfo.roomName || 'N/A'} (${positionInfo.posX},${positionInfo.posY})`);
+    this._emitToRoom(
+      ROOM_PREFIXES.ADMIN,
+      EVENTS.ADMIN_NEW_AGENT_MFA,
+      eventData
+    );
+    logger.info(
+      `MFA code notification sent to admin room for position: ${
+        positionInfo.roomName || "N/A"
+      } (${positionInfo.posX},${positionInfo.posY})`
+    );
   }
 
   /**
@@ -103,13 +114,19 @@ class WebSocketService {
    * @param {number} positionInfo.posY - Y position in the room grid.
    */
   notifyAdminsAgentRegistered(computerId, positionInfo) {
-     const eventData = {
+    const eventData = {
       computerId,
       positionInfo,
       timestamp: new Date(),
     };
-    this._emitToRoom(ROOM_PREFIXES.ADMIN, EVENTS.ADMIN_AGENT_REGISTERED, eventData);
-    logger.info(`Agent registration notification for Computer ID: ${computerId} with position info sent to admin room.`);
+    this._emitToRoom(
+      ROOM_PREFIXES.ADMIN,
+      EVENTS.ADMIN_AGENT_REGISTERED,
+      eventData
+    );
+    logger.info(
+      `Agent registration notification for Computer ID: ${computerId} with position info sent to admin room.`
+    );
   }
 
   /**
@@ -121,9 +138,9 @@ class WebSocketService {
    * @param {number} [data.diskUsage] - Disk usage percentage.
    */
   updateRealtimeCache(computerId, data) {
-    if (!computerId || typeof computerId !== 'number') {
-        logger.warn('Invalid computerId provided for updateRealtimeCache');
-        return;
+    if (!computerId || typeof computerId !== "number") {
+      logger.warn("Invalid computerId provided for updateRealtimeCache");
+      return;
     }
 
     const existingData = this.agentRealtimeStatus.get(computerId) || {};
@@ -147,10 +164,14 @@ class WebSocketService {
   isAgentConnected(computerId) {
     if (!this.io || !computerId) return false;
     try {
-      const room = this.io.sockets.adapter.rooms.get(ROOM_PREFIXES.AGENT(computerId));
+      const room = this.io.sockets.adapter.rooms.get(
+        ROOM_PREFIXES.AGENT(computerId)
+      );
       return !!room && room.size > 0;
     } catch (error) {
-      logger.error(`Error checking online status for computer ${computerId}: ${error.message}`);
+      logger.error(
+        `Error checking online status for computer ${computerId}: ${error.message}`
+      );
       return false;
     }
   }
@@ -192,11 +213,15 @@ class WebSocketService {
     const computerId = socket.data?.computerId;
 
     if (!computerId) {
-      logger.debug(`Socket ${socket.id} disconnected without an associated computerId.`);
+      logger.debug(
+        `Socket ${socket.id} disconnected without an associated computerId.`
+      );
       return;
     }
 
-    logger.info(`Handling disconnect for agent socket ${socket.id} (Computer ID: ${computerId})`);
+    logger.info(
+      `Handling disconnect for agent socket ${socket.id} (Computer ID: ${computerId})`
+    );
 
     setTimeout(async () => {
       try {
@@ -204,32 +229,42 @@ class WebSocketService {
           logger.info(`Computer ${computerId} confirmed offline after delay.`);
 
           const offlineStatusData = {
-              status: 'offline',
-              cpuUsage: 0,
-              ramUsage: 0,
-              diskUsage: 0,
-              timestamp: new Date(),
+            status: "offline",
+            cpuUsage: 0,
+            ramUsage: 0,
+            diskUsage: 0,
+            timestamp: new Date(),
           };
 
           this._emitToRoom(
-              ROOM_PREFIXES.COMPUTER_SUBSCRIBERS(computerId),
-              EVENTS.COMPUTER_STATUS_UPDATED,
-              offlineStatusData
+            ROOM_PREFIXES.COMPUTER_SUBSCRIBERS(computerId),
+            EVENTS.COMPUTER_STATUS_UPDATED,
+            offlineStatusData
           );
-          logger.info(`Broadcasted final 'offline' status for computer ${computerId}.`);
+          logger.info(
+            `Broadcasted final 'offline' status for computer ${computerId}.`
+          );
 
           const deleted = this.agentRealtimeStatus.delete(computerId);
           if (deleted) {
-            logger.info(`Removed realtime status for computer ${computerId} from Map.`);
+            logger.info(
+              `Removed realtime status for computer ${computerId} from Map.`
+            );
           } else {
-            logger.warn(`Attempted to remove status for computer ${computerId}, but it was not found in the Map (might have been removed already).`);
+            logger.warn(
+              `Attempted to remove status for computer ${computerId}, but it was not found in the Map (might have been removed already).`
+            );
           }
-
         } else {
-           logger.info(`Computer ${computerId} still has other connections active. Not marking as offline or removing status yet.`);
+          logger.info(
+            `Computer ${computerId} still has other connections active. Not marking as offline or removing status yet.`
+          );
         }
       } catch (error) {
-         logger.error(`Error during delayed offline check for computer ${computerId} (Socket ID: ${socket.id}): ${error.message}`, { stack: error.stack });
+        logger.error(
+          `Error during delayed offline check for computer ${computerId} (Socket ID: ${socket.id}): ${error.message}`,
+          { stack: error.stack }
+        );
       }
     }, AGENT_OFFLINE_CHECK_DELAY_MS);
   }
@@ -240,16 +275,18 @@ class WebSocketService {
    * @param {number} computerId - The computer ID.
    */
   async broadcastStatusUpdate(computerId) {
-     if (!computerId || typeof computerId !== 'number') {
-        logger.warn('broadcastStatusUpdate called with invalid computerId');
-        return;
+    if (!computerId || typeof computerId !== "number") {
+      logger.warn("broadcastStatusUpdate called with invalid computerId");
+      return;
     }
     try {
       const statusData = this.getAgentRealtimeStatus(computerId);
 
       if (!statusData) {
-          logger.warn(`No status data found in Map for computer ${computerId} during broadcast attempt. Skipping.`);
-          return;
+        logger.warn(
+          `No status data found in Map for computer ${computerId} during broadcast attempt. Skipping.`
+        );
+        return;
       }
 
       const eventData = {
@@ -261,10 +298,16 @@ class WebSocketService {
         timestamp: statusData.lastUpdated || new Date(),
       };
 
-      this._emitToRoom(ROOM_PREFIXES.COMPUTER_SUBSCRIBERS(computerId), EVENTS.COMPUTER_STATUS_UPDATED, eventData);
-
+      this._emitToRoom(
+        ROOM_PREFIXES.COMPUTER_SUBSCRIBERS(computerId),
+        EVENTS.COMPUTER_STATUS_UPDATED,
+        eventData
+      );
     } catch (error) {
-      logger.error(`Failed during status broadcast preparation for computer ${computerId}: ${error.message}`, { stack: error.stack });
+      logger.error(
+        `Failed during status broadcast preparation for computer ${computerId}: ${error.message}`,
+        { stack: error.stack }
+      );
     }
   }
 
@@ -275,20 +318,28 @@ class WebSocketService {
    * @param {number} computerId - The target computer ID.
    */
   storePendingCommand(commandId, userId, computerId) {
-     if (!commandId || !userId || !computerId) {
-        logger.warn('storePendingCommand called with invalid parameters', { commandId, userId, computerId });
-        return;
+    if (!commandId || !userId || !computerId) {
+      logger.warn("storePendingCommand called with invalid parameters", {
+        commandId,
+        userId,
+        computerId,
+      });
+      return;
     }
 
     if (this.pendingCommands.has(commandId)) {
-        const existingCommand = this.pendingCommands.get(commandId);
-        clearTimeout(existingCommand.timeoutId);
-        logger.warn(`Command ${commandId} already existed in pending commands. Overwriting and clearing old timeout.`);
+      const existingCommand = this.pendingCommands.get(commandId);
+      clearTimeout(existingCommand.timeoutId);
+      logger.warn(
+        `Command ${commandId} already existed in pending commands. Overwriting and clearing old timeout.`
+      );
     }
 
     const timeoutId = setTimeout(() => {
       if (this.pendingCommands.has(commandId)) {
-        logger.warn(`Command ${commandId} timed out after ${PENDING_COMMAND_TIMEOUT_MS}ms and removed from pending commands.`);
+        logger.warn(
+          `Command ${commandId} timed out after ${PENDING_COMMAND_TIMEOUT_MS}ms and removed from pending commands.`
+        );
         this.pendingCommands.delete(commandId);
       }
     }, PENDING_COMMAND_TIMEOUT_MS);
@@ -300,7 +351,9 @@ class WebSocketService {
       timeoutId,
     });
 
-    logger.debug(`Command ${commandId} stored as pending for computer ${computerId} by user ${userId}. Timeout set.`);
+    logger.debug(
+      `Command ${commandId} stored as pending for computer ${computerId} by user ${userId}. Timeout set.`
+    );
   }
 
   /**
@@ -311,37 +364,49 @@ class WebSocketService {
    * @param {string} [commandType='console'] - Type of command (e.g., console, script, power).
    * @returns {boolean} True if the command was successfully emitted to the agent's room.
    */
-  sendCommandToAgent(computerId, command, commandId, commandType = 'console') {
+  sendCommandToAgent(computerId, command, commandId, commandType = "console") {
     if (!computerId || !command || !commandId) {
-        logger.warn('sendCommandToAgent called with invalid parameters', { computerId, commandId, commandExists: !!command });
-        return false;
+      logger.warn("sendCommandToAgent called with invalid parameters", {
+        computerId,
+        commandId,
+        commandExists: !!command,
+      });
+      return false;
     }
 
-    if (typeof command !== 'string' || command.length > 2000) {
-        logger.warn(`Invalid command format or length exceeds 2000 characters for command ID ${commandId}`);
-        return false;
+    if (typeof command !== "string" || command.length > 2000) {
+      logger.warn(
+        `Invalid command format or length exceeds 2000 characters for command ID ${commandId}`
+      );
+      return false;
     }
 
     try {
       const agentRoom = ROOM_PREFIXES.AGENT(computerId);
 
       if (!this.isAgentConnected(computerId)) {
-        logger.warn(`Cannot send command ${commandId} to computer ${computerId}: Agent is not connected (no sockets found in room ${agentRoom}).`);
+        logger.warn(
+          `Cannot send command ${commandId} to computer ${computerId}: Agent is not connected (no sockets found in room ${agentRoom}).`
+        );
         return false;
       }
 
       // Emit event with format matching the API documentation
-      this.io.to(agentRoom).emit(EVENTS.COMMAND_EXECUTE, { 
+      this.io.to(agentRoom).emit(EVENTS.COMMAND_EXECUTE, {
         command,
-        commandId, 
-        commandType
+        commandId,
+        commandType,
       });
 
-      logger.info(`Command ${commandId} (type: ${commandType}) sent to agent room ${agentRoom} for computer ${computerId}`);
+      logger.info(
+        `Command ${commandId} (type: ${commandType}) sent to agent room ${agentRoom} for computer ${computerId}`
+      );
       return true;
-
     } catch (error) {
-      logger.error(`Error sending command ${commandId} to computer ${computerId}: ${error.message}`, { stack: error.stack });
+      logger.error(
+        `Error sending command ${commandId} to computer ${computerId}: ${error.message}`,
+        { stack: error.stack }
+      );
       return false;
     }
   }
@@ -356,15 +421,20 @@ class WebSocketService {
    * @param {any} result.result - The actual output or result data from the agent.
    */
   notifyCommandCompletion(commandId, result) {
-     if (!commandId || !result) {
-        logger.warn('notifyCommandCompletion called with invalid parameters', { commandId, resultExists: !!result });
-        return;
+    if (!commandId || !result) {
+      logger.warn("notifyCommandCompletion called with invalid parameters", {
+        commandId,
+        resultExists: !!result,
+      });
+      return;
     }
     try {
       const pendingCommand = this.pendingCommands.get(commandId);
 
       if (!pendingCommand) {
-        logger.warn(`Received completion for unknown or already timed-out/processed command ${commandId}. Ignoring.`);
+        logger.warn(
+          `Received completion for unknown or already timed-out/processed command ${commandId}. Ignoring.`
+        );
         return;
       }
 
@@ -377,49 +447,61 @@ class WebSocketService {
       const formattedResult = {
         commandId,
         computerId,
-        type: result.type || 'unknown',
+        type: result.type || "unknown",
         success: result.success === true,
         result: result.result,
         timestamp: new Date(),
       };
 
-      this._emitToRoom(ROOM_PREFIXES.USER(userId), EVENTS.COMMAND_COMPLETED, formattedResult);
+      this._emitToRoom(
+        ROOM_PREFIXES.USER(userId),
+        EVENTS.COMMAND_COMPLETED,
+        formattedResult
+      );
 
-      logger.debug(`Command ${commandId} completion notified to user ${userId}`);
-
+      logger.debug(
+        `Command ${commandId} completion notified to user ${userId}`
+      );
     } catch (error) {
-      logger.error(`Error processing command completion notification for ${commandId}: ${error.message}`, { stack: error.stack });
+      logger.error(
+        `Error processing command completion notification for ${commandId}: ${error.message}`,
+        { stack: error.stack }
+      );
     }
   }
 
-
-   /**
+  /**
    * Joins an authenticated user's socket to their dedicated room for direct notifications.
    * @param {import("socket.io").Socket} socket - The user's socket instance.
    * @param {number} userId - The authenticated user's ID.
    */
   joinUserRoom(socket, userId) {
     if (!socket || !userId) {
-      logger.error('joinUserRoom called with invalid socket or userId');
+      logger.error("joinUserRoom called with invalid socket or userId");
       return;
     }
     try {
       const roomName = ROOM_PREFIXES.USER(userId);
       socket.join(roomName);
       socket.data.userId = userId;
-      logger.info(`User socket ${socket.id} (User ID: ${userId}) joined user room: ${roomName}`);
+      logger.info(
+        `User socket ${socket.id} (User ID: ${userId}) joined user room: ${roomName}`
+      );
     } catch (error) {
-      logger.error(`Error joining user room for User ID ${userId} (Socket ${socket.id}): ${error.message}`, { stack: error.stack });
+      logger.error(
+        `Error joining user room for User ID ${userId} (Socket ${socket.id}): ${error.message}`,
+        { stack: error.stack }
+      );
     }
   }
 
-   /**
+  /**
    * Joins an authenticated admin's socket to the admin room for admin-specific events.
    * @param {import("socket.io").Socket} socket - The admin's socket instance.
    */
   joinAdminRoom(socket) {
     if (!socket) {
-      logger.error('joinAdminRoom called with invalid socket');
+      logger.error("joinAdminRoom called with invalid socket");
       return;
     }
     try {
@@ -427,10 +509,12 @@ class WebSocketService {
       socket.join(roomName);
       logger.info(`Admin socket ${socket.id} joined admin room: ${roomName}`);
     } catch (error) {
-      logger.error(`Error joining admin room for Socket ${socket.id}: ${error.message}`, { stack: error.stack });
+      logger.error(
+        `Error joining admin room for Socket ${socket.id}: ${error.message}`,
+        { stack: error.stack }
+      );
     }
   }
-
 
   /**
    * Joins computer subscriber room for a specific computer.
@@ -440,15 +524,20 @@ class WebSocketService {
    */
   joinComputerRoom(socket, computerId) {
     if (!socket || !computerId) {
-      logger.error('joinComputerRoom called with invalid socket or computerId');
+      logger.error("joinComputerRoom called with invalid socket or computerId");
       return;
     }
     try {
       const roomName = ROOM_PREFIXES.COMPUTER_SUBSCRIBERS(computerId);
       socket.join(roomName);
-      logger.info(`Socket ${socket.id} joined computer subscriber room: ${roomName}`);
+      logger.info(
+        `Socket ${socket.id} joined computer subscriber room: ${roomName}`
+      );
     } catch (error) {
-      logger.error(`Error joining computer subscriber room for Computer ID ${computerId} (Socket ${socket.id}): ${error.message}`, { stack: error.stack });
+      logger.error(
+        `Error joining computer subscriber room for Computer ID ${computerId} (Socket ${socket.id}): ${error.message}`,
+        { stack: error.stack }
+      );
     }
   }
 
@@ -459,15 +548,20 @@ class WebSocketService {
    */
   joinAgentRoom(socket, computerId) {
     if (!socket || !computerId) {
-      logger.error('joinAgentRoom called with invalid socket or computerId');
+      logger.error("joinAgentRoom called with invalid socket or computerId");
       return;
     }
     try {
       const roomName = ROOM_PREFIXES.AGENT(computerId);
       socket.join(roomName);
-      logger.info(`Socket ${socket.id} joined agent room for computer ${computerId}: ${roomName}`);
+      logger.info(
+        `Socket ${socket.id} joined agent room for computer ${computerId}: ${roomName}`
+      );
     } catch (error) {
-      logger.error(`Error joining agent room for Computer ID ${computerId} (Socket ${socket.id}): ${error.message}`, { stack: error.stack });
+      logger.error(
+        `Error joining agent room for Computer ID ${computerId} (Socket ${socket.id}): ${error.message}`,
+        { stack: error.stack }
+      );
     }
   }
 
@@ -492,11 +586,18 @@ class WebSocketService {
   async notifyAgentsOfNewVersion(versionInfo = {}) {
     try {
       // Validate required fields
-      if (!versionInfo.version || !versionInfo.download_url || !versionInfo.checksum_sha256) {
-        logger.warn('Incomplete version information provided for agent notification', { versionInfo });
+      if (
+        !versionInfo.version ||
+        !versionInfo.download_url ||
+        !versionInfo.checksum_sha256
+      ) {
+        logger.warn(
+          "Incomplete version information provided for agent notification",
+          { versionInfo }
+        );
         return;
       }
-      
+
       // Format the event data according to the API documentation
       const eventData = {
         status: "success",
@@ -504,7 +605,7 @@ class WebSocketService {
         version: versionInfo.version,
         download_url: versionInfo.download_url,
         checksum_sha256: versionInfo.checksum_sha256,
-        notes: versionInfo.notes || ""
+        notes: versionInfo.notes || "",
       };
 
       // Get all agent rooms
@@ -513,19 +614,23 @@ class WebSocketService {
 
       // For each room, check if it's an agent room
       for (const [roomName] of rooms.entries()) {
-        if (roomName.startsWith('agent_')) {
+        if (roomName.startsWith("agent_")) {
           this._emitToRoom(roomName, EVENTS.NEW_VERSION_AVAILABLE, eventData);
-          logger.debug(`Notified room ${roomName} about new agent version: ${eventData.version}`);
+          logger.debug(
+            `Notified room ${roomName} about new agent version: ${eventData.version}`
+          );
           notifiedRooms++;
         }
       }
 
-      logger.info(`Notified ${notifiedRooms} agent rooms about new agent version: ${eventData.version}`);
+      logger.info(
+        `Notified ${notifiedRooms} agent rooms about new agent version: ${eventData.version}`
+      );
     } catch (error) {
-      logger.error('Error notifying agents of new version:', { 
-        error: error.message, 
+      logger.error("Error notifying agents of new version:", {
+        error: error.message,
         stack: error.stack,
-        version: versionInfo?.version
+        version: versionInfo?.version,
       });
     }
   }

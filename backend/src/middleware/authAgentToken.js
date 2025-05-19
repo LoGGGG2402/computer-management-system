@@ -1,5 +1,5 @@
-const computerService = require('../services/computer.service');
-const logger = require('../utils/logger');
+const computerService = require("../services/computer.service");
+const logger = require("../utils/logger");
 
 /**
  * Middleware to authenticate agent requests using agent token
@@ -9,61 +9,61 @@ const logger = require('../utils/logger');
  */
 const verifyAgentToken = async (req, res, next) => {
   try {
-    const agentId = req.headers['x-agent-id'];
-    const token = req.headers.authorization?.split(' ')[1];
+    const agentId = req.headers["x-agent-id"];
+    const token = req.headers.authorization?.split(" ")[1];
 
-    // Check if both agent ID and token are provided
     if (!agentId || !token) {
-      logger.debug('Missing agent credentials', { 
+      logger.debug("Missing agent credentials", {
         hasAgentId: !!agentId,
         hasToken: !!token,
-        endpoint: `${req.method} ${req.originalUrl}`, 
-        ip: req.ip 
+        endpoint: `${req.method} ${req.originalUrl}`,
+        ip: req.ip,
       });
-      
+
       return res.status(403).json({
-        status: 'error',
-        message: 'Agent ID and token are required',
+        status: "error",
+        message: "Agent ID and token are required",
       });
     }
 
-    // Verify the token with computer service
     const computerId = await computerService.verifyAgentToken(agentId, token);
-    
+
     if (!computerId) {
-      logger.warn('Invalid agent credentials', { 
+      logger.warn("Invalid agent credentials", {
         agentId,
-        endpoint: `${req.method} ${req.originalUrl}`, 
-        ip: req.ip
+        endpoint: `${req.method} ${req.originalUrl}`,
+        ip: req.ip,
       });
-      
+
       return res.status(401).json({
-        status: 'error',
-        message: 'Unauthorized (Invalid agent credentials)',
+        status: "error",
+        message: "Unauthorized (Invalid agent credentials)",
       });
     }
 
-    // Attach computer object and agent ID to request for use in controllers
     req.computerId = computerId;
     req.agentId = agentId;
-    
-    logger.debug(`Authenticated agent: ${agentId} (Computer ID: ${computerId})`, {
-      endpoint: `${req.method} ${req.originalUrl}`
-    });
-    
+
+    logger.debug(
+      `Authenticated agent: ${agentId} (Computer ID: ${computerId})`,
+      {
+        endpoint: `${req.method} ${req.originalUrl}`,
+      }
+    );
+
     next();
   } catch (error) {
-    logger.error('Agent authentication error:', {
+    logger.error("Agent authentication error:", {
       error: error.message,
       stack: error.stack,
-      agentId: req.headers['agent-id'],
+      agentId: req.headers["agent-id"],
       endpoint: `${req.method} ${req.originalUrl}`,
-      ip: req.ip
+      ip: req.ip,
     });
-    
+
     res.status(500).json({
-      status: 'error',
-      message: 'Internal server error during authentication',
+      status: "error",
+      message: "Internal server error during authentication",
     });
   }
 };

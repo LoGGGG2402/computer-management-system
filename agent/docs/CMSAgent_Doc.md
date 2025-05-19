@@ -444,7 +444,7 @@ Agent communicates with the Server through HTTP API and WebSocket API endpoints 
         - `GET /api/agent/check-update`: Checking if there is a newer agent version. Requires query parameter `current_version`. Returns new version information (`version`, `download_url`, `checksum_sha256`, `notes`) if available, or 204 No Content if not. Requires header `X-Agent-ID` and `Authorization: Bearer <agent_token>`.
         - `GET /api/agent/agent-packages/:filename`: Downloading agent update package. Requires path parameter `filename`. Requires header `X-Agent-ID` and `Authorization: Bearer <agent_token>`.
 - **Agent WebSocket API (Connected to `/socket.io`):**
-    - **Connecting and Authenticating:** When setting up a WebSocket connection, agent sends the following headers: `X-Client-Type: "agent"`, `Authorization: Bearer <agent_token>`, `X-Agent-ID: string (agentId)`. Server responds via events `connect` (success) or `connect_error` (failure).
+    - **Connecting and Authenticating:** When setting up a WebSocket connection, agent sends the following headers: `X-Client-Type: "agent"`, `Authorization: Bearer <agent_token>`, `X-Agent-ID: string (agentId)`. Server responds via events `connect` (success) or `auth_error` (failure).
     - **Agent Emits Events:**
         - `agent:status_update`: Sending current resource usage (`cpuUsage`, `ramUsage`, `diskUsage`).
         - `agent:command_result`: Sending the result of executing a command from the Server (`commandId`, `commandType`, `success`, `result: {stdout, stderr, exitCode}`).

@@ -1,6 +1,6 @@
-const jwt = require('jsonwebtoken');
-const config = require('../config/auth.config.js');
-const logger = require('../utils/logger.js');
+const jwt = require("jsonwebtoken");
+const config = require("../config/auth.config.js");
+const logger = require("../utils/logger.js");
 
 /**
  * Verify JWT token from requests
@@ -9,49 +9,53 @@ const logger = require('../utils/logger.js');
  * @param {Function} next - Express next middleware function
  */
 const verifyToken = (req, res, next) => {
-  const token = req.headers['x-access-token'] || req.headers['authorization']?.replace('Bearer ', '');
+  const token =
+    req.headers["x-access-token"] ||
+    req.headers["authorization"]?.replace("Bearer ", "");
 
   if (!token) {
-    logger.debug('Missing authentication token', { 
-      endpoint: `${req.method} ${req.originalUrl}`, 
-      ip: req.ip 
+    logger.debug("Missing authentication token", {
+      endpoint: `${req.method} ${req.originalUrl}`,
+      ip: req.ip,
     });
-    
+
     return res.status(403).json({
-      status: 'error',
-      message: 'No token provided',
+      status: "error",
+      message: "No token provided",
     });
   }
 
   jwt.verify(token, config.accessToken.secret, (err, decoded) => {
     if (err) {
-      logger.warn('Invalid JWT token', { 
-        error: err.message, 
-        endpoint: `${req.method} ${req.originalUrl}`, 
-        ip: req.ip
+      logger.warn("Invalid JWT token", {
+        error: err.message,
+        endpoint: `${req.method} ${req.originalUrl}`,
+        ip: req.ip,
       });
-      
+
       return res.status(401).json({
-        status: 'error',
-        message: 'Unauthorized (Invalid token)',
+        status: "error",
+        message: "Unauthorized (Invalid token)",
       });
     }
-    
-    // Set user data in request object for use in routes
+
     req.user = {
       id: decoded.id,
       username: decoded.username,
       role: decoded.role,
     };
-    
-    logger.debug(`Authenticated user: ${decoded.username} (ID: ${decoded.id}, Role: ${decoded.role})`, {
-      endpoint: `${req.method} ${req.originalUrl}`
-    });
-    
+
+    logger.debug(
+      `Authenticated user: ${decoded.username} (ID: ${decoded.id}, Role: ${decoded.role})`,
+      {
+        endpoint: `${req.method} ${req.originalUrl}`,
+      }
+    );
+
     next();
   });
 };
 
 module.exports = {
-  verifyToken
-};  
+  verifyToken,
+};

@@ -22,11 +22,11 @@
  * -   **Token Revocation**: Provides mechanisms to revoke a specific refresh token (e.g., on logout) or all refresh tokens for a user (e.g., on password change or suspicious activity detection).
  * -   **HttpOnly Cookies**: Refresh tokens should be stored in HttpOnly cookies to prevent access from client-side JavaScript (XSS).
  */
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
-const bcrypt = require('bcrypt');
-const db = require('../database/models');
-const authConfig = require('../config/auth.config');
+const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+const bcrypt = require("bcrypt");
+const db = require("../database/models");
+const authConfig = require("../config/auth.config");
 
 const User = db.User;
 const RefreshToken = db.RefreshToken;
@@ -51,12 +51,12 @@ class AuthService {
     try {
       const user = await User.findOne({ where: { username, is_active: true } });
       if (!user) {
-        throw new Error('User not found or inactive');
+        throw new Error("User not found or inactive");
       }
 
       const passwordIsValid = await user.validPassword(password);
       if (!passwordIsValid) {
-        throw new Error('Invalid password');
+        throw new Error("Invalid password");
       }
 
       const accessToken = await this.generateAccessToken(user);
@@ -69,7 +69,7 @@ class AuthService {
         is_active: user.is_active,
         token: accessToken.token,
         expires_at: accessToken.expires_at,
-        refreshToken: refreshTokenData.tokenForCookie
+        refreshToken: refreshTokenData.tokenForCookie,
       };
     } catch (error) {
       throw error;
@@ -86,10 +86,17 @@ class AuthService {
   async getUserById(userId) {
     try {
       const user = await User.findByPk(userId, {
-        attributes: ['id', 'username', 'role', 'is_active', 'created_at', 'updated_at']
+        attributes: [
+          "id",
+          "username",
+          "role",
+          "is_active",
+          "created_at",
+          "updated_at",
+        ],
       });
       if (!user) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
       return user;
     } catch (error) {
@@ -114,7 +121,7 @@ class AuthService {
       {
         id: user.id,
         username: user.username,
-        role: user.role
+        role: user.role,
       },
       authConfig.accessToken.secret,
       { expiresIn }
@@ -122,7 +129,7 @@ class AuthService {
 
     return {
       token,
-      expires_at
+      expires_at,
     };
   }
 
@@ -138,8 +145,8 @@ class AuthService {
    * @property {number} db_id - The ID of the refresh token record in the database.
    */
   async generateRefreshToken(userId) {
-    const selector = crypto.randomBytes(16).toString('hex');
-    const secretPart = crypto.randomBytes(32).toString('hex');
+    const selector = crypto.randomBytes(16).toString("hex");
+    const secretPart = crypto.randomBytes(32).toString("hex");
     const tokenForCookie = `${selector}.${secretPart}`;
 
     const salt = await bcrypt.genSalt(10);
@@ -155,14 +162,14 @@ class AuthService {
       selector: selector,
       hashed_verifier: hashedVerifier,
       expires_at,
-      issued_at
+      issued_at,
     });
 
     return {
       tokenForCookie,
       selector,
       expires_at,
-      db_id: refreshTokenRecord.id
+      db_id: refreshTokenRecord.id,
     };
   }
 
@@ -172,18 +179,23 @@ class AuthService {
    * @returns {number} The corresponding number of milliseconds, or 0 if the format is invalid.
    */
   parseExpiresIn(expiresIn) {
-    if (typeof expiresIn !== 'string' || expiresIn.length < 2) return 0;
+    if (typeof expiresIn !== "string" || expiresIn.length < 2) return 0;
     const unit = expiresIn.charAt(expiresIn.length - 1).toLowerCase();
     const value = parseInt(expiresIn.slice(0, -1), 10);
 
     if (isNaN(value)) return 0;
 
     switch (unit) {
-      case 's': return value * 1000;
-      case 'm': return value * 60 * 1000;
-      case 'h': return value * 60 * 60 * 1000;
-      case 'd': return value * 24 * 60 * 60 * 1000;
-      default: return 0;
+      case "s":
+        return value * 1000;
+      case "m":
+        return value * 60 * 1000;
+      case "h":
+        return value * 60 * 60 * 1000;
+      case "d":
+        return value * 24 * 60 * 60 * 1000;
+      default:
+        return 0;
     }
   }
 
@@ -197,38 +209,47 @@ class AuthService {
    * or if there are signs of tampering (verifier mismatch).
    */
   async refreshAuthToken(tokenFromCookie) {
-    if (!tokenFromCookie || typeof tokenFromCookie !== 'string' || !tokenFromCookie.includes('.')) {
-      throw new Error('Invalid refresh token format');
+    if (
+      !tokenFromCookie ||
+      typeof tokenFromCookie !== "string" ||
+      !tokenFromCookie.includes(".")
+    ) {
+      throw new Error("Invalid refresh token format");
     }
 
-    const [selector, secretPart] = tokenFromCookie.split('.', 2);
+    const [selector, secretPart] = tokenFromCookie.split(".", 2);
 
     if (!selector || !secretPart) {
-      throw new Error('Malformed refresh token');
+      throw new Error("Malformed refresh token");
     }
 
     const tokenRecord = await RefreshToken.findOne({ where: { selector } });
 
     if (!tokenRecord) {
-      throw new Error('Invalid refresh token (selector not found)');
+      throw new Error("Invalid refresh token (selector not found)");
     }
 
-    const isMatch = await bcrypt.compare(secretPart, tokenRecord.hashed_verifier);
+    const isMatch = await bcrypt.compare(
+      secretPart,
+      tokenRecord.hashed_verifier
+    );
 
     if (!isMatch) {
       await this.invalidateAllUserTokens(tokenRecord.user_id);
-      throw new Error('Invalid refresh token (verifier mismatch - potential tampering, all tokens for user invalidated)');
+      throw new Error(
+        "Invalid refresh token (verifier mismatch - potential tampering, all tokens for user invalidated)"
+      );
     }
 
     if (tokenRecord.expires_at < new Date()) {
       await tokenRecord.destroy();
-      throw new Error('Refresh token expired');
+      throw new Error("Refresh token expired");
     }
 
     const user = await User.findByPk(tokenRecord.user_id);
     if (!user || !user.is_active) {
       await tokenRecord.destroy();
-      throw new Error('User not found or inactive');
+      throw new Error("User not found or inactive");
     }
 
     await tokenRecord.destroy();
@@ -243,8 +264,8 @@ class AuthService {
         id: user.id,
         username: user.username,
         role: user.role,
-        is_active: user.is_active
-      }
+        is_active: user.is_active,
+      },
     };
   }
 
@@ -257,11 +278,15 @@ class AuthService {
    * only the legitimate owner can request revocation.
    */
   async revokeRefreshToken(tokenFromCookie) {
-    if (!tokenFromCookie || typeof tokenFromCookie !== 'string' || !tokenFromCookie.includes('.')) {
+    if (
+      !tokenFromCookie ||
+      typeof tokenFromCookie !== "string" ||
+      !tokenFromCookie.includes(".")
+    ) {
       return false;
     }
 
-    const [selector, secretPart] = tokenFromCookie.split('.', 2);
+    const [selector, secretPart] = tokenFromCookie.split(".", 2);
 
     if (!selector || !secretPart) {
       return false;
@@ -270,7 +295,10 @@ class AuthService {
     const tokenRecord = await RefreshToken.findOne({ where: { selector } });
 
     if (tokenRecord) {
-      const isMatch = await bcrypt.compare(secretPart, tokenRecord.hashed_verifier);
+      const isMatch = await bcrypt.compare(
+        secretPart,
+        tokenRecord.hashed_verifier
+      );
       if (isMatch) {
         await tokenRecord.destroy();
         return true;
@@ -301,7 +329,7 @@ class AuthService {
    */
   async invalidateAllUserTokens(userId) {
     const result = await RefreshToken.destroy({
-      where: { user_id: userId }
+      where: { user_id: userId },
     });
     return result;
   }

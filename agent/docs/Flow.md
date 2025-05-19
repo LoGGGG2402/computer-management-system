@@ -1,12 +1,6 @@
 # Computer Management System Agent Flow Documentation
 
-<style>
-.mermaid {
-    display: flex;
-    justify-content: center;
-    margin: 20px 0;
-}
-</style>
+
 
 ## 1. Agent Initialization and Registration Flow
 

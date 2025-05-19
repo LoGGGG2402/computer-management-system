@@ -1,54 +1,54 @@
-'use strict';
+"use strict";
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('agent_versions', {
+    await queryInterface.createTable("agent_versions", {
       id: {
         type: Sequelize.UUID,
         primaryKey: true,
-        defaultValue: Sequelize.UUIDV4
+        defaultValue: Sequelize.UUIDV4,
       },
       version: {
         type: Sequelize.STRING(50),
         allowNull: false,
-        unique: true
+        unique: true,
       },
       checksum_sha256: {
         type: Sequelize.STRING(64),
-        allowNull: false
+        allowNull: false,
       },
       download_url: {
         type: Sequelize.STRING(255),
-        allowNull: false
+        allowNull: false,
       },
       notes: {
         type: Sequelize.TEXT,
-        allowNull: true
+        allowNull: true,
       },
       is_stable: {
         type: Sequelize.BOOLEAN,
-        defaultValue: false
+        defaultValue: false,
       },
       file_path: {
         type: Sequelize.STRING(255),
-        allowNull: false
+        allowNull: false,
       },
       file_size: {
         type: Sequelize.INTEGER,
-        allowNull: false
+        allowNull: false,
       },
       created_at: {
         type: Sequelize.DATE,
-        allowNull: false
+        allowNull: false,
       },
       updated_at: {
         type: Sequelize.DATE,
-        allowNull: false
-      }
+        allowNull: false,
+      },
     });
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.dropTable('agent_versions');
-  }
+    await queryInterface.dropTable("agent_versions");
+  },
 };

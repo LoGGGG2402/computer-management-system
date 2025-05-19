@@ -3,15 +3,6 @@
 <div align="center">
   <h3>A comprehensive solution for enterprise computer management</h3>
 </div>
-
-<style>
-.mermaid {
-    display: flex;
-    justify-content: center;
-    margin: 20px 0;
-}
-</style>
-
 ## Overview
 
 The Computer Management System (CMS) is a robust web application designed to manage, monitor, and control computers within an organization. Built on a centralized architecture with Backend as the coordination hub, the system orchestrates communication between the user interface and client computers. The Backend serves as the command center that processes all operations, providing real-time tracking of operational status, secure remote command execution, and comprehensive asset management capabilities.
