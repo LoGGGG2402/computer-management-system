@@ -169,10 +169,14 @@ const NotificationHandler = () => {
  */
 const MainLayout = () => {
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      <Header />
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8">
-        <Outlet />
+    <div className="flex flex-col min-h-screen bg-gray-50 overflow-x-hidden">
+      <div className="w-full">
+        <Header />
+      </div>
+      <main className="flex-1 w-full mx-auto px-4 py-8">
+        <div className="max-w-7xl mx-auto">
+          <Outlet />
+        </div>
       </main>
       <footer className="bg-white border-t border-gray-200 py-6 mt-auto shadow-inner">
         <div className="max-w-7xl mx-auto px-4 text-center">

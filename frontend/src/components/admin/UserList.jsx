@@ -79,7 +79,7 @@ const UserList = ({ onEdit, onRefresh, refreshTrigger }) => {
   const handleDelete = async (id) => {
     setActionLoading(true);
     try {
-      await userService.deleteUser(id);
+      await userService.deactivateUser(id);
       message.success('User deactivated successfully');
       fetchUsers();
       if (onRefresh) onRefresh();
