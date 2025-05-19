@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback } from "react";
 
 /**
  * Custom hook providing common data formatting functions.
@@ -11,13 +11,13 @@ export const useFormatting = () => {
    * @returns {string} Formatted date and time or 'Invalid Date'/'Never'.
    */
   const formatTimestamp = useCallback((timestamp) => {
-    if (!timestamp) return 'Never';
+    if (!timestamp) return "Never";
     try {
       const date = new Date(timestamp);
-      if (isNaN(date.getTime())) return 'Invalid Date';
+      if (isNaN(date.getTime())) return "Invalid Date";
       return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
     } catch (e) {
-      return 'Invalid Date';
+      return "Invalid Date";
     }
   }, []);
 
@@ -27,24 +27,27 @@ export const useFormatting = () => {
    * @returns {string} Human-readable time ago string or 'Invalid Date'/'Never'.
    */
   const getTimeAgo = useCallback((timestamp) => {
-    if (!timestamp) return 'Never';
+    if (!timestamp) return "Never";
     try {
       const now = new Date();
       const time = new Date(timestamp);
-      if (isNaN(time.getTime())) return 'Invalid Date';
+      if (isNaN(time.getTime())) return "Invalid Date";
 
       const diffMs = now - time;
       const diffSecs = Math.floor(diffMs / 1000);
-      if (diffSecs < 0) return 'In the future';
-      if (diffSecs < 60) return `${diffSecs} second${diffSecs !== 1 ? 's' : ''} ago`;
+      if (diffSecs < 0) return "In the future";
+      if (diffSecs < 60)
+        return `${diffSecs} second${diffSecs !== 1 ? "s" : ""} ago`;
       const diffMins = Math.floor(diffSecs / 60);
-      if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+      if (diffMins < 60)
+        return `${diffMins} minute${diffMins !== 1 ? "s" : ""} ago`;
       const diffHours = Math.floor(diffMins / 60);
-      if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+      if (diffHours < 24)
+        return `${diffHours} hour${diffHours !== 1 ? "s" : ""} ago`;
       const diffDays = Math.floor(diffHours / 24);
-      return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+      return `${diffDays} day${diffDays !== 1 ? "s" : ""} ago`;
     } catch (e) {
-      return 'Invalid Date';
+      return "Invalid Date";
     }
   }, []);
 
@@ -54,7 +57,7 @@ export const useFormatting = () => {
    * @returns {string} Formatted RAM size in GB or 'Unknown'.
    */
   const formatRAMSize = useCallback((bytes) => {
-    if (!bytes) return 'Unknown';
+    if (!bytes) return "Unknown";
     const gb = parseInt(bytes) / (1024 * 1024 * 1024);
     return `${gb.toFixed(2)} GB`;
   }, []);
@@ -65,7 +68,7 @@ export const useFormatting = () => {
    * @returns {string} Formatted disk size in GB or 'Unknown'.
    */
   const formatDiskSize = useCallback((bytes) => {
-    if (!bytes) return 'Unknown';
+    if (!bytes) return "Unknown";
     const gb = parseInt(bytes) / (1024 * 1024 * 1024);
     return `${gb.toFixed(2)} GB`;
   }, []);
@@ -76,9 +79,9 @@ export const useFormatting = () => {
    * @returns {string} Color code ('#52c41a', '#faad14', or '#f5222d').
    */
   const getStatusColor = useCallback((value) => {
-    if (value < 60) return '#52c41a'; // Green
-    if (value < 80) return '#faad14'; // Yellow
-    return '#f5222d'; // Red
+    if (value < 60) return "#52c41a"; // Green
+    if (value < 80) return "#faad14"; // Yellow
+    return "#f5222d"; // Red
   }, []);
 
   return {

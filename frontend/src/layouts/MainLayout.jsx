@@ -12,7 +12,6 @@ import { Toaster, toast } from 'react-hot-toast';
 import Header from './Header';
 import { useSocket } from '../contexts/SocketContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 
 /**
  * NotificationHandler Component
@@ -27,7 +26,6 @@ const NotificationHandler = () => {
   const { socket, isSocketReady } = useSocket();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { copyToClipboard } = useCopyToClipboard();
 
   /**
    * Handles WebSocket events for system notifications
@@ -51,7 +49,7 @@ const NotificationHandler = () => {
      * @param {string} data.mfaCode - The MFA verification code
      * @param {Object} data.positionInfo - Information about the agent's location
      */
-    const handleNewMfa = (data) => {
+    const handleNewMfa = async (data) => {
       const positionInfoText = data.positionInfo ? 
         `Location: ${data.positionInfo.roomName || 'Unknown'}\nPosition: Row ${data.positionInfo.posY || '?'}, Column ${data.positionInfo.posX || '?'}` : 
         null;
@@ -59,10 +57,14 @@ const NotificationHandler = () => {
       toast(
         (t) => (
           <div 
-            onClick={() => {
-              copyToClipboard(data.mfaCode);
-              toast.dismiss(t.id);
-              toast.success('MFA code copied to clipboard!');
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(data.mfaCode);
+                toast.dismiss(t.id);
+                toast.success('MFA code copied to clipboard!');
+              } catch (err) {
+                toast.error('Failed to copy MFA code');
+              }
             }}
             className="cursor-pointer p-1"
           >
@@ -148,7 +150,7 @@ const NotificationHandler = () => {
         socket.off('admin:agent_registered', handleAgentRegistered);
       }
     };
-  }, [socket, isSocketReady, user?.role, navigate, copyToClipboard]);
+  }, [socket, isSocketReady, user?.role, navigate]);
 
   return null;
 };

@@ -1,187 +1,156 @@
 import api from './api';
 
 /**
- * In-memory token storage
+ * Store access token in memory.
+ * JWT access token should not be stored in localStorage for security reasons.
  */
 const tokenStorage = {
   token: null,
-  
   setToken(token) {
     this.token = token;
   },
-  
   getToken() {
     return this.token;
   },
-  
   clearToken() {
     this.token = null;
-  }
+  },
 };
 
 /**
- * User info storage in localStorage
- */
-const userStorage = {
-  setUserInfo(userData) {
-    const userInfo = {
-      id: userData.id,
-      username: userData.username,
-      role: userData.role,
-      is_active: userData.is_active,
-      expires_at: userData.expires_at
-    };
-    localStorage.setItem('userInfo', JSON.stringify(userInfo));
-  },
-  
-  getUserInfo() {
-    const storedData = localStorage.getItem('userInfo');
-    if (!storedData) return null;
-    try {
-      return JSON.parse(storedData);
-    } catch (error) {
-      console.error('Error parsing stored user info:', error);
-      return null;
-    }
-  },
-  
-  clearUserInfo() {
-    localStorage.removeItem('userInfo');
-  }
-};
-
-/**
- * Authentication service
+ * Authentication service.
+ * Handles login, logout, token refresh, and user information management.
  */
 class AuthService {
+  /**
+   * Getter for tokenStorage to be accessed by api.js.
+   */
   get tokenStorage() {
     return tokenStorage;
   }
 
   /**
-   * Refresh the access token
-   * @returns {Promise<Object>} Updated user data with new access token
+   * User login.
+   * @param {string} username - Username.
+   * @param {string} password - Password.
+   * @returns {Promise<Object>} User data including token.
+   * @throws {Error} If login fails.
+   * Successful response structure from API doc:
+   * {
+   * "status": "success",
+   * "data": {
+   * "id": "integer",
+   * "username": "string",
+   * "role": "string ('admin' or 'user')",
+   * "is_active": "boolean",
+   * "token": "string (JWT Access Token)",
+   * "expires_at": "string (ISO-8601 datetime)"
+   * }
+   * }
+   * Cookie `refreshToken` is set as HttpOnly by server.
+   */
+  async login(username, password) {
+    try {
+      const response = await api.post('/auth/login', { username, password });
+      if (response.data.status === 'success' && response.data.data.token) {
+        const userData = response.data.data;
+        tokenStorage.setToken(userData.token);
+        return userData;
+      }
+      throw new Error(response.data.message || 'Login unsuccessful.');
+    } catch (error) {
+      const errorMessage = error.extractedMessage || 'Login failed. Please check your credentials.';
+      console.error('Login error:', errorMessage, error);
+      throw new Error(errorMessage);
+    }
+  }
+
+  /**
+   * Refresh access token.
+   * API endpoint `/api/auth/refresh-token` uses HttpOnly refreshToken cookie.
+   * @returns {Promise<Object>} User data with new access token.
+   * Successful response structure from API doc:
+   * {
+   * "status": "success",
+   * "data": {
+   * "token": "string (new JWT Access Token)",
+   * "expires_at": "string (ISO-8601 datetime)"
+   * }
+   * }
+   * New `refreshToken` cookie is also set HttpOnly by server (token rotation).
+   * @throws {Error} If token refresh fails.
    */
   async refreshToken() {
     try {
-      const response = await api.post(`/auth/refresh-token`);
-      
+      const response = await api.post('/auth/refresh-token');
       if (response.data.status === 'success' && response.data.data.token) {
-        const newToken = response.data.data.token;
-        const userInfo = userStorage.getUserInfo();
-        
-        tokenStorage.setToken(newToken);
-        
-        return {
-          ...userInfo,
-          token: newToken,
-          expires_at: response.data.data.expires_at
-        };
+        const { token, expires_at } = response.data.data;
+        tokenStorage.setToken(token);
+        return { token, expires_at };
       }
-      
-      throw new Error('Invalid refresh token response');
+      throw new Error(response.data.message || 'Token refresh unsuccessful.');
     } catch (error) {
+      console.error('Token refresh error:', error.extractedMessage || error.message, error);
       throw error;
     }
   }
 
   /**
-   * Login user
-   * @param {string} username - Username
-   * @param {string} password - Password
-   * @returns {Promise<Object>} User data
-   */
-  async login(username, password) {
-    try {
-      const response = await api.post(`/auth/login`, {
-        username,
-        password
-      });
-      
-      if (response.data.status === 'success' && response.data.data.token) {
-        const userData = response.data.data;
-        
-        tokenStorage.setToken(userData.token);
-        userStorage.setUserInfo(userData);
-        
-        return userData;
-      }
-      
-      return null;
-    } catch (error) {
-      const errorMessage = error.extractedMessage || 'Login failed. Please check your credentials.';
-      console.error('Login error:', errorMessage);
-      throw new Error(errorMessage);
-    }
-  }
-
-  /**
-   * Logout user
+   * User logout.
+   * Calls `/api/auth/logout` API to invalidate refresh token on server.
+   * Clears token and user information on client side.
    */
   async logout() {
     try {
-      await api.post(`/auth/logout`);
+      await api.post('/auth/logout');
     } catch (error) {
-      console.error('Error during server logout:', error);
+      console.error('Server-side logout error (can be ignored if client cleanup is done):', error.extractedMessage || error.message);
     } finally {
       tokenStorage.clearToken();
-      userStorage.clearUserInfo();
     }
   }
 
   /**
-   * Handle refresh token error
+   * Handle refresh token error (e.g., expired or invalid refresh token).
+   * This function will logout the user and redirect to login page.
    */
   async handleRefreshTokenError() {
-    try {
-      await this.logout();
-    } catch (error) {
-      console.error('Error during logout after refresh token failure:', error);
-    } finally {
-      tokenStorage.clearToken();
-      userStorage.clearUserInfo();
-      
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
+    console.warn('Token refresh error. Logging out user.');
+    await this.logout();
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login';
     }
   }
 
   /**
-   * Get user profile
-   * @returns {Promise<Object>} User profile data
+   * Get current user profile information.
+   * API endpoint: `/api/auth/me`
+   * @returns {Promise<Object|null>} User profile data or null if failed.
+   * Successful response structure from API doc:
+   * {
+   * "status": "success",
+   * "data": {
+   * "id": "integer",
+   * "username": "string",
+   * "role": "string",
+   * "is_active": "boolean",
+   * "created_at": "string (ISO-8601 datetime)",
+   * "updated_at": "string (ISO-8601 datetime)"
+   * }
+   * }
    */
   async getProfile() {
     try {
-      const response = await api.get(`/auth/me`);
-      return response.data.status === 'success' ? response.data.data : null;
+      const response = await api.get('/auth/me');
+      if (response.data.status === 'success') {
+        return response.data.data;
+      }
+      return null;
     } catch (error) {
-      const errorMessage = error.extractedMessage || 'Failed to fetch user profile';
-      console.error('Profile error:', errorMessage);
-      throw new Error(errorMessage);
+      const errorMessage = error.extractedMessage || 'Failed to fetch user profile information.';
+      console.error('Profile fetch error:', errorMessage, error);
+      return null;
     }
-  }
-
-  /**
-   * Check if user is authenticated
-   * @returns {boolean} Authentication status
-   */
-  isAuthenticated() {
-    return !!this.getCurrentUser()?.token;
-  }
-  
-  /**
-   * Get current user data
-   * @returns {Object|null} User data
-   */
-  getCurrentUser() {
-    const userInfo = userStorage.getUserInfo();
-    if (!userInfo) return null;
-    
-    return {
-      ...userInfo,
-      token: tokenStorage.getToken()
-    };
   }
 }
 
