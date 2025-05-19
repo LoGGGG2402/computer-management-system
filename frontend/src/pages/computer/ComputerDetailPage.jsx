@@ -24,10 +24,9 @@ import {
 } from "@ant-design/icons";
 import computerService from "../../services/computer.service";
 import { useSocket } from "../../contexts/SocketContext";
-import ComputerCard from "../../components/computer/ComputerCard";
-import ComputerError from "../../components/computer/ComputerError";
+import ComputerDetail from "../../components/computer/ComputerDetail";
 import ComputerConsole from "../../components/computer/ComputerConsole";
-import { LoadingComponent } from "../../components/common";
+import { Loading } from "../../components/common";
 import { useSimpleFetch } from "../../hooks/useSimpleFetch";
 
 const { Title } = Typography;
@@ -96,15 +95,6 @@ const ComputerDetailPage = () => {
   }, [computerIdInt, subscribeToComputer, unsubscribeFromComputer, isSocketReady]);
 
   /**
-   * Triggers a refresh of computer details
-   * 
-   * @function
-   */
-  const handleRefresh = () => {
-    // refreshComputerDetails();
-  };
-
-  /**
    * Handles navigation to previous page
    * 
    * @function
@@ -138,30 +128,16 @@ const ComputerDetailPage = () => {
       children: (
         <div className="computer-overview">
           {computer && (
-            <ComputerCard
+            <ComputerDetail
               computer={computer}
               isOnline={isOnline}
               cpuUsage={computerStatus?.cpuUsage || 0}
               ramUsage={computerStatus?.ramUsage || 0}
               diskUsage={computerStatus?.diskUsage || computer?.disk_usage || 0}
-              onRefresh={handleRefresh}
+              onRefresh={refreshComputerDetails}
             />
           )}
         </div>
-      ),
-    },
-    {
-      key: "errors",
-      label: (
-        <span>
-          <ExclamationCircleOutlined /> Errors
-        </span>
-      ),
-      children: (
-        <ComputerError
-          computerId={computerIdInt}
-          onRefresh={handleRefresh}
-        />
       ),
     },
     {
@@ -180,11 +156,11 @@ const ComputerDetailPage = () => {
         />
       ),
     },
-  ], [computerIdInt, computer, isOnline, computerStatus, handleRefresh]);
+  ], [computerIdInt, computer, isOnline, computerStatus, refreshComputerDetails]);
 
   if (loading) {
     return (
-      <LoadingComponent
+      <Loading
         tip="Loading computer details..."
         type="section"
         size="large"
@@ -221,7 +197,7 @@ const ComputerDetailPage = () => {
           </Space>
         }
         extra={
-          <Button onClick={handleRefresh} disabled={loading}>
+          <Button onClick={refreshComputerDetails} disabled={loading}>
             Refresh
           </Button>
         }

@@ -12,7 +12,7 @@ import { DesktopOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import SimpleComputerCard from '../../components/computer/SimpleComputerCard';
 import computerService from '../../services/computer.service';
-import { LoadingComponent } from '../../components/common';
+import { Loading } from '../../components/common';
 
 const { Title } = Typography;
 
@@ -197,7 +197,7 @@ const ComputersListPage = () => {
         }
       >
         {loading ? (
-          <LoadingComponent type="section" tip="Loading computers list..." />
+          <Loading type="section" tip="Loading computers list..." />
         ) : (
           <>
             <Row gutter={[16, 16]}>

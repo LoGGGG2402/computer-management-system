@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LoadingComponent } from '../components/common';
+import { Loading } from '../components/common';
 
 /**
  * Login Page Component
@@ -144,7 +144,7 @@ const LoginPage = () => {
             disabled={loading}
           >
             {loading ? (
-              <LoadingComponent type="inline" size="small" tip="" />
+              <Loading type="inline" size="small" tip="" />
             ) : 'Sign In'}
           </button>
         </form>

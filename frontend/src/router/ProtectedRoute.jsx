@@ -1,6 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LoadingComponent } from '../components/common';
+import { Loading } from '../components/common';
 
 /**
  * Protected Route component that requires authentication
@@ -11,7 +11,7 @@ const ProtectedRoute = () => {
   
   // Show loading state while checking authentication
   if (loading) {
-    return <LoadingComponent />;
+    return <Loading />;
   }
   
   // Redirect to login if not authenticated
@@ -32,7 +32,7 @@ const AdminRoute = () => {
   
   // Show loading state while checking authentication
   if (loading) {
-    return <LoadingComponent />;
+    return <Loading />;
   }
   
   // Redirect to login if not authenticated
@@ -58,7 +58,7 @@ const PublicRoute = () => {
   
   // Show loading state while checking authentication
   if (loading) {
-    return <LoadingComponent />;
+    return <Loading />;
   }
   
   // Redirect to dashboard if already authenticated

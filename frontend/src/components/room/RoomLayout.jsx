@@ -10,7 +10,7 @@ import React from 'react';
 import { Row, Col, Card, Empty, Badge } from 'antd';
 import { DesktopOutlined } from '@ant-design/icons';
 import SimpleComputerCard, { cardStyle } from '../computer/SimpleComputerCard';
-import { LoadingComponent } from '../../components/common';
+import { Loading } from '../../components/common';
 
 /**
  * RoomLayout Component
@@ -27,7 +27,7 @@ import { LoadingComponent } from '../../components/common';
 const RoomLayout = ({ computers, room }) => {
 
   if (!computers || !room) {
-    return <LoadingComponent type="inline" tip="Đang tải giao diện phòng..." />;
+    return <Loading type="inline" tip="Đang tải giao diện phòng..." />;
   }
 
   if (!room.layout) {

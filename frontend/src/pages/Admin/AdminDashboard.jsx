@@ -18,7 +18,7 @@ import {
   InfoCircleOutlined
 } from '@ant-design/icons';
 import adminService from '../../services/admin.service';
-import { LoadingComponent } from '../../components/common';
+import { Loading } from '../../components/common';
 import { useSimpleFetch } from '../../hooks/useSimpleFetch';
 import { useFormatting } from '../../hooks/useFormatting';
 
@@ -71,7 +71,7 @@ const AdminDashboard = () => {
           <Card className="shadow-md hover:shadow-lg transition-shadow">
             <Statistic
               title="Total Users"
-              value={loading ? <LoadingComponent type="inline" size="small" tip="" /> : displayStats.totalUsers}
+              value={loading ? <Loading type="inline" size="small" tip="" /> : displayStats.totalUsers}
               prefix={<TeamOutlined />}
             />
           </Card>
@@ -81,7 +81,7 @@ const AdminDashboard = () => {
           <Card className="shadow-md hover:shadow-lg transition-shadow">
             <Statistic
               title="Total Rooms"
-              value={loading ? <LoadingComponent type="inline" size="small" tip="" /> : displayStats.totalRooms}
+              value={loading ? <Loading type="inline" size="small" tip="" /> : displayStats.totalRooms}
               prefix={<BankOutlined />}
             />
           </Card>
@@ -91,7 +91,7 @@ const AdminDashboard = () => {
           <Card className="shadow-md hover:shadow-lg transition-shadow">
             <Statistic
               title="Total Computers"
-              value={loading ? <LoadingComponent type="inline" size="small" tip="" /> : displayStats.totalComputers}
+              value={loading ? <Loading type="inline" size="small" tip="" /> : displayStats.totalComputers}
               prefix={<DesktopOutlined />}
             />
           </Card>
@@ -101,7 +101,7 @@ const AdminDashboard = () => {
           <Card className="shadow-md hover:shadow-lg transition-shadow">
             <Statistic
               title="Computers with Errors"
-              value={loading ? <LoadingComponent type="inline" size="small" tip="" /> : displayStats.computersWithErrors}
+              value={loading ? <Loading type="inline" size="small" tip="" /> : displayStats.computersWithErrors}
               prefix={<WarningOutlined />}
               valueStyle={{ color: displayStats.computersWithErrors > 0 ? '#cf1322' : undefined }}
             />
@@ -116,7 +116,7 @@ const AdminDashboard = () => {
               <Card bordered={false}>
                 <Statistic
                   title="Online Computers"
-                  value={loading ? <LoadingComponent type="inline" size="small" tip="" /> : displayStats.onlineComputers}
+                  value={loading ? <Loading type="inline" size="small" tip="" /> : displayStats.onlineComputers}
                   prefix={<CloudServerOutlined style={{ color: '#3f8600' }} />}
                   suffix={`/ ${displayStats.totalComputers}`}
                 />
@@ -136,7 +136,7 @@ const AdminDashboard = () => {
               <Card bordered={false}>
                 <Statistic
                   title="Offline Computers"
-                  value={loading ? <LoadingComponent type="inline" size="small" tip="" /> : displayStats.offlineComputers}
+                  value={loading ? <Loading type="inline" size="small" tip="" /> : displayStats.offlineComputers}
                   prefix={<ApiOutlined style={{ color: '#cf1322' }} />}
                   suffix={`/ ${displayStats.totalComputers}`}
                 />
@@ -159,10 +159,10 @@ const AdminDashboard = () => {
         <Card 
           title={<><WarningOutlined style={{ color: '#faad14', marginRight: 8 }} /> Unresolved Errors</>} 
           className="shadow-md hover:shadow-lg transition-shadow"
-          extra={loading ? <LoadingComponent type="inline" size="small" tip="" /> : <Tag color="volcano">{unresolvedErrors.length} Active</Tag>}
+          extra={loading ? <Loading type="inline" size="small" tip="" /> : <Tag color="volcano">{unresolvedErrors.length} Active</Tag>}
         >
           {loading ? (
-            <LoadingComponent tip="Loading errors..." />
+            <Loading tip="Loading errors..." />
           ) : unresolvedErrors.length === 0 ? (
             <Text type="secondary">No unresolved errors found.</Text>
           ) : (

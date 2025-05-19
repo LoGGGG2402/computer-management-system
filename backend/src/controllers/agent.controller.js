@@ -109,7 +109,7 @@ class AgentController {
       if (errors.length > 0) {
         return res.status(400).json({
           status: "position_error",
-          message: "Validation failed",
+          message: errors[0].message,
           errors,
         });
       }
@@ -213,7 +213,7 @@ class AgentController {
       if (errors.length > 0) {
         return res.status(400).json({
           status: "error",
-          message: "Validation failed",
+          message: errors[0].message,
           errors,
         });
       }
@@ -366,7 +366,7 @@ class AgentController {
     if (errors.length > 0) {
       return res.status(400).json({
         status: "error",
-        message: "Validation failed",
+        message: errors[0].message,
         errors,
       });
     }
@@ -466,7 +466,7 @@ class AgentController {
     if (errors.length > 0) {
       return res.status(400).json({
         status: "error",
-        message: "Validation failed",
+        message: errors[0].message,
         errors,
       });
     }
@@ -543,7 +543,7 @@ class AgentController {
     if (errors.length > 0) {
       return res.status(400).json({
         status: "error",
-        message: "Validation failed",
+        message: errors[0].message,
         errors,
       });
     }
@@ -619,7 +619,7 @@ class AgentController {
     if (errors.length > 0) {
       return res.status(400).json({
         status: "error",
-        message: "Validation failed",
+        message: errors[0].message,
         errors,
       });
     }

@@ -7,15 +7,16 @@
  * 
  * @module RoomsListPage
  */
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Card, Button, Modal, Typography, message } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import RoomList from '../../components/room/RoomList';
+import DataList from '../../components/common/DataList';
 import RoomForm from '../../components/room/RoomForm';
 import { useAuth } from '../../contexts/AuthContext';
-import { LoadingComponent } from '../../components/common';
+import { Loading } from '../../components/common';
 import roomService from '../../services/room.service';
+import userService from '../../services/user.service';
 import { useModalState } from '../../hooks/useModalState';
 import { useSimpleFetch } from '../../hooks/useSimpleFetch';
 
@@ -36,6 +37,13 @@ const { Title } = Typography;
  * @returns {React.ReactElement} The rendered RoomsListPage component
  */
 const RoomsListPage = () => {
+  const { isAdmin } = useAuth();
+  const navigate = useNavigate();
+
+  // State for filters and pagination
+  const [filters, setFilters] = useState({ name: '', assigned_user_id: null });
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
+
   const {
     isModalVisible,
     selectedItem: selectedRoom,
@@ -45,9 +53,52 @@ const RoomsListPage = () => {
     setSelectedItem,
   } = useModalState();
 
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const { isAdmin } = useAuth();
-  const navigate = useNavigate();
+  // Fetch users for filter dropdown (only for admin)
+  const { data: usersData, loading: usersLoading } = useSimpleFetch(
+    userService.getAllUsers,
+    [isAdmin],
+    { manual: !isAdmin, errorMessage: 'Failed to fetch users' }
+  );
+
+  const users = useMemo(() => 
+    usersData?.users || usersData?.data?.users || usersData?.data || usersData || [], 
+    [usersData]
+  );
+
+  // Fetch rooms using useSimpleFetch
+  const fetchRoomsCallback = useCallback(async () => {
+    const params = {
+      page: pagination.current,
+      limit: pagination.pageSize,
+      ...(filters.name && { name: filters.name }),
+      ...(filters.assigned_user_id && { assigned_user_id: filters.assigned_user_id }),
+    };
+    return await roomService.getAllRooms(params);
+  }, [pagination.current, pagination.pageSize, filters.name, filters.assigned_user_id]);
+
+  const { 
+    data: roomsResponse, 
+    loading: roomsLoading, 
+    error: roomsError, 
+    refresh: fetchRooms 
+  } = useSimpleFetch(
+    fetchRoomsCallback,
+    [fetchRoomsCallback],
+    { errorMessage: 'Failed to fetch rooms' }
+  );
+
+  // Update pagination total when roomsResponse changes
+  React.useEffect(() => {
+    if (roomsResponse) {
+      const totalRooms = roomsResponse?.total || roomsResponse?.data?.total || roomsResponse?.data?.rooms?.length || roomsResponse?.rooms?.length || (Array.isArray(roomsResponse) ? roomsResponse.length : 0);
+      setPagination(prev => ({ ...prev, total: totalRooms }));
+    }
+  }, [roomsResponse]);
+
+  const rooms = useMemo(() => {
+    return Array.isArray(roomsResponse) ? roomsResponse :
+           roomsResponse?.data?.rooms || roomsResponse?.rooms || roomsResponse?.data || [];
+  }, [roomsResponse]);
 
   const { loading: isModalLoading, executeFetch: fetchRoomDetailsForEdit } = useSimpleFetch(
     roomService.getRoomById,
@@ -64,6 +115,27 @@ const RoomsListPage = () => {
       },
     }
   );
+
+  const handleTableChange = (newPagination) => {
+    setPagination(prev => ({
+      ...prev,
+      current: newPagination.current,
+      pageSize: newPagination.pageSize,
+    }));
+  };
+
+  const handleSearch = (values) => {
+    setFilters({
+      name: values.name || '',
+      assigned_user_id: values.assigned_user_id || null
+    });
+    setPagination(prev => ({ ...prev, current: 1 }));
+  };
+
+  const handleReset = () => {
+    setFilters({ name: '', assigned_user_id: null });
+    setPagination(prev => ({ ...prev, current: 1 }));
+  };
 
   /**
    * Handles opening the modal for creating a new room
@@ -102,7 +174,7 @@ const RoomsListPage = () => {
    */
   const handleSuccess = () => {
     closeModal();
-    setRefreshTrigger(prev => prev + 1);
+    fetchRooms();
     message.success(`Room ${modalAction === 'create' ? 'created' : 'updated'} successfully`);
   };
 
@@ -133,10 +205,20 @@ const RoomsListPage = () => {
           )
         }
       >
-        <RoomList 
-          onEdit={handleEdit} 
+        <DataList 
+          type="room"
+          data={rooms}
+          loading={roomsLoading}
+          error={roomsError}
+          pagination={pagination}
+          filters={filters}
+          filterOptions={users}
+          filterOptionsLoading={usersLoading}
+          onTableChange={handleTableChange}
+          onSearch={handleSearch}
+          onReset={handleReset}
+          onEdit={handleEdit}
           onView={handleView}
-          refreshTrigger={refreshTrigger} 
         />
       </Card>
 
@@ -148,7 +230,7 @@ const RoomsListPage = () => {
         width={600}
       >
         {isModalLoading ? (
-          <LoadingComponent type="section" tip="Loading room data..." />
+          <Loading type="section" tip="Loading room data..." />
         ) : (
           <RoomForm
             initialValues={selectedRoom}

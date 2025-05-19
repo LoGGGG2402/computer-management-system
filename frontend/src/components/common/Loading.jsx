@@ -16,7 +16,7 @@ const { Text } = Typography;
  * @param {Object} [props.style] - Additional custom styles to apply
  * @param {string} [props.className] - Additional CSS classes to apply
  */
-const LoadingComponent = ({
+const Loading = ({
   tip = 'Đang tải...',
   size = 'default',
   type = 'section',
@@ -78,4 +78,4 @@ const LoadingComponent = ({
   );
 };
 
-export default LoadingComponent;
+export default Loading;

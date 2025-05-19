@@ -107,7 +107,7 @@ class ComputerController {
       if (errors.length > 0) {
         return res.status(400).json({
           status: "error",
-          message: "Validation failed",
+          message: errors[0].message,
           errors,
         });
       }
@@ -400,7 +400,7 @@ class ComputerController {
       if (errors.length > 0) {
         return res.status(400).json({
           status: "error",
-          message: "Validation failed",
+          message: errors[0].message,
           errors,
         });
       }
@@ -497,7 +497,7 @@ class ComputerController {
       if (errors.length > 0) {
         return res.status(400).json({
           status: "error",
-          message: "Validation failed",
+          message: errors[0].message,
           errors,
         });
       }

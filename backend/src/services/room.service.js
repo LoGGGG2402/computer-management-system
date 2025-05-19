@@ -1,4 +1,5 @@
 const db = require("../database/models");
+const { Op } = require("sequelize");
 
 const Room = db.Room;
 const User = db.User;
@@ -108,6 +109,7 @@ class RoomService {
         offset,
         order: [["id", "ASC"]],
       });
+
 
       return {
         total: count,

@@ -20,7 +20,7 @@ import AssignmentComponent from '../../components/admin/AssignmentComponent';
 import roomService from '../../services/room.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCommandHandle } from '../../contexts/CommandHandleContext';
-import { LoadingComponent } from '../../components/common';
+import { Loading } from '../../components/common';
 import { useSimpleFetch } from '../../hooks/useSimpleFetch';
 import { useModalState } from '../../hooks/useModalState';
 import { useFormatting } from '../../hooks/useFormatting';
@@ -176,7 +176,7 @@ const RoomDetailPage = () => {
   */
 
   if (loading && !room) {
-    return <LoadingComponent type="section" tip="Loading room information..." />;
+    return <Loading type="section" tip="Loading room information..." />;
   }
 
   if (error || !room) {

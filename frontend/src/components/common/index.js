@@ -1,1 +1,2 @@
-export { default as LoadingComponent } from './LoadingComponent';
+export { default as Loading } from './Loading';
+export { default as DataList } from './DataList';

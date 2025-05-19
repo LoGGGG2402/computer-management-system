@@ -6,7 +6,7 @@
  * 
  * @module Dashboard
  */
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 
 /**

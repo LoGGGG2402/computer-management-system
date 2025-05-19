@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Transfer, Button, message } from 'antd';
 import roomService from '../../services/room.service';
 import userService from '../../services/user.service';
-import { LoadingComponent } from '../common';
+import { Loading } from '../common';
 import { useSimpleFetch } from '../../hooks/useSimpleFetch';
 
 const AssignmentComponent = ({ type, id, onSuccess }) => {
@@ -101,7 +101,7 @@ const AssignmentComponent = ({ type, id, onSuccess }) => {
   return (
     <div className="assignment-component">
       {loading ? (
-        <LoadingComponent type="section" tip="Loading assignment data..." />
+        <Loading type="section" tip="Loading assignment data..." />
       ) : (
         <>
           <Transfer
