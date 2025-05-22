@@ -1,75 +1,75 @@
- // CMSAgent.Service/Configuration/Manager/IRuntimeConfigManager.cs
+// CMSAgent.Service/Configuration/Manager/IRuntimeConfigManager.cs
 using CMSAgent.Service.Configuration.Models; // For RuntimeConfig
 using System.Threading.Tasks;
 
 namespace CMSAgent.Service.Configuration.Manager
 {
     /// <summary>
-    /// Interface định nghĩa các phương thức để quản lý cấu hình runtime của Agent (runtime_config.json).
+    /// Interface defining methods to manage Agent's runtime configuration (runtime_config.json).
     /// </summary>
     public interface IRuntimeConfigManager
     {
         /// <summary>
-        /// Tải cấu hình runtime từ file.
-        /// Nếu file không tồn tại hoặc có lỗi, một cấu hình mặc định (hoặc rỗng) có thể được trả về.
+        /// Load runtime configuration from file.
+        /// If file doesn't exist or has errors, a default (or empty) configuration may be returned.
         /// </summary>
-        /// <returns>Đối tượng RuntimeConfig đã được tải, hoặc một instance mới nếu không tải được.</returns>
+        /// <returns>Loaded RuntimeConfig object, or a new instance if loading fails.</returns>
         Task<RuntimeConfig> LoadConfigAsync();
 
         /// <summary>
-        /// Lưu đối tượng RuntimeConfig hiện tại vào file.
+        /// Save the current RuntimeConfig object to file.
         /// </summary>
-        /// <param name="config">Đối tượng RuntimeConfig cần lưu.</param>
-        /// <returns>True nếu lưu thành công, ngược lại False.</returns>
+        /// <param name="config">RuntimeConfig object to save.</param>
+        /// <returns>True if save successful, False otherwise.</returns>
         Task<bool> SaveConfigAsync(RuntimeConfig config);
 
         /// <summary>
-        /// Lấy Agent ID hiện tại từ cấu hình.
+        /// Get current Agent ID from configuration.
         /// </summary>
-        /// <returns>Agent ID hoặc null nếu chưa được cấu hình.</returns>
+        /// <returns>Agent ID or null if not configured.</returns>
         Task<string?> GetAgentIdAsync();
 
         /// <summary>
-        /// Lấy token đã mã hóa của Agent từ cấu hình.
+        /// Get Agent's encrypted token from configuration.
         /// </summary>
-        /// <returns>Token đã mã hóa hoặc null nếu chưa có.</returns>
+        /// <returns>Encrypted token or null if not available.</returns>
         Task<string?> GetEncryptedAgentTokenAsync();
 
         /// <summary>
-        /// Lấy thông tin vị trí (RoomConfig) của Agent.
+        /// Get Agent's position information (RoomConfig).
         /// </summary>
-        /// <returns>Đối tượng PositionInfo hoặc null nếu chưa được cấu hình.</returns>
+        /// <returns>PositionInfo object or null if not configured.</returns>
         Task<PositionInfo?> GetPositionInfoAsync();
 
         /// <summary>
-        /// Cập nhật Agent ID trong cấu hình và lưu lại.
+        /// Update Agent ID in configuration and save.
         /// </summary>
-        /// <param name="agentId">Agent ID mới.</param>
+        /// <param name="agentId">New Agent ID.</param>
         Task UpdateAgentIdAsync(string agentId);
 
         /// <summary>
-        /// Cập nhật token đã mã hóa và lưu lại.
+        /// Update encrypted token and save.
         /// </summary>
-        /// <param name="encryptedToken">Token đã mã hóa mới.</param>
+        /// <param name="encryptedToken">New encrypted token.</param>
         Task UpdateEncryptedAgentTokenAsync(string encryptedToken);
 
         /// <summary>
-        /// Cập nhật thông tin vị trí và lưu lại.
+        /// Update position information and save.
         /// </summary>
-        /// <param name="positionInfo">Thông tin vị trí mới.</param>
+        /// <param name="positionInfo">New position information.</param>
         Task UpdatePositionInfoAsync(PositionInfo positionInfo);
 
         /// <summary>
-        /// Lấy đường dẫn đầy đủ đến thư mục gốc lưu trữ dữ liệu của Agent trong ProgramData
-        /// (ví dụ: C:\ProgramData\CMSAgent).
+        /// Get full path to Agent's root data storage directory in ProgramData
+        /// (e.g., C:\ProgramData\CMSAgent).
         /// </summary>
-        /// <returns>Đường dẫn đến thư mục ProgramData của Agent.</returns>
+        /// <returns>Path to Agent's ProgramData directory.</returns>
         string GetAgentProgramDataPath();
 
         /// <summary>
-        /// Lấy đường dẫn đầy đủ đến file runtime_config.json.
+        /// Get full path to runtime_config.json file.
         /// </summary>
-        /// <returns>Đường dẫn đến file runtime_config.json.</returns>
+        /// <returns>Path to runtime_config.json file.</returns>
         string GetRuntimeConfigFilePath();
     }
 }

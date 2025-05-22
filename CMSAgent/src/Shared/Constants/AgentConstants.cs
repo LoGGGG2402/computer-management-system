@@ -19,8 +19,9 @@ namespace CMSAgent.Shared.Constants
         // --- Service Name ---
         /// <summary>
         /// The service name of CMSAgent to be registered in Windows Services.
+        /// This name is used by both the Agent Service and the Updater to identify and control the service.
         /// </summary>
-        public const string ServiceName = "CMSAgentService";
+        public const string ServiceName = "CMSAgent";
 
         /// <summary>
         /// The display name of CMSAgent Service in Windows Services.
@@ -97,5 +98,36 @@ namespace CMSAgent.Shared.Constants
         /// Default timeout (seconds) for waiting for a process to exit.
         /// </summary>
         public const int DefaultProcessWaitForExitTimeoutSeconds = 60;
+
+        /// <summary>
+        /// Default timeout (seconds) for waiting for process output/error streams to close.
+        /// </summary>
+        public const int DefaultProcessStreamCloseTimeoutSeconds = 5;
+
+        /// <summary>
+        /// Default period (seconds) for monitoring new agent service stability after update.
+        /// </summary>
+        public const int DefaultNewAgentWatchdogPeriodSeconds = 120;
+
+        /// <summary>
+        /// Exit codes for command execution results.
+        /// </summary>
+        public static class CommandExitCodes
+        {
+            /// <summary>
+            /// Command execution timed out
+            /// </summary>
+            public const int Timeout = -1;
+
+            /// <summary>
+            /// Command execution was cancelled
+            /// </summary>
+            public const int Cancelled = -2;
+
+            /// <summary>
+            /// General unexpected error during command execution
+            /// </summary>
+            public const int GeneralError = -99;
+        }
     }
 }

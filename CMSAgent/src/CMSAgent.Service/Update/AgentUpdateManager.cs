@@ -14,7 +14,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using CMSAgent.Service.Configuration.Manager; // For IRuntimeConfigManager (để lấy AgentProgramDataPath)
+using CMSAgent.Service.Configuration.Manager; // For IRuntimeConfigManager (to get AgentProgramDataPath)
 
 
 namespace CMSAgent.Service.Update
@@ -24,10 +24,10 @@ namespace CMSAgent.Service.Update
         private readonly ILogger<AgentUpdateManager> _logger;
         private readonly AppSettings _appSettings;
         private readonly IAgentApiClient _apiClient;
-        private readonly IAgentSocketClient _socketClient; // Để gửi agent:update_status
+        private readonly IAgentSocketClient _socketClient; // To send agent:update_status
         private readonly IVersionIgnoreManager _versionIgnoreManager;
-        private readonly IRuntimeConfigManager _runtimeConfigManager; // Để lấy AgentProgramDataPath
-        private readonly Func<Task> _requestServiceShutdown; // Action để yêu cầu service tự dừng
+        private readonly IRuntimeConfigManager _runtimeConfigManager; // To get AgentProgramDataPath
+        private readonly Func<Task> _requestServiceShutdown; // Action to request service shutdown
 
         private static readonly SemaphoreSlim _updateLock = new SemaphoreSlim(1, 1);
         private volatile bool _isUpdateInProgress = false;
@@ -57,7 +57,7 @@ namespace CMSAgent.Service.Update
             _agentProgramDataPath = _runtimeConfigManager.GetAgentProgramDataPath();
             if (string.IsNullOrWhiteSpace(_agentProgramDataPath))
             {
-                var errorMsg = "Không thể xác định AgentProgramDataPath từ RuntimeConfigManager.";
+                var errorMsg = "Cannot determine AgentProgramDataPath from RuntimeConfigManager.";
                 _logger.LogCritical(errorMsg);
                 throw new InvalidOperationException(errorMsg);
             }
@@ -67,27 +67,27 @@ namespace CMSAgent.Service.Update
         {
             if (string.IsNullOrWhiteSpace(currentAgentVersion))
             {
-                _logger.LogError("Phiên bản Agent hiện tại không được cung cấp. Không thể kiểm tra cập nhật.");
+                _logger.LogError("Current Agent version not provided. Cannot check for updates.");
                 return;
             }
 
-            _logger.LogInformation("Đang kiểm tra cập nhật cho phiên bản Agent: {CurrentVersion}", currentAgentVersion);
+            _logger.LogInformation("Checking for updates for Agent version: {CurrentVersion}", currentAgentVersion);
             UpdateNotification? updateInfo = await _apiClient.CheckForUpdatesAsync(currentAgentVersion, cancellationToken);
 
             if (cancellationToken.IsCancellationRequested)
             {
-                _logger.LogInformation("Kiểm tra cập nhật bị hủy bỏ.");
+                _logger.LogInformation("Update check cancelled.");
                 return;
             }
 
             if (updateInfo != null && updateInfo.UpdateAvailable && !string.IsNullOrWhiteSpace(updateInfo.Version))
             {
-                _logger.LogInformation("Có phiên bản mới: {NewVersion}. Đang xử lý thông báo cập nhật.", updateInfo.Version);
+                _logger.LogInformation("New version available: {NewVersion}. Processing update notification.", updateInfo.Version);
                 await ProcessUpdateNotificationAsync(updateInfo, cancellationToken);
             }
             else
             {
-                _logger.LogInformation("Không có bản cập nhật mới hoặc thông tin cập nhật không hợp lệ.");
+                _logger.LogInformation("No new updates available or update information is invalid.");
             }
         }
 
@@ -95,21 +95,21 @@ namespace CMSAgent.Service.Update
         {
             if (updateNotification == null || string.IsNullOrWhiteSpace(updateNotification.Version) || string.IsNullOrWhiteSpace(updateNotification.DownloadUrl) || string.IsNullOrWhiteSpace(updateNotification.ChecksumSha256))
             {
-                _logger.LogError("Thông báo cập nhật không hợp lệ hoặc thiếu thông tin.");
+                _logger.LogError("Invalid update notification or missing information.");
                 return;
             }
 
-            _logger.LogInformation("Đang xử lý thông báo cập nhật cho phiên bản: {NewVersion}", updateNotification.Version);
+            _logger.LogInformation("Processing update notification for version: {NewVersion}", updateNotification.Version);
 
             if (_versionIgnoreManager.IsVersionIgnored(updateNotification.Version))
             {
-                _logger.LogWarning("Phiên bản {NewVersion} đang nằm trong danh sách bỏ qua. Hủy quá trình cập nhật.", updateNotification.Version);
+                _logger.LogWarning("Version {NewVersion} is in the ignore list. Cancelling update process.", updateNotification.Version);
                 return;
             }
 
-            if (!await _updateLock.WaitAsync(TimeSpan.Zero, cancellationToken)) // Thử lock ngay lập tức
+            if (!await _updateLock.WaitAsync(TimeSpan.Zero, cancellationToken)) // Try to lock immediately
             {
-                _logger.LogWarning("Một quá trình cập nhật khác đang diễn ra. Bỏ qua yêu cầu cập nhật cho phiên bản {NewVersion}.", updateNotification.Version);
+                _logger.LogWarning("Another update process is in progress. Ignoring update request for version {NewVersion}.", updateNotification.Version);
                 return;
             }
 
@@ -119,73 +119,73 @@ namespace CMSAgent.Service.Update
                 await NotifyUpdateStatusAsync("update_started", updateNotification.Version, null);
 
                 string downloadDir = Path.Combine(_agentProgramDataPath, AgentConstants.UpdatesSubFolderName, AgentConstants.UpdateDownloadSubFolderName);
-                Directory.CreateDirectory(downloadDir); // Đảm bảo thư mục tồn tại
-                string downloadedPackagePath = Path.Combine(downloadDir, $"CMSAgent_v{updateNotification.Version}.zip"); // Tên file ví dụ
+                Directory.CreateDirectory(downloadDir); // Ensure directory exists
+                string downloadedPackagePath = Path.Combine(downloadDir, $"CMSAgent_v{updateNotification.Version}.zip"); // Example filename
 
-                // 1. Tải gói cập nhật
-                _logger.LogInformation("Đang tải gói cập nhật từ: {DownloadUrl}", updateNotification.DownloadUrl);
+                // 1. Download update package
+                _logger.LogInformation("Downloading update package from: {DownloadUrl}", updateNotification.DownloadUrl);
                 bool downloadSuccess = await _apiClient.DownloadAgentPackageAsync(Path.GetFileName(updateNotification.DownloadUrl), downloadedPackagePath, cancellationToken);
                 if (!downloadSuccess || cancellationToken.IsCancellationRequested)
                 {
-                    await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeDownloadFailed, "Không thể tải gói cập nhật.", updateNotification.Version);
+                    await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeDownloadFailed, "Cannot download update package.", updateNotification.Version);
                     return;
                 }
-                _logger.LogInformation("Tải gói cập nhật thành công: {FilePath}", downloadedPackagePath);
+                _logger.LogInformation("Update package downloaded successfully: {FilePath}", downloadedPackagePath);
 
-                // 2. Xác minh Checksum
-                _logger.LogInformation("Đang xác minh checksum cho: {FilePath}", downloadedPackagePath);
+                // 2. Verify Checksum
+                _logger.LogInformation("Verifying checksum for: {FilePath}", downloadedPackagePath);
                 string? calculatedChecksum = await FileUtils.CalculateSha256ChecksumAsync(downloadedPackagePath);
                 if (string.IsNullOrWhiteSpace(calculatedChecksum) || !calculatedChecksum.Equals(updateNotification.ChecksumSha256, StringComparison.OrdinalIgnoreCase))
                 {
-                    await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeChecksumMismatch, $"Checksum không khớp. Expected: {updateNotification.ChecksumSha256}, Calculated: {calculatedChecksum}", updateNotification.Version);
-                    FileUtils.TryDeleteFile(downloadedPackagePath, _logger); // Xóa file lỗi
+                    await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeChecksumMismatch, $"Checksum mismatch. Expected: {updateNotification.ChecksumSha256}, Calculated: {calculatedChecksum}", updateNotification.Version);
+                    FileUtils.TryDeleteFile(downloadedPackagePath, _logger); // Delete error file
                     return;
                 }
-                _logger.LogInformation("Xác minh checksum thành công.");
+                _logger.LogInformation("Checksum verification successful.");
 
-                // 3. Giải nén gói cập nhật
+                // 3. Extract update package
                 string extractDir = Path.Combine(_agentProgramDataPath, AgentConstants.UpdatesSubFolderName, AgentConstants.UpdateExtractedSubFolderName, updateNotification.Version);
-                if (Directory.Exists(extractDir)) // Xóa thư mục giải nén cũ nếu có
+                if (Directory.Exists(extractDir)) // Delete old extraction directory if exists
                 {
-                    _logger.LogInformation("Xóa thư mục giải nén cũ: {ExtractDir}", extractDir);
+                    _logger.LogInformation("Deleting old extraction directory: {ExtractDir}", extractDir);
                     Directory.Delete(extractDir, true);
                 }
                 Directory.CreateDirectory(extractDir);
-                _logger.LogInformation("Đang giải nén gói cập nhật vào: {ExtractDir}", extractDir);
+                _logger.LogInformation("Extracting update package to: {ExtractDir}", extractDir);
                 bool extractSuccess = await FileUtils.DecompressZipFileAsync(downloadedPackagePath, extractDir);
                 if (!extractSuccess || cancellationToken.IsCancellationRequested)
                 {
-                    await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeExtractionFailed, "Không thể giải nén gói cập nhật.", updateNotification.Version);
+                    await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeExtractionFailed, "Cannot extract update package.", updateNotification.Version);
                     FileUtils.TryDeleteFile(downloadedPackagePath, _logger);
                     return;
                 }
-                _logger.LogInformation("Giải nén gói cập nhật thành công.");
-                FileUtils.TryDeleteFile(downloadedPackagePath, _logger); // Xóa file zip sau khi giải nén
+                _logger.LogInformation("Update package extracted successfully.");
+                FileUtils.TryDeleteFile(downloadedPackagePath, _logger); // Delete zip file after extraction
 
-                // 4. Khởi chạy CMSUpdater.exe
-                _logger.LogInformation("Đang chuẩn bị khởi chạy CMSUpdater.exe cho phiên bản {NewVersion}", updateNotification.Version);
+                // 4. Launch CMSUpdater.exe
+                _logger.LogInformation("Preparing to launch CMSUpdater.exe for version {NewVersion}", updateNotification.Version);
                 bool updaterLaunched = await LaunchUpdaterAsync(extractDir, updateNotification.Version, cancellationToken);
                 if (!updaterLaunched || cancellationToken.IsCancellationRequested)
                 {
-                    await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeUpdateLaunchFailed, "Không thể khởi chạy CMSUpdater.exe.", updateNotification.Version);
+                    await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeUpdateLaunchFailed, "Cannot launch CMSUpdater.exe.", updateNotification.Version);
                     return;
                 }
-                _logger.LogInformation("CMSUpdater.exe đã được khởi chạy. Agent Service sẽ sớm dừng lại.");
+                _logger.LogInformation("CMSUpdater.exe has been launched. Agent Service will stop soon.");
 
-                // 5. Yêu cầu Agent Service tự dừng (graceful shutdown)
-                // AgentCoreOrchestrator sẽ xử lý việc này
+                // 5. Request Agent Service to stop (graceful shutdown)
+                // AgentCoreOrchestrator will handle this
                 await _requestServiceShutdown();
 
             }
             catch (OperationCanceledException)
             {
-                _logger.LogWarning("Quá trình cập nhật bị hủy bỏ cho phiên bản {NewVersion}.", updateNotification.Version);
-                await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeUpdateGeneralFailure, "Quá trình cập nhật bị hủy.", updateNotification.Version, false); // Không ignore version nếu do cancel
+                _logger.LogWarning("Update process cancelled for version {NewVersion}.", updateNotification.Version);
+                await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeUpdateGeneralFailure, "Update process cancelled.", updateNotification.Version, false); // Don't ignore version if cancelled
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi nghiêm trọng trong quá trình cập nhật phiên bản {NewVersion}.", updateNotification.Version);
-                await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeUpdateGeneralFailure, $"Lỗi không xác định: {ex.Message}", updateNotification.Version);
+                _logger.LogError(ex, "Critical error during update process for version {NewVersion}.", updateNotification.Version);
+                await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeUpdateGeneralFailure, $"Unknown error: {ex.Message}", updateNotification.Version);
             }
             finally
             {
@@ -196,41 +196,42 @@ namespace CMSAgent.Service.Update
 
         private async Task<bool> LaunchUpdaterAsync(string extractedUpdatePath, string newVersion, CancellationToken cancellationToken)
         {
-            string updaterExeName = "CMSUpdater.exe"; // Tên file thực thi của Updater
-            string updaterPathInNewPackage = Path.Combine(extractedUpdatePath, "Updater", updaterExeName); // Ưu tiên updater trong gói mới
-            string updaterPathInCurrentInstall = Path.Combine(AppContext.BaseDirectory, "Updater", updaterExeName); // Updater hiện tại
+            string updaterExeName = "CMSUpdater.exe"; // Updater executable filename
+            string updaterPathInNewPackage = Path.Combine(extractedUpdatePath, "Updater", updaterExeName); // Prefer updater in new package
+            string updaterPathInCurrentInstall = Path.Combine(AppContext.BaseDirectory, "Updater", updaterExeName); // Current updater
 
             string updaterToLaunch = File.Exists(updaterPathInNewPackage) ? updaterPathInNewPackage : updaterPathInCurrentInstall;
 
             if (!File.Exists(updaterToLaunch))
             {
-                _logger.LogError("Không tìm thấy CMSUpdater.exe tại '{Path1}' hoặc '{Path2}'.", updaterPathInNewPackage, updaterPathInCurrentInstall);
+                _logger.LogError("CMSUpdater.exe not found at '{Path1}' or '{Path2}'.", updaterPathInNewPackage, updaterPathInCurrentInstall);
                 return false;
             }
 
-            int currentAgentPid = Process.GetCurrentProcess().Id;
-            string arguments = $"-pid {currentAgentPid} -new-agent-version \"{newVersion}\"";
-            // Các tham số khác có thể được thêm vào nếu UpdaterConfig yêu cầu
-            // Ví dụ: -log-dir "đường_dẫn_log" -install-dir "đường_dẫn_cài_đặt_agent" -source-path "đường_dẫn_file_cập_nhật_đã_giải_nén"
+            string arguments = $"-new-version \"{newVersion}\" " +
+                             $"-old-version \"{_appSettings.AgentVersion}\" " +
+                             $"-source-path \"{extractedUpdatePath}\" " +
+                             $"-service-wait-timeout {_appSettings.ServiceWaitTimeoutSeconds} " +
+                             $"-watchdog-period {_appSettings.NewAgentWatchdogPeriodSeconds}";
 
-            _logger.LogInformation("Đang khởi chạy Updater: \"{UpdaterPath}\" với tham số: {Arguments}", updaterToLaunch, arguments);
+            _logger.LogInformation("Launching Updater: \"{UpdaterPath}\" with arguments: {Arguments}", updaterToLaunch, arguments);
 
             try
             {
-                // Khởi chạy Updater như một tiến trình riêng biệt, không chờ nó kết thúc.
+                // Launch Updater as a separate process, don't wait for it to finish
                 Process? updaterProcess = ProcessUtils.StartProcess(updaterToLaunch, arguments, Path.GetDirectoryName(updaterToLaunch), createNoWindow: true, useShellExecute: false);
 
-                if (updaterProcess == null || updaterProcess.HasExited) // Kiểm tra HasExited ngay có thể không chính xác nếu process vừa start
+                if (updaterProcess == null || updaterProcess.HasExited) // Checking HasExited immediately may not be accurate if process just started
                 {
-                    _logger.LogError("Không thể khởi chạy hoặc CMSUpdater.exe kết thúc ngay lập tức. PID: {PID}", updaterProcess?.Id);
+                    _logger.LogError("Cannot launch or CMSUpdater.exe exited immediately. PID: {PID}", updaterProcess?.Id);
                     return false;
                 }
-                _logger.LogInformation("CMSUpdater.exe đã được khởi chạy thành công với PID: {UpdaterPID}", updaterProcess.Id);
+                _logger.LogInformation("CMSUpdater.exe launched successfully with PID: {UpdaterPID}", updaterProcess.Id);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi khởi chạy CMSUpdater.exe.");
+                _logger.LogError(ex, "Error launching CMSUpdater.exe.");
                 return false;
             }
         }
@@ -239,7 +240,7 @@ namespace CMSAgent.Service.Update
         {
             if (!_socketClient.IsConnected)
             {
-                _logger.LogWarning("Không thể gửi trạng thái cập nhật '{Status}' cho phiên bản {TargetVersion}: WebSocket không kết nối.", status, targetVersion);
+                _logger.LogWarning("Cannot send update status '{Status}' for version {TargetVersion}: WebSocket not connected.", status, targetVersion);
                 return;
             }
             try
@@ -248,58 +249,45 @@ namespace CMSAgent.Service.Update
                 {
                     status = status,
                     target_version = targetVersion,
-                    message = message // Có thể null
+                    message = message
                 };
-                await _socketClient.SendUpdateStatusAsync(payload);
-                _logger.LogInformation("Đã gửi trạng thái cập nhật '{Status}' cho phiên bản {TargetVersion} lên server.", status, targetVersion);
+                await _socketClient.SendEventAsync("agent:update_status", payload);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi gửi trạng thái cập nhật '{Status}' cho phiên bản {TargetVersion}.", status, targetVersion);
+                _logger.LogError(ex, "Error sending update status '{Status}' for version {TargetVersion}.", status, targetVersion);
             }
         }
 
         private async Task ReportUpdateErrorAsync(string errorType, string errorMessage, string targetVersion)
         {
-            var errorReport = ErrorReportingUtils.CreateErrorReport(
-                errorType: errorType,
-                message: $"Lỗi cập nhật Agent lên phiên bản {targetVersion}: {errorMessage}",
-                customDetails: new { TargetVersion = targetVersion }
-            );
-            await _apiClient.ReportErrorAsync(errorReport); // Không cần await lâu vì đây là báo cáo lỗi
-            _logger.LogError("Đã báo cáo lỗi cập nhật loại '{ErrorType}' cho phiên bản {TargetVersion}: {ErrorMessage}", errorType, targetVersion, errorMessage);
+            try
+            {
+                var errorReport = new AgentErrorReport
+                {
+                    ErrorType = errorType,
+                    ErrorMessage = errorMessage,
+                    TargetVersion = targetVersion,
+                    Timestamp = DateTime.UtcNow
+                };
+                await _apiClient.ReportUpdateErrorAsync(errorReport);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reporting update error to server.");
+            }
         }
 
         private async Task HandleUpdateFailureAsync(string errorType, string errorMessage, string targetVersion, bool shouldIgnoreVersionOnError = true)
         {
-            _logger.LogError("Cập nhật thất bại! Loại lỗi: {ErrorType}, Phiên bản đích: {TargetVersion}, Thông điệp: {ErrorMessage}", errorType, targetVersion, errorMessage);
+            _logger.LogError("Update failed: {ErrorMessage}", errorMessage);
             await NotifyUpdateStatusAsync("update_failed", targetVersion, errorMessage);
             await ReportUpdateErrorAsync(errorType, errorMessage, targetVersion);
 
             if (shouldIgnoreVersionOnError)
             {
-                _logger.LogWarning("Thêm phiên bản {TargetVersion} vào danh sách bỏ qua do lỗi cập nhật.", targetVersion);
-                await _versionIgnoreManager.IgnoreVersionAsync(targetVersion);
-            }
-        }
-    }
-
-    // Extension method cho FileUtils (để tránh lặp code)
-    internal static class FileUtilsExtensions
-    {
-        public static void TryDeleteFile(string filePath, ILogger logger)
-        {
-            try
-            {
-                if (File.Exists(filePath))
-                {
-                    File.Delete(filePath);
-                    logger.LogInformation("Đã xóa file: {FilePath}", filePath);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Không thể xóa file: {FilePath}", filePath);
+                _versionIgnoreManager.IgnoreVersion(targetVersion);
+                _logger.LogWarning("Version {TargetVersion} has been added to ignore list due to update failure.", targetVersion);
             }
         }
     }

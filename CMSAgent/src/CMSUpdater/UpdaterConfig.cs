@@ -8,12 +8,6 @@ namespace CMSUpdater
     public class UpdaterConfig
     {
         /// <summary>
-        /// Process ID of the running CMSAgent.Service that needs to be stopped.
-        /// </summary>
-        /// <example>Command line parameter: -pid 1234</example>
-        public int CurrentAgentPid { get; set; } = -1;
-
-        /// <summary>
         /// Version string of the new Agent to be installed.
         /// </summary>
         /// <example>Command line parameter: -new-version "1.1.0"</example>

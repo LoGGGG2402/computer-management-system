@@ -8,6 +8,12 @@ Throughout this document authentication tokens are referenced:
 
 - **Agent Tokens**: All references to `<agent_token>` refer to tokens obtained from either the `/api/agent/identify` endpoint (for already registered agents) or from the `/api/agent/verify-mfa` endpoint (for new agents completing registration). Unlike user tokens, agent tokens do not expire and do not have a refresh mechanism.
 
+### Agent Token Characteristics
+- **Persistence**: Agent tokens are permanent and do not expire
+- **No Refresh Required**: Unlike user authentication tokens, agent tokens do not require periodic refresh
+- **One-time Generation**: Tokens are generated once during agent registration/identification and remain valid until explicitly revoked
+- **Revocation Only**: The only way to invalidate an agent token is through explicit revocation by an administrator
+
 ## Agent Token Security
 
 - **Token Storage**: Agent tokens are cryptographically secure, unique identifiers assigned to each registered agent.

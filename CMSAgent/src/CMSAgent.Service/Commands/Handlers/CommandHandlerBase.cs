@@ -1,4 +1,3 @@
- // CMSAgent.Service/Commands/Handlers/CommandHandlerBase.cs
 using CMSAgent.Service.Commands.Models;
 using Microsoft.Extensions.Logging;
 using System;
@@ -8,7 +7,7 @@ using System.Threading.Tasks;
 namespace CMSAgent.Service.Commands.Handlers
 {
     /// <summary>
-    /// Lớp cơ sở trừu tượng cho các command handler, cung cấp các chức năng chung.
+    /// Abstract base class for command handlers, providing common functionality.
     /// </summary>
     public abstract class CommandHandlerBase : ICommandHandler
     {
@@ -20,29 +19,34 @@ namespace CMSAgent.Service.Commands.Handlers
         }
 
         /// <summary>
-        /// Phương thức trừu tượng mà các lớp con phải triển khai để xử lý logic cụ thể của lệnh.
+        /// Abstract method that derived classes must implement to handle specific command logic.
         /// </summary>
+        /// <param name="commandRequest">The command request to execute</param>
+        /// <param name="cancellationToken">Token to cancel the operation</param>
+        /// <returns>Command execution result</returns>
         protected abstract Task<CommandOutputResult> ExecuteInternalAsync(CommandRequest commandRequest, CancellationToken cancellationToken);
 
         /// <summary>
-        /// Thực thi lệnh và đóng gói kết quả.
+        /// Executes the command and wraps the result.
         /// </summary>
+        /// <param name="commandRequest">The command request to execute</param>
+        /// <param name="cancellationToken">Token to cancel the operation</param>
+        /// <returns>Command execution result</returns>
         public async Task<CommandResult> ExecuteAsync(CommandRequest commandRequest, CancellationToken cancellationToken)
         {
-            Logger.LogInformation("Bắt đầu thực thi lệnh ID: {CommandId}, Type: {CommandType}, Command: {CommandText}",
+            Logger.LogInformation("Starting command execution ID: {CommandId}, Type: {CommandType}, Command: {CommandText}",
                 commandRequest.CommandId, commandRequest.CommandType, commandRequest.Command);
 
             var commandResult = new CommandResult
             {
                 CommandId = commandRequest.CommandId,
                 CommandType = commandRequest.CommandType,
-                Success = false // Mặc định là thất bại
+                Success = false
             };
 
             try
             {
-                // Áp dụng timeout nếu có
-                int defaultTimeoutSeconds = GetDefaultCommandTimeoutSeconds(commandRequest); // Lấy từ AppSettings hoặc command params
+                int defaultTimeoutSeconds = GetDefaultCommandTimeoutSeconds(commandRequest);
                 using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(defaultTimeoutSeconds));
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
@@ -51,43 +55,46 @@ namespace CMSAgent.Service.Commands.Handlers
 
                 if (commandResult.Success)
                 {
-                    Logger.LogInformation("Thực thi lệnh ID: {CommandId} thành công. ExitCode: {ExitCode}",
+                    Logger.LogInformation("Command execution ID: {CommandId} successful. ExitCode: {ExitCode}",
                         commandRequest.CommandId, commandResult.Result.ExitCode);
                 }
                 else
                 {
-                    Logger.LogWarning("Thực thi lệnh ID: {CommandId} thất bại. ExitCode: {ExitCode}, Error: {ErrorMessage}",
+                    Logger.LogWarning("Command execution ID: {CommandId} failed. ExitCode: {ExitCode}, Error: {ErrorMessage}",
                         commandRequest.CommandId, commandResult.Result.ExitCode, commandResult.Result.ErrorMessage);
                 }
             }
             catch (OperationCanceledException ex) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
-                Logger.LogWarning(ex, "Lệnh ID: {CommandId} bị timeout sau {TimeoutSeconds} giây.", commandRequest.CommandId, defaultTimeoutSeconds);
+                Logger.LogWarning(ex, "Command ID: {CommandId} timed out after {TimeoutSeconds} seconds.", commandRequest.CommandId, defaultTimeoutSeconds);
                 commandResult.Result = new CommandOutputResult
                 {
                     ErrorMessage = $"Command timed out after {defaultTimeoutSeconds} seconds.",
-                    ExitCode = -1 // Mã lỗi cho timeout
+                    ExitCode = AgentConstants.CommandExitCodes.Timeout,
+                    ErrorCode = "COMMAND_TIMEOUT"
                 };
                 commandResult.Success = false;
             }
-            catch (OperationCanceledException ex) // Bị hủy bởi token bên ngoài
+            catch (OperationCanceledException ex)
             {
-                Logger.LogWarning(ex, "Lệnh ID: {CommandId} bị hủy bỏ.", commandRequest.CommandId);
+                Logger.LogWarning(ex, "Command ID: {CommandId} was cancelled.", commandRequest.CommandId);
                 commandResult.Result = new CommandOutputResult
                 {
                     ErrorMessage = "Command execution was canceled.",
-                    ExitCode = -2 // Mã lỗi cho cancellation
+                    ExitCode = AgentConstants.CommandExitCodes.Cancelled,
+                    ErrorCode = "COMMAND_CANCELLED"
                 };
                 commandResult.Success = false;
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "Lỗi không mong muốn khi thực thi lệnh ID: {CommandId}.", commandRequest.CommandId);
+                Logger.LogError(ex, "Unexpected error during command execution ID: {CommandId}.", commandRequest.CommandId);
                 commandResult.Result = new CommandOutputResult
                 {
                     ErrorMessage = $"Unexpected error: {ex.Message}",
-                    Stderr = ex.ToString(), // Ghi stack trace vào stderr để debug
-                    ExitCode = -99 // Mã lỗi chung
+                    Stderr = ex.ToString(),
+                    ExitCode = AgentConstants.CommandExitCodes.GeneralError,
+                    ErrorCode = "UNEXPECTED_ERROR"
                 };
                 commandResult.Success = false;
             }
@@ -96,12 +103,13 @@ namespace CMSAgent.Service.Commands.Handlers
         }
 
         /// <summary>
-        /// Lấy giá trị timeout mặc định cho lệnh.
-        /// Có thể được override bởi các lớp con nếu cần logic phức tạp hơn.
+        /// Gets the default timeout value for the command.
+        /// Can be overridden by derived classes if more complex logic is needed.
         /// </summary>
+        /// <param name="commandRequest">The command request</param>
+        /// <returns>Timeout value in seconds</returns>
         protected virtual int GetDefaultCommandTimeoutSeconds(CommandRequest commandRequest)
         {
-            // Mặc định lấy từ commandRequest.Parameters nếu có, nếu không thì từ AppSettings
             if (commandRequest.Parameters != null &&
                 commandRequest.Parameters.TryGetValue("timeout_sec", out var timeoutObj) &&
                 timeoutObj is JsonElement timeoutJson &&
@@ -110,14 +118,15 @@ namespace CMSAgent.Service.Commands.Handlers
             {
                 return timeoutSec;
             }
-            // Giả sử có AppSettings được inject vào lớp con và có DefaultCommandTimeoutSeconds
-            // Đây là ví dụ, cần triển khai thực tế
-            return 60; // Giá trị mặc định cứng nếu không lấy được từ đâu
+            return 60;
         }
 
         /// <summary>
-        /// Kiểm tra xem exit code có được coi là thành công hay không, dựa trên 'expected_exit_codes' trong parameters.
+        /// Checks if the exit code is considered successful based on 'expected_exit_codes' in parameters.
         /// </summary>
+        /// <param name="commandRequest">The command request</param>
+        /// <param name="exitCode">The exit code to check</param>
+        /// <returns>True if the exit code is considered successful</returns>
         protected virtual bool IsExitCodeSuccessful(CommandRequest commandRequest, int exitCode)
         {
             if (commandRequest.Parameters != null &&
@@ -132,11 +141,11 @@ namespace CMSAgent.Service.Commands.Handlers
                 }
                 catch (JsonException ex)
                 {
-                    Logger.LogWarning(ex, "Không thể parse 'expected_exit_codes' cho lệnh ID: {CommandId}", commandRequest.CommandId);
-                    return exitCode == 0; // Mặc định về kiểm tra exit code 0 nếu parse lỗi
+                    Logger.LogWarning(ex, "Could not parse 'expected_exit_codes' for command ID: {CommandId}", commandRequest.CommandId);
+                    return exitCode == 0;
                 }
             }
-            return exitCode == 0; // Mặc định là thành công nếu exit code là 0
+            return exitCode == 0;
         }
     }
 }

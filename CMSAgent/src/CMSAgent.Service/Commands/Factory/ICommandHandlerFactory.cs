@@ -1,19 +1,19 @@
- // CMSAgent.Service/Commands/Factory/ICommandHandlerFactory.cs
+// CMSAgent.Service/Commands/Factory/ICommandHandlerFactory.cs
 using CMSAgent.Service.Commands.Handlers;
 using CMSAgent.Service.Commands.Models;
 
 namespace CMSAgent.Service.Commands.Factory
 {
     /// <summary>
-    /// Interface cho factory tạo ra các command handler.
+    /// Interface for factory that creates command handlers.
     /// </summary>
     public interface ICommandHandlerFactory
     {
         /// <summary>
-        /// Tạo một ICommandHandler dựa trên loại lệnh.
+        /// Creates an ICommandHandler based on the command type.
         /// </summary>
-        /// <param name="commandType">Loại lệnh (ví dụ: "CONSOLE", "SYSTEM_ACTION").</param>
-        /// <returns>Một instance của ICommandHandler phù hợp, hoặc null nếu loại lệnh không được hỗ trợ.</returns>
+        /// <param name="commandType">Command type (e.g., "CONSOLE", "SYSTEM_ACTION").</param>
+        /// <returns>An instance of the appropriate ICommandHandler, or null if the command type is not supported.</returns>
         ICommandHandler? CreateHandler(string commandType);
     }
 }

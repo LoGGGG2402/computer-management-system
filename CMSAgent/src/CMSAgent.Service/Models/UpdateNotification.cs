@@ -1,48 +1,48 @@
- // CMSAgent.Service/Models/UpdateNotification.cs
+// CMSAgent.Service/Models/UpdateNotification.cs
 using System.Text.Json.Serialization;
 
 namespace CMSAgent.Service.Models
 {
     /// <summary>
-    /// Model đại diện cho thông báo có phiên bản mới từ Server qua WebSocket.
-    /// Sự kiện WebSocket: "agent:new_version_available"
-    /// Tham khảo: agent_api.md và CMSAgent_Doc.md mục 8.1.2.
-    /// Cấu trúc này tương tự như UpdateCheckResponse khi có cập nhật.
+    /// Model representing new version notification from Server via WebSocket.
+    /// WebSocket event: "agent:new_version_available"
+    /// Reference: agent_api.md and CMSAgent_Doc.md section 8.1.2.
+    /// This structure is similar to UpdateCheckResponse when an update is available.
     /// </summary>
     public class UpdateNotification
     {
         /// <summary>
-        /// Trạng thái (thường là "success").
+        /// Status (usually "success").
         /// </summary>
         [JsonPropertyName("status")]
-        public string Status { get; set; } = "success"; // Mặc định theo API doc
+        public string Status { get; set; } = "success"; // Default according to API doc
 
         /// <summary>
-        /// Luôn là true cho sự kiện này.
+        /// Always true for this event.
         /// </summary>
         [JsonPropertyName("update_available")]
-        public bool UpdateAvailable { get; set; } = true; // Mặc định theo API doc
+        public bool UpdateAvailable { get; set; } = true; // Default according to API doc
 
         /// <summary>
-        /// Phiên bản mới của Agent.
+        /// New version of Agent.
         /// </summary>
         [JsonPropertyName("version")]
         public string Version { get; set; } = string.Empty;
 
         /// <summary>
-        /// URL để tải gói cập nhật.
+        /// URL to download the update package.
         /// </summary>
         [JsonPropertyName("download_url")]
         public string DownloadUrl { get; set; } = string.Empty;
 
         /// <summary>
-        /// Checksum SHA256 của gói cập nhật.
+        /// SHA256 checksum of the update package.
         /// </summary>
         [JsonPropertyName("checksum_sha256")]
         public string ChecksumSha256 { get; set; } = string.Empty;
 
         /// <summary>
-        /// Ghi chú phát hành cho phiên bản mới (tùy chọn).
+        /// Release notes for the new version (optional).
         /// </summary>
         [JsonPropertyName("notes")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

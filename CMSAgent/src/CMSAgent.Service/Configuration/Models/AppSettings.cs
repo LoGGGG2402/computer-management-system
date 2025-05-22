@@ -1,102 +1,101 @@
- // CMSAgent.Service/Configuration/Models/AppSettings.cs
+// CMSAgent.Service/Configuration/Models/AppSettings.cs
 using System.ComponentModel.DataAnnotations;
 
 namespace CMSAgent.Service.Configuration.Models
 {
     /// <summary>
-    /// Model đại diện cho các cài đặt trong file appsettings.json.
-    /// Các thuộc tính ở đây sẽ được binding từ file cấu hình.
+    /// Model representing settings in appsettings.json file.
+    /// Properties here will be bound from the configuration file.
     /// </summary>
     public class AppSettings
     {
         /// <summary>
-        /// Cấu hình Serilog (thường là một section riêng trong JSON).
-        /// Ở đây ta có thể để kiểu 'object' hoặc một lớp cụ thể nếu muốn định nghĩa chi tiết.
+        /// Serilog configuration (usually a separate section in JSON).
+        /// Here we can use 'object' type or a specific class if we want to define details.
         /// </summary>
         public SerilogSettings Serilog { get; set; } = new SerilogSettings();
 
         /// <summary>
-        /// URL của Management Server (ví dụ: "https://cms.example.com").
+        /// Management Server URL (e.g., "https://cms.example.com").
         /// </summary>
         [Required(ErrorMessage = "ServerUrl is required.")]
         [Url(ErrorMessage = "ServerUrl must be a valid URL.")]
         public string ServerUrl { get; set; } = string.Empty;
 
         /// <summary>
-        /// Đường dẫn gốc cho các HTTP API trên Server (ví dụ: "/api").
+        /// Root path for HTTP APIs on Server (e.g., "/api").
         /// </summary>
-        public string ApiPath { get; set; } = "/api"; // Giá trị mặc định
+        public string ApiPath { get; set; } = "/api"; // Default value
 
         /// <summary>
-        /// Phiên bản hiện tại của Agent.
-        /// Giá trị này có thể được cập nhật tự động bởi CMSUpdater.
+        /// Current version of Agent.
+        /// This value can be automatically updated by CMSUpdater.
         /// </summary>
         public string Version { get; set; } = "0.0.0";
 
         /// <summary>
-        /// Khoảng thời gian (giây) gửi báo cáo trạng thái tài nguyên.
-        /// Mặc định: 60 giây.
+        /// Time interval (seconds) for sending resource status reports.
+        /// Default: 60 seconds.
         /// </summary>
         [Range(10, 3600, ErrorMessage = "StatusReportIntervalSec must be between 10 and 3600.")]
         public int StatusReportIntervalSec { get; set; } = 60;
 
         /// <summary>
-        /// Khoảng thời gian (giây) kiểm tra cập nhật tự động.
-        /// Mặc định: 3600 giây (1 giờ).
+        /// Time interval (seconds) for checking automatic updates.
+        /// Default: 3600 seconds (1 hour).
         /// </summary>
         [Range(300, 86400, ErrorMessage = "AutoUpdateIntervalSec must be between 300 and 86400.")]
         public int AutoUpdateIntervalSec { get; set; } = 3600;
 
         /// <summary>
-        /// Bật/tắt tính năng tự động kiểm tra cập nhật.
-        /// Mặc định: true.
+        /// Enable/disable automatic update check feature.
+        /// Default: true.
         /// </summary>
         public bool EnableAutoUpdate { get; set; } = true;
 
-
         /// <summary>
-        /// Khoảng thời gian (giây) làm mới token định kỳ.
-        /// Mặc định: 43200 giây (12 giờ).
+        /// Time interval (seconds) for periodic token refresh.
+        /// Default: 43200 seconds (12 hours).
         /// </summary>
         [Range(600, 86400, ErrorMessage = "TokenRefreshIntervalSec must be between 600 and 86400.")]
         public int TokenRefreshIntervalSec { get; set; } = 43200;
 
         /// <summary>
-        /// Cấu hình cho chính sách retry HTTP (Polly).
+        /// Configuration for HTTP retry policy (Polly).
         /// </summary>
         public HttpRetryPolicySettings HttpRetryPolicy { get; set; } = new HttpRetryPolicySettings();
 
         /// <summary>
-        /// Cấu hình cho kết nối WebSocket.
+        /// Configuration for WebSocket connection.
         /// </summary>
         public WebSocketSettings WebSocketPolicy { get; set; } = new WebSocketSettings();
 
         /// <summary>
-        /// Cấu hình cho việc thực thi lệnh.
+        /// Configuration for command execution.
         /// </summary>
         public CommandExecutionSettings CommandExecution { get; set; } = new CommandExecutionSettings();
 
         /// <summary>
-        /// Giới hạn tài nguyên, ví dụ kích thước tối đa của hàng đợi dữ liệu offline.
+        /// Resource limits, e.g., maximum size of offline data queue.
         /// </summary>
         public ResourceLimitSettings ResourceLimits { get; set; } = new ResourceLimitSettings();
 
         /// <summary>
-        /// GUID duy nhất của Agent, được sử dụng để tạo tên Mutex.
-        /// Giá trị này nên được sinh ngẫu nhiên và duy nhất cho mỗi bản cài đặt.
-        /// Nó có thể được ghi vào appsettings.json trong quá trình cài đặt.
+        /// Unique GUID of Agent, used to create Mutex name.
+        /// This value should be randomly generated and unique for each installation.
+        /// It can be written to appsettings.json during installation.
         /// </summary>
-        public string AgentInstanceGuid { get; set; } = string.Empty; // Sẽ được tạo khi cài đặt
+        public string AgentInstanceGuid { get; set; } = string.Empty; // Will be generated during installation
     }
 
     /// <summary>
-    /// Cấu hình chi tiết cho Serilog.
+    /// Detailed configuration for Serilog.
     /// </summary>
     public class SerilogSettings
     {
         public MinimumLevelSettings MinimumLevel { get; set; } = new MinimumLevelSettings();
-        // Các cấu hình khác của Serilog có thể thêm vào đây nếu cần đọc từ appsettings.json
-        // Ví dụ: public List<SerilogSinkSettings> WriteTo { get; set; }
+        // Other Serilog configurations can be added here if needed to read from appsettings.json
+        // Example: public List<SerilogSinkSettings> WriteTo { get; set; }
     }
 
     public class MinimumLevelSettings
@@ -105,93 +104,92 @@ namespace CMSAgent.Service.Configuration.Models
         public Dictionary<string, string> Override { get; set; } = new Dictionary<string, string>();
     }
 
-
     /// <summary>
-    /// Cấu hình cho chính sách retry HTTP.
+    /// Configuration for HTTP retry policy.
     /// </summary>
     public class HttpRetryPolicySettings
     {
         /// <summary>
-        /// Số lần thử lại tối đa.
+        /// Maximum number of retry attempts.
         /// </summary>
         [Range(0, 10)]
         public int MaxRetries { get; set; } = 3;
 
         /// <summary>
-        /// Thời gian chờ ban đầu (giây) trước khi thử lại.
-        /// Sẽ tăng theo cấp số nhân cho các lần thử lại sau.
+        /// Initial delay (seconds) before retry.
+        /// Will increase exponentially for subsequent retries.
         /// </summary>
         [Range(1, 60)]
         public int InitialDelaySeconds { get; set; } = 2;
 
         /// <summary>
-        /// Thời gian chờ tối đa (giây) giữa các lần thử lại.
+        /// Maximum delay (seconds) between retries.
         /// </summary>
         [Range(5, 300)]
         public int MaxDelaySeconds { get; set; } = 30;
     }
 
     /// <summary>
-    /// Cấu hình cho kết nối WebSocket.
+    /// Configuration for WebSocket connection.
     /// </summary>
     public class WebSocketSettings
     {
         /// <summary>
-        /// Thời gian timeout (giây) khi cố gắng kết nối WebSocket.
+        /// Timeout (seconds) when attempting WebSocket connection.
         /// </summary>
         [Range(5, 120)]
         public int ConnectionTimeoutSeconds { get; set; } = 30;
 
         /// <summary>
-        /// Thời gian chờ tối thiểu (giây) trong chiến lược exponential backoff khi kết nối lại.
+        /// Minimum wait time (seconds) in exponential backoff strategy when reconnecting.
         /// </summary>
         [Range(1, 60)]
         public int ReconnectMinBackoffSeconds { get; set; } = 5;
 
         /// <summary>
-        /// Thời gian chờ tối đa (giây) trong chiến lược exponential backoff.
+        /// Maximum wait time (seconds) in exponential backoff strategy.
         /// </summary>
         [Range(60, 600)]
         public int ReconnectMaxBackoffSeconds { get; set; } = 300;
 
         /// <summary>
-        /// Số lần thử kết nối lại tối đa (-1 nghĩa là vô hạn).
+        /// Maximum number of reconnection attempts (-1 means infinite).
         /// </summary>
         [Range(-1, 100)]
-        public int MaxReconnectAttempts { get; set; } = -1; // Vô hạn
+        public int MaxReconnectAttempts { get; set; } = -1; // Infinite
     }
 
     /// <summary>
-    /// Cấu hình cho việc thực thi lệnh.
+    /// Configuration for command execution.
     /// </summary>
     public class CommandExecutionSettings
     {
         /// <summary>
-        /// Kích thước tối đa của hàng đợi lệnh.
+        /// Maximum size of command queue.
         /// </summary>
         [Range(1, 100)]
         public int MaxQueueSize { get; set; } = 10;
 
         /// <summary>
-        /// Số lượng lệnh tối đa có thể chạy song song.
+        /// Maximum number of commands that can run in parallel.
         /// </summary>
         [Range(1, 10)]
-        public int MaxParallelCommands { get; set; } = 1; // Mặc định chạy tuần tự
+        public int MaxParallelCommands { get; set; } = 1; // Default to sequential execution
 
         /// <summary>
-        /// Thời gian timeout mặc định (giây) cho một lệnh.
+        /// Default timeout (seconds) for a command.
         /// </summary>
         [Range(10, 3600)]
         public int DefaultCommandTimeoutSeconds { get; set; } = 60;
     }
 
     /// <summary>
-    /// Cấu hình giới hạn tài nguyên.
+    /// Resource limit configuration.
     /// </summary>
     public class ResourceLimitSettings
     {
         /// <summary>
-        /// Kích thước tối đa (số lượng item) của hàng đợi dữ liệu offline.
+        /// Maximum size (number of items) of offline data queue.
         /// </summary>
         [Range(10, 1000)]
         public int MaxOfflineQueueSize { get; set; } = 100;

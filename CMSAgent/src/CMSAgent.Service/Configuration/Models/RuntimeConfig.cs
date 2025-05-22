@@ -1,30 +1,30 @@
- // CMSAgent.Service/Configuration/Models/RuntimeConfig.cs
+// CMSAgent.Service/Configuration/Models/RuntimeConfig.cs
 using System.Text.Json.Serialization;
 
 namespace CMSAgent.Service.Configuration.Models
 {
     /// <summary>
-    /// Model đại diện cho các cài đặt trong file runtime_config.json.
-    /// File này chứa các cấu hình động, có thể thay đổi trong quá trình Agent hoạt động.
+    /// Model representing settings in runtime_config.json file.
+    /// This file contains dynamic configurations that can change during Agent operation.
     /// </summary>
     public class RuntimeConfig
     {
         /// <summary>
-        /// ID duy nhất của Agent (GUID string).
+        /// Unique ID of Agent (GUID string).
         /// </summary>
         [JsonPropertyName("agentId")]
         public string AgentId { get; set; } = string.Empty;
 
         /// <summary>
-        /// Thông tin vị trí của máy (phòng, tọa độ).
+        /// Machine position information (room, coordinates).
         /// </summary>
         [JsonPropertyName("room_config")]
-        public PositionInfo? RoomConfig { get; set; } // Sử dụng nullable nếu có thể chưa được cấu hình
+        public PositionInfo? RoomConfig { get; set; } // Use nullable if it may not be configured yet
 
         /// <summary>
-        /// Token xác thực của Agent, đã được mã hóa bằng DPAPI.
+        /// Agent's authentication token, encrypted using DPAPI.
         /// </summary>
         [JsonPropertyName("agent_token_encrypted")]
-        public string? AgentTokenEncrypted { get; set; } // Token có thể null nếu agent chưa được đăng ký
+        public string? AgentTokenEncrypted { get; set; } // Token can be null if agent is not registered yet
     }
 }

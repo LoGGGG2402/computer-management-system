@@ -8,14 +8,14 @@ using System.Runtime.InteropServices; // For OSPlatform
 namespace CMSAgent.Service.Security
 {
     /// <summary>
-    /// Triển khai IDpapiProtector sử dụng Windows Data Protection API (DPAPI).
-    /// Mã hóa dữ liệu với phạm vi LocalMachine, nghĩa là chỉ có thể giải mã trên cùng một máy.
+    /// Implementation of IDpapiProtector using Windows Data Protection API (DPAPI).
+    /// Encrypts data with LocalMachine scope, meaning it can only be decrypted on the same machine.
     /// </summary>
     public class DpapiProtector : IDpapiProtector
     {
         private readonly ILogger<DpapiProtector> _logger;
 
-        // Phạm vi bảo vệ: Dữ liệu được mã hóa chỉ có thể được giải mã trên cùng một máy tính.
+        // Protection scope: Encrypted data can only be decrypted on the same computer.
         private const DataProtectionScope Scope = DataProtectionScope.LocalMachine;
 
         public DpapiProtector(ILogger<DpapiProtector> logger)
@@ -24,30 +24,30 @@ namespace CMSAgent.Service.Security
 
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                _logger.LogWarning("DPAPI Protector chỉ được hỗ trợ trên Windows. Các hoạt động mã hóa/giải mã sẽ không thành công trên các nền tảng khác.");
+                _logger.LogWarning("DPAPI Protector is only supported on Windows. Encryption/decryption operations will fail on other platforms.");
             }
         }
 
         /// <summary>
-        /// Mã hóa một chuỗi văn bản gốc (plaintext).
+        /// Encrypt a plaintext string.
         /// </summary>
-        /// <param name="plainText">Chuỗi cần mã hóa.</param>
-        /// <param name="optionalEntropy">Một mảng byte tùy chọn để tăng cường độ bảo mật (có thể là null).</param>
-        /// <returns>Chuỗi đã được mã hóa dưới dạng Base64, hoặc null nếu có lỗi.</returns>
+        /// <param name="plainText">String to encrypt.</param>
+        /// <param name="optionalEntropy">Optional byte array to enhance security (can be null).</param>
+        /// <returns>Encrypted string in Base64 format, or null if there is an error.</returns>
         public string? Protect(string plainText, byte[]? optionalEntropy = null)
         {
             if (string.IsNullOrEmpty(plainText))
             {
-                _logger.LogWarning("Không thể mã hóa chuỗi rỗng hoặc null.");
+                _logger.LogWarning("Cannot encrypt empty or null string.");
                 return null;
             }
 
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                _logger.LogError("DPAPI không khả dụng trên nền tảng hiện tại. Không thể mã hóa.");
-                // Trong môi trường không phải Windows, có thể ném NotSupportedException
-                // hoặc trả về chuỗi gốc (không an toàn) tùy theo yêu cầu.
-                // Hiện tại trả về null để báo lỗi.
+                _logger.LogError("DPAPI is not available on current platform. Cannot encrypt.");
+                // In non-Windows environments, we could throw NotSupportedException
+                // or return the original string (unsafe) depending on requirements.
+                // Currently returning null to indicate error.
                 return null;
             }
 
@@ -59,33 +59,33 @@ namespace CMSAgent.Service.Security
             }
             catch (CryptographicException ex)
             {
-                _logger.LogError(ex, "Lỗi mã hóa DPAPI.");
+                _logger.LogError(ex, "DPAPI encryption error.");
                 return null;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi không xác định trong quá trình mã hóa DPAPI.");
+                _logger.LogError(ex, "Unknown error during DPAPI encryption.");
                 return null;
             }
         }
 
         /// <summary>
-        /// Giải mã một chuỗi đã được mã hóa (ciphertext) trở lại văn bản gốc.
+        /// Decrypt an encrypted string (ciphertext) back to plaintext.
         /// </summary>
-        /// <param name="encryptedTextBase64">Chuỗi đã mã hóa (dưới dạng Base64) cần giải mã.</param>
-        /// <param name="optionalEntropy">Mảng byte tùy chọn đã được sử dụng khi mã hóa (phải giống hệt, có thể là null).</param>
-        /// <returns>Chuỗi văn bản gốc đã được giải mã, hoặc null nếu có lỗi (ví dụ: sai entropy, dữ liệu hỏng).</returns>
+        /// <param name="encryptedTextBase64">Encrypted string (in Base64 format) to decrypt.</param>
+        /// <param name="optionalEntropy">Optional byte array used during encryption (must be identical, can be null).</param>
+        /// <returns>Decrypted plaintext string, or null if there is an error (e.g., wrong entropy, corrupted data).</returns>
         public string? Unprotect(string encryptedTextBase64, byte[]? optionalEntropy = null)
         {
             if (string.IsNullOrEmpty(encryptedTextBase64))
             {
-                _logger.LogWarning("Không thể giải mã chuỗi mã hóa rỗng hoặc null.");
+                _logger.LogWarning("Cannot decrypt empty or null encrypted string.");
                 return null;
             }
 
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                _logger.LogError("DPAPI không khả dụng trên nền tảng hiện tại. Không thể giải mã.");
+                _logger.LogError("DPAPI is not available on current platform. Cannot decrypt.");
                 return null;
             }
 
@@ -97,18 +97,18 @@ namespace CMSAgent.Service.Security
             }
             catch (FormatException ex)
             {
-                _logger.LogError(ex, "Lỗi định dạng Base64 khi giải mã.");
+                _logger.LogError(ex, "Base64 format error during decryption.");
                 return null;
             }
             catch (CryptographicException ex)
             {
-                // Lỗi này thường xảy ra nếu dữ liệu bị hỏng, sai scope, hoặc sai entropy.
-                _logger.LogError(ex, "Lỗi giải mã DPAPI. Dữ liệu có thể bị hỏng hoặc không thể giải mã trên máy này/bởi user này (nếu scope là CurrentUser).");
+                // This error usually occurs if data is corrupted, wrong scope, or wrong entropy.
+                _logger.LogError(ex, "DPAPI decryption error. Data may be corrupted or cannot be decrypted on this machine/by this user (if scope is CurrentUser).");
                 return null;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi không xác định trong quá trình giải mã DPAPI.");
+                _logger.LogError(ex, "Unknown error during DPAPI decryption.");
                 return null;
             }
         }

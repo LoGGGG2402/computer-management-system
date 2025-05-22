@@ -1,18 +1,18 @@
- // CMSAgent.Service/Configuration/Models/PositionInfo.cs
+// CMSAgent.Service/Configuration/Models/PositionInfo.cs
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 
 namespace CMSAgent.Service.Configuration.Models
 {
     /// <summary>
-    /// Model chứa thông tin vị trí của Agent.
-    /// Được sử dụng trong runtime_config.json và trong payload của API /api/agent/identify.
+    /// Model containing Agent's position information.
+    /// Used in runtime_config.json and in the payload of /api/agent/identify API.
     /// </summary>
     public class PositionInfo
     {
         /// <summary>
-        /// Tên phòng nơi Agent được đặt.
-        /// Bắt buộc. (3-100 ký tự)
+        /// Name of the room where Agent is placed.
+        /// Required. (3-100 characters)
         /// </summary>
         [JsonPropertyName("roomName")]
         [Required(AllowEmptyStrings = false, ErrorMessage = "RoomName is required.")]
@@ -20,16 +20,16 @@ namespace CMSAgent.Service.Configuration.Models
         public string RoomName { get; set; } = string.Empty;
 
         /// <summary>
-        /// Tọa độ X của Agent trong phòng.
-        /// Bắt buộc. (Phải là số nguyên không âm)
+        /// X coordinate of Agent in the room.
+        /// Required. (Must be a non-negative integer)
         /// </summary>
         [JsonPropertyName("posX")]
         [Range(0, int.MaxValue, ErrorMessage = "PosX must be a non-negative integer.")]
         public int PosX { get; set; }
 
         /// <summary>
-        /// Tọa độ Y của Agent trong phòng.
-        /// Bắt buộc. (Phải là số nguyên không âm)
+        /// Y coordinate of Agent in the room.
+        /// Required. (Must be a non-negative integer)
         /// </summary>
         [JsonPropertyName("posY")]
         [Range(0, int.MaxValue, ErrorMessage = "PosY must be a non-negative integer.")]

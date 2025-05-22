@@ -19,7 +19,7 @@ namespace CMSUpdater
 
         private string ActualServiceName => AgentConstants.ServiceName ?? AgentConstants.ServiceName;
         private int ActualServiceWaitTimeout => _config.ServiceWaitTimeoutSeconds ?? AgentConstants.DefaultProcessWaitForExitTimeoutSeconds;
-        private int ActualWatchdogPeriod => _config.NewAgentWatchdogPeriodSeconds ?? 120; // TODO: Consider adding to AgentConstants
+        private int ActualWatchdogPeriod => _config.NewAgentWatchdogPeriodSeconds ?? AgentConstants.DefaultNewAgentWatchdogPeriodSeconds;
 
         /// <summary>
         /// Initializes a new instance of the UpdateTaskRunner class.
@@ -87,55 +87,50 @@ namespace CMSUpdater
         }
 
         /// <summary>
-        /// Waits for the old Agent process to stop completely.
+        /// Waits for the old Agent service to stop completely.
         /// </summary>
         /// <returns>True if the old Agent stopped successfully, false otherwise.</returns>
         private async Task<bool> WaitForOldAgentToStopAsync()
         {
-            _logger.LogInformation("Waiting for old Agent process (PID: {AgentPid}) to stop...", _config.CurrentAgentPid);
-            if (_config.CurrentAgentPid <= 0)
-            {
-                _logger.LogWarning("Old Agent PID is invalid ({AgentPid}). Skipping direct PID wait.", _config.CurrentAgentPid);
-            }
-            else
+            _logger.LogInformation("Waiting for old Agent service ({ServiceName}) to stop...", ActualServiceName);
+            
+            if (OperatingSystem.IsWindows())
             {
                 try
                 {
-                    bool exited = ProcessUtils.WaitForProcessExit(_config.CurrentAgentPid, ActualServiceWaitTimeout * 1000);
-                    if (!exited)
+                    using var serviceController = new ServiceController(ActualServiceName);
+                    
+                    if (serviceController.Status == ServiceControllerStatus.Running)
                     {
-                        _logger.LogWarning("Old Agent (PID: {AgentPid}) did not stop after {Timeout} seconds. Attempting to kill process.", _config.CurrentAgentPid, ActualServiceWaitTimeout);
-                        try
+                        _logger.LogInformation("Stopping service {ServiceName}...", ActualServiceName);
+                        serviceController.Stop();
+                        
+                        // Đợi service dừng với timeout
+                        serviceController.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(ActualServiceWaitTimeout));
+                        
+                        if (serviceController.Status != ServiceControllerStatus.Stopped)
                         {
-                            var oldAgentProcess = Process.GetProcessById(_config.CurrentAgentPid);
-                            oldAgentProcess.Kill(true);
-                            _logger.LogInformation("Successfully killed old Agent (PID: {AgentPid}).", _config.CurrentAgentPid);
-                        }
-                        catch (Exception killEx)
-                        {
-                            _logger.LogError(killEx, "Cannot kill old Agent (PID: {AgentPid}). Update process may fail.", _config.CurrentAgentPid);
+                            _logger.LogWarning("Service {ServiceName} did not stop after {Timeout} seconds.", ActualServiceName, ActualServiceWaitTimeout);
                             return false;
                         }
+                        
+                        _logger.LogInformation("Service {ServiceName} has stopped successfully.", ActualServiceName);
                     }
                     else
                     {
-                        _logger.LogInformation("Old Agent (PID: {AgentPid}) has stopped.", _config.CurrentAgentPid);
+                        _logger.LogInformation("Service {ServiceName} is not running (current status: {Status}).", ActualServiceName, serviceController.Status);
                     }
-                }
-                catch (ArgumentException)
-                {
-                    _logger.LogInformation("Old Agent (PID: {AgentPid}) not found (may have already stopped).", _config.CurrentAgentPid);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error while waiting for old Agent (PID: {AgentPid}) to stop.", _config.CurrentAgentPid);
+                    _logger.LogError(ex, "Error while stopping service {ServiceName}.", ActualServiceName);
+                    return false;
                 }
             }
-            
-            if (OperatingSystem.IsWindows() && IsServiceRunning(ActualServiceName))
+            else
             {
-                 _logger.LogWarning("Service {ServiceName} is still running. Attempting to stop service...", ActualServiceName);
-                 if (!await StopServiceAsync(ActualServiceName)) return false;
+                _logger.LogWarning("Service control is only supported on Windows.");
+                return false;
             }
 
             _logger.LogInformation("Confirmed old Agent has stopped.");
@@ -200,25 +195,30 @@ namespace CMSUpdater
                     return false;
                 }
 
+                // Tạo thư mục tạm thời cho phiên bản mới
+                string tempInstallDir = _config.AgentInstallDirectory + ".new";
+                if (Directory.Exists(tempInstallDir))
+                {
+                    _logger.LogWarning("Temporary installation directory exists, will be deleted: {TempDir}", tempInstallDir);
+                    Directory.Delete(tempInstallDir, true);
+                }
+                Directory.CreateDirectory(tempInstallDir);
+
+                // Sao chép các file mới vào thư mục tạm thời
+                _logger.LogInformation("Copying new files to temporary directory: {TempDir}", tempInstallDir);
+                await Task.Run(() => FileUtils.CopyDirectory(_config.NewAgentExtractedPath, tempInstallDir, true));
+
+                // Xóa thư mục cài đặt cũ
                 if (Directory.Exists(_config.AgentInstallDirectory))
                 {
-                    _logger.LogInformation("Deleting old files in installation directory: {InstallDir}", _config.AgentInstallDirectory);
-                    var installDirInfo = new DirectoryInfo(_config.AgentInstallDirectory);
-                    foreach (var file in installDirInfo.GetFiles())
-                    {
-                        try { file.Delete(); } catch (Exception ex) { _logger.LogWarning(ex, "Cannot delete file: {FilePath}", file.FullName); }
-                    }
-                    foreach (var dir in installDirInfo.GetDirectories())
-                    {
-                        try { dir.Delete(true); } catch (Exception ex) { _logger.LogWarning(ex, "Cannot delete directory: {DirPath}", dir.FullName); }
-                    }
-                }
-                else
-                {
-                    Directory.CreateDirectory(_config.AgentInstallDirectory);
+                    _logger.LogInformation("Deleting old installation directory: {InstallDir}", _config.AgentInstallDirectory);
+                    Directory.Delete(_config.AgentInstallDirectory, true);
                 }
 
-                await Task.Run(() => FileUtils.CopyDirectory(_config.NewAgentExtractedPath, _config.AgentInstallDirectory, true));
+                // Di chuyển thư mục tạm thời thành thư mục cài đặt chính thức
+                _logger.LogInformation("Moving temporary directory to final installation directory");
+                Directory.Move(tempInstallDir, _config.AgentInstallDirectory);
+
                 _logger.LogInformation("Agent file replacement completed successfully.");
                 return true;
             }
@@ -231,6 +231,22 @@ namespace CMSUpdater
                     new { Step = "ReplaceAgentFilesAsync", SourcePath = _config.NewAgentExtractedPath, InstallDir = _config.AgentInstallDirectory }
                 );
                 _logger.LogError("AgentErrorReport: {@ErrorReport}", errorReport);
+
+                // Dọn dẹp thư mục tạm thời nếu có lỗi
+                string tempInstallDir = _config.AgentInstallDirectory + ".new";
+                if (Directory.Exists(tempInstallDir))
+                {
+                    try
+                    {
+                        Directory.Delete(tempInstallDir, true);
+                        _logger.LogInformation("Cleaned up temporary installation directory after error");
+                    }
+                    catch (Exception cleanupEx)
+                    {
+                        _logger.LogWarning(cleanupEx, "Failed to clean up temporary installation directory: {TempDir}", tempInstallDir);
+                    }
+                }
+
                 return false;
             }
         }

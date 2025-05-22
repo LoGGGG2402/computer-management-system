@@ -44,16 +44,17 @@ namespace CMSAgent.Shared.Utils
             var outputBuilder = new StringBuilder();
             var errorBuilder = new StringBuilder();
 
-            using var outputWaitHandle = new AutoResetEvent(false);
-            using var errorWaitHandle = new AutoResetEvent(false);
+            var outputTask = new TaskCompletionSource<bool>();
+            var errorTask = new TaskCompletionSource<bool>();
+
             process.OutputDataReceived += (sender, e) =>
             {
-                if (e.Data == null) outputWaitHandle.Set();
+                if (e.Data == null) outputTask.TrySetResult(true);
                 else outputBuilder.AppendLine(e.Data);
             };
             process.ErrorDataReceived += (sender, e) =>
             {
-                if (e.Data == null) errorWaitHandle.Set();
+                if (e.Data == null) errorTask.TrySetResult(true);
                 else errorBuilder.AppendLine(e.Data);
             };
 
@@ -73,8 +74,18 @@ namespace CMSAgent.Shared.Utils
                     await process.WaitForExitAsync(combinedCts.Token);
                 }
 
-                if (!outputWaitHandle.WaitOne(TimeSpan.FromSeconds(5))) { Log.Warning("Timeout waiting for output stream to close.");}
-                if (!errorWaitHandle.WaitOne(TimeSpan.FromSeconds(5))) { Log.Warning("Timeout waiting for error stream to close.");}
+                // Đợi cả output và error stream đóng với timeout
+                var streamTasks = new[] { outputTask.Task, errorTask.Task };
+                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(AgentConstants.DefaultProcessStreamCloseTimeoutSeconds));
+                
+                if (await Task.WhenAny(Task.WhenAll(streamTasks), timeoutTask) != timeoutTask)
+                {
+                    Log.Information("All process streams closed successfully");
+                }
+                else
+                {
+                    Log.Warning("Timeout waiting for process streams to close");
+                }
 
                 if (process.HasExited)
                 {
@@ -83,30 +94,21 @@ namespace CMSAgent.Shared.Utils
                 }
                 else
                 {
-                    Log.Warning("Command did not exit normally (timeout or cancellation). Attempting to kill.");
-                    if (!process.HasExited)
-                    {
-                        try { process.Kill(true); } catch (Exception killEx) { Log.Error(killEx, "Failed to kill process {FileName}", fileName); }
-                    }
+                    Log.Warning("Command did not exit normally (timeout or cancellation). Attempting graceful shutdown.");
+                    await CloseProcessGracefully(process);
                     return (outputBuilder.ToString(), errorBuilder.ToString(), -1);
                 }
             }
             catch (OperationCanceledException)
             {
                 Log.Warning("Command execution was cancelled for {FileName} {Arguments}.", fileName, arguments);
-                if (!process.HasExited)
-                {
-                    try { process.Kill(true); } catch (Exception killEx) { Log.Error(killEx, "Failed to kill process {FileName} after cancellation", fileName); }
-                }
+                await CloseProcessGracefully(process);
                 return (outputBuilder.ToString(), errorBuilder.ToString(), -1);
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Error executing command: {FileName} {Arguments}", fileName, arguments);
-                if (!process.HasExited)
-                {
-                    try { process.Kill(true); } catch (Exception killEx) { Log.Error(killEx, "Failed to kill process {FileName} after exception", fileName); }
-                }
+                await CloseProcessGracefully(process);
                 return (string.Empty, ex.Message, ex.HResult);
             }
         }
@@ -184,6 +186,53 @@ namespace CMSAgent.Shared.Utils
             {
                 Log.Error(ex, "Failed to start process: {FilePath} {Arguments}", filePath, arguments);
                 return null;
+            }
+        }
+
+        private static async Task<bool> CloseProcessGracefully(Process process, int timeoutMilliseconds = 5000)
+        {
+            try
+            {
+                if (process.HasExited) return true;
+
+                // Thử đóng tiến trình một cách nhẹ nhàng trước
+                process.CloseMainWindow();
+                
+                // Đợi tiến trình đóng trong một khoảng thời gian
+                if (await Task.Run(() => process.WaitForExit(timeoutMilliseconds)))
+                {
+                    return true;
+                }
+
+                // Nếu không đóng được, thử gửi tín hiệu kết thúc
+                if (OperatingSystem.IsWindows())
+                {
+                    try
+                    {
+                        process.EnableRaisingEvents = true;
+                        var tcs = new TaskCompletionSource<bool>();
+                        process.Exited += (s, e) => tcs.TrySetResult(true);
+                        
+                        if (await Task.WhenAny(tcs.Task, Task.Delay(timeoutMilliseconds)) == tcs.Task)
+                        {
+                            return true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warning(ex, "Failed to enable process events for graceful shutdown");
+                    }
+                }
+
+                // Nếu vẫn không đóng được, mới sử dụng Kill
+                Log.Warning("Process did not exit gracefully, forcing termination");
+                process.Kill(true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error during graceful process shutdown");
+                return false;
             }
         }
     }

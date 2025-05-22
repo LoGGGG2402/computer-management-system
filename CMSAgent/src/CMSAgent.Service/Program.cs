@@ -1,4 +1,4 @@
- // CMSAgent.Service/Program.cs
+// CMSAgent.Service/Program.cs
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -36,20 +36,20 @@ namespace CMSAgent.Service
 
         public static async Task<int> Main(string[] args)
         {
-            // --- Cấu hình ban đầu cho Serilog (ghi ra Console để debug sớm) ---
-            // Cấu hình đầy đủ sẽ được thực hiện sau khi IConfiguration được load.
+            // --- Initial configuration for Serilog (output to Console for early debugging) ---
+            // Full configuration will be done after IConfiguration is loaded.
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Debug()
                 .Enrich.FromLogContext()
                 .WriteTo.Console()
-                .CreateBootstrapLogger(); // Logger tạm thời
+                .CreateBootstrapLogger(); // Temporary logger
 
-            Log.Information("CMSAgent.Service đang khởi động...");
-            Log.Information("Tham số dòng lệnh: {Args}", string.Join(" ", args));
+            Log.Information("CMSAgent.Service is starting...");
+            Log.Information("Command line arguments: {Args}", string.Join(" ", args));
 
-            // --- Cấu hình System.CommandLine ---
-            var configureCommand = new Command("configure", "Chạy quy trình cấu hình ban đầu cho Agent.");
-            var debugCommand = new Command("debug", "Chạy Agent ở chế độ debug (console) thay vì Windows Service.");
+            // --- Configure System.CommandLine ---
+            var configureCommand = new Command("configure", "Run initial configuration process for Agent.");
+            var debugCommand = new Command("debug", "Run Agent in debug mode (console) instead of Windows Service.");
 
             var rootCommand = new RootCommand("CMS Agent Service")
             {
@@ -59,7 +59,7 @@ namespace CMSAgent.Service
 
             rootCommand.SetHandler(async (InvocationContext context) =>
             {
-                // Mặc định chạy như service nếu không có lệnh con nào được gọi
+                // Default to running as service if no subcommand is called
                 await RunAsServiceOrDebugAsync(args, isDebugModeFromArg: false, isConfigureModeFromArg: false);
             });
 
@@ -73,12 +73,12 @@ namespace CMSAgent.Service
                 await RunAsServiceOrDebugAsync(args, isDebugModeFromArg: true, isConfigureModeFromArg: false);
             });
 
-            // Nếu không có lệnh con nào được truyền vào (ví dụ: chỉ chạy CMSAgent.Service.exe)
-            // thì System.CommandLine sẽ không gọi SetHandler của rootCommand.
-            // Do đó, ta cần kiểm tra args.
+            // If no subcommand is passed (e.g., just running CMSAgent.Service.exe)
+            // then System.CommandLine won't call rootCommand's SetHandler.
+            // Therefore, we need to check args.
             if (args.Length == 0 || (!args.Contains("configure") && !args.Contains("debug")))
             {
-                 Log.Information("Không có lệnh 'configure' hoặc 'debug'. Chạy ở chế độ Windows Service mặc định.");
+                 Log.Information("No 'configure' or 'debug' command. Running in default Windows Service mode.");
                 return await RunAsServiceOrDebugAsync(args, isDebugModeFromArg: false, isConfigureModeFromArg: false);
             }
 
@@ -93,54 +93,54 @@ namespace CMSAgent.Service
                 var hostBuilder = CreateHostBuilder(args, isDebugModeFromArg, isConfigureModeFromArg);
                 host = hostBuilder.Build();
 
-                // --- Kiểm tra Mutex sau khi ILogger và AppSettings đã được DI ---
-                // MutexManager cần AppSettings để lấy AgentInstanceGuid
+                // --- Check Mutex after ILogger and AppSettings are DI ---
+                // MutexManager needs AppSettings to get AgentInstanceGuid
                 _mutexManager = host.Services.GetRequiredService<MutexManager>();
                 if (!_mutexManager.RequestOwnership())
                 {
-                    Log.Fatal("Một instance khác của CMSAgent.Service đã chạy. Thoát ứng dụng.");
-                    // Không cần gọi ReleaseOwnership vì chưa giành được
-                    return 1; // Exit code cho lỗi
+                    Log.Fatal("Another instance of CMSAgent.Service is already running. Exiting application.");
+                    // No need to call ReleaseOwnership since we didn't acquire it
+                    return 1; // Exit code for error
                 }
 
-                // --- Nếu là chế độ configure ---
+                // --- If in configure mode ---
                 if (isConfigureModeFromArg)
                 {
-                    Log.Information("Chạy ở chế độ cấu hình (configure)...");
+                    Log.Information("Running in configuration mode (configure)...");
                     var orchestrator = host.Services.GetRequiredService<IAgentCoreOrchestrator>();
                     bool configSuccess = await orchestrator.RunInitialConfigurationAsync();
                     if (configSuccess)
                     {
-                        Log.Information("Cấu hình hoàn tất thành công. Agent sẽ cần được khởi động (như một service) để hoạt động.");
-                        // Cân nhắc: có nên tự động start service sau khi configure thành công? (Installer thường làm việc này)
+                        Log.Information("Configuration completed successfully. Agent will need to be started (as a service) to operate.");
+                        // Consider: should we automatically start the service after successful configuration? (Installer typically handles this)
                     }
                     else
                     {
-                        Log.Error("Quá trình cấu hình thất bại.");
+                        Log.Error("Configuration process failed.");
                     }
-                    // Dù thành công hay thất bại, chế độ configure chỉ chạy một lần rồi thoát.
+                    // Whether successful or failed, configure mode only runs once then exits.
                     return configSuccess ? 0 : 1;
                 }
 
-                // --- Chạy Host (Service hoặc Debug Console) ---
-                Log.Information("Bắt đầu chạy Host...");
+                // --- Run Host (Service or Debug Console) ---
+                Log.Information("Starting Host...");
                 await host.RunAsync();
-                Log.Information("Host đã dừng.");
-                return 0; // Thành công
+                Log.Information("Host has stopped.");
+                return 0; // Success
             }
             catch (OperationCanceledException)
             {
-                Log.Warning("Hoạt động của Host bị hủy bỏ.");
-                return 0; // Không phải lỗi nghiêm trọng
+                Log.Warning("Host operation cancelled.");
+                return 0; // Not a critical error
             }
             catch (Exception ex)
             {
-                Log.Fatal(ex, "Lỗi nghiêm trọng xảy ra trong quá trình Host chạy hoặc khởi tạo.");
-                return 1; // Exit code cho lỗi
+                Log.Fatal(ex, "Critical error occurred during Host running or initialization.");
+                return 1; // Exit code for error
             }
             finally
             {
-                _mutexManager?.ReleaseOwnership(); // Đảm bảo giải phóng Mutex
+                _mutexManager?.ReleaseOwnership(); // Ensure Mutex is released
                 _mutexManager?.Dispose();
 
                 if (host is IAsyncDisposable asyncDisposableHost)
@@ -151,18 +151,18 @@ namespace CMSAgent.Service
                 {
                     host?.Dispose();
                 }
-                SerilogConfigurator.CloseAndFlush(); // Đảm bảo tất cả log được ghi trước khi thoát
+                SerilogConfigurator.CloseAndFlush(); // Ensure all logs are written before exit
             }
         }
 
 
         public static IHostBuilder CreateHostBuilder(string[] args, bool isDebugMode, bool isConfigureMode) =>
             Host.CreateDefaultBuilder(args)
-                .UseContentRoot(AppContext.BaseDirectory) // Đảm bảo đường dẫn gốc đúng khi chạy như service
+                .UseContentRoot(AppContext.BaseDirectory) // Ensure correct root path when running as service
                 .ConfigureAppConfiguration((hostingContext, config) =>
                 {
                     var env = hostingContext.HostingEnvironment;
-                    config.SetBasePath(AppContext.BaseDirectory); // Quan trọng cho việc tìm appsettings.json
+                    config.SetBasePath(AppContext.BaseDirectory); // Important for finding appsettings.json
                     config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
                     config.AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: true, reloadOnChange: true);
                     config.AddEnvironmentVariables();
@@ -170,104 +170,91 @@ namespace CMSAgent.Service
                     {
                         config.AddCommandLine(args);
                     }
-                    Log.Information("Đã load cấu hình từ appsettings.json. Environment: {Environment}", env.EnvironmentName);
+                    Log.Information("Configuration loaded from appsettings.json. Environment: {Environment}", env.EnvironmentName);
                 })
                 .ConfigureLogging((hostingContext, loggingBuilder) =>
                 {
-                    // Xóa các provider logging mặc định nếu muốn chỉ dùng Serilog
+                    // Clear default logging providers if you want to use only Serilog
                     loggingBuilder.ClearProviders();
-                    // Serilog sẽ được cấu hình trong UseSerilog
+                    // Serilog will be configured in UseSerilog
                 })
                 .UseSerilog((hostingContext, services, loggerConfiguration) =>
                 {
-                    // Lấy IRuntimeConfigManager để có đường dẫn ProgramData
-                    // Cần đăng ký IRuntimeConfigManager trước khi UseSerilog được gọi nếu nó là dependency
-                    // Hoặc, tạo instance tạm thời ở đây (không lý tưởng)
-                    // Cách tốt hơn là SerilogConfigurator không phụ thuộc vào IRuntimeConfigManager trực tiếp
-                    // mà nhận đường dẫn ProgramData như một tham số.
-
-                    // Tạm thời, ta sẽ tự xác định ProgramData path ở đây cho Serilog
-                    string agentProgramDataPath = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                        AgentConstants.AgentProgramDataFolderName);
-                    Directory.CreateDirectory(Path.Combine(agentProgramDataPath, AgentConstants.LogsSubFolderName)); // Đảm bảo thư mục log tồn tại
+                    // Create temporary instance of RuntimeConfigManager to get ProgramData path
+                    // Note: This is a temporary solution. In the future, should restructure so that
+                    // SerilogConfigurator doesn't directly depend on RuntimeConfigManager
+                    var runtimeConfigManager = new RuntimeConfigManager(
+                        services.GetRequiredService<ILogger<RuntimeConfigManager>>()
+                    );
+                    string agentProgramDataPath = runtimeConfigManager.GetAgentProgramDataPath();
 
                     SerilogConfigurator.Configure(
                         hostingContext.Configuration,
                         agentProgramDataPath,
-                        AgentConstants.AgentLogFilePrefix, // Tiền tố cho log của Service
-                        isDebugMode || isConfigureMode // Chạy ở console nếu debug hoặc configure
+                        AgentConstants.AgentLogFilePrefix,
+                        isDebugMode || isConfigureMode
                     );
-                    Log.Information("Serilog đã được cấu hình đầy đủ.");
+                    Log.Information("Serilog has been fully configured.");
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
-                    // --- Đăng ký Cấu hình ---
+                    // --- Register Configuration ---
                     services.Configure<AppSettings>(hostContext.Configuration.GetSection("AppSettings"));
-                    // Đảm bảo AppSettings được load và có AgentInstanceGuid trước khi MutexManager được tạo
-                    // Validate AppSettings, đặc biệt là AgentInstanceGuid
+                    // Ensure AppSettings is loaded and has AgentInstanceGuid before MutexManager is created
+                    // Validate AppSettings, especially AgentInstanceGuid
                     var appSettings = hostContext.Configuration.GetSection("AppSettings").Get<AppSettings>();
                     if (appSettings == null || string.IsNullOrWhiteSpace(appSettings.AgentInstanceGuid))
                     {
-                        // Ghi log bằng logger tạm thời nếu ILogger chưa sẵn sàng
-                        Log.Warning("AgentInstanceGuid không được tìm thấy hoặc rỗng trong appsettings.json. " +
-                                   "Mutex sẽ sử dụng một GUID mặc định (ít an toàn hơn) hoặc ứng dụng có thể không khởi động đúng cách.");
-                        // Cân nhắc việc throw exception ở đây nếu AgentInstanceGuid là bắt buộc.
-                        // Nếu không throw, MutexManager sẽ throw khi không có GUID.
-                        // Để đơn giản, ta sẽ để MutexManager xử lý.
+                        // Log using temporary logger if ILogger is not ready
+                        Log.Warning("AgentInstanceGuid not found or empty in appsettings.json. " +
+                                   "Mutex will use a default GUID (less secure) or application may not start properly.");
+                        // Consider throwing exception here if AgentInstanceGuid is mandatory.
+                        // If not thrown, MutexManager will throw when there's no GUID.
+                        // For simplicity, we'll let MutexManager handle it.
                     }
 
 
                     services.AddSingleton<IRuntimeConfigManager, RuntimeConfigManager>();
 
-                    // --- Đăng ký Shared Services ---
+                    // --- Register Shared Services ---
                     services.AddSingleton<IVersionIgnoreManager>(provider =>
                         new VersionIgnoreManager(provider.GetRequiredService<IRuntimeConfigManager>().GetAgentProgramDataPath())
                     );
 
-                    // --- Đăng ký Security ---
+                    // --- Register Security ---
                     services.AddSingleton<IDpapiProtector, DpapiProtector>();
-                    services.AddSingleton<MutexManager>(); // Singleton vì nó quản lý global resource
+                    services.AddSingleton<MutexManager>(); // Singleton because it manages global resource
 
-                    // --- Đăng ký Communication ---
+                    // --- Register Communication ---
+                    services.AddHttpClient(); // Register IHttpClientFactory
                     services.AddHttpClient<IAgentApiClient, AgentApiClient>()
-                        .AddPolicyHandler((serviceProvider, request) => // Cấu hình Polly retry
+                        .AddPolicyHandler((serviceProvider, request) =>
                         {
                             var settings = serviceProvider.GetRequiredService<IOptions<AppSettings>>().Value.HttpRetryPolicy;
                             var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("PollyHttpRetry");
-                            return HttpPolicyExtensions
-                                .HandleTransientHttpError()
-                                .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.NotFound && msg.RequestMessage?.Method == HttpMethod.Get)
-                                .WaitAndRetryAsync(
-                                    retryCount: settings.MaxRetries,
-                                    sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(settings.InitialDelaySeconds, retryAttempt)),
-                                    onRetry: (outcome, timespan, retryAttempt, context) =>
-                                    {
-                                        logger.LogWarning("Thử lại yêu cầu HTTP lần {RetryAttempt}/{MaxRetries} đến {Uri} sau {Timespan}s. Lý do: {StatusCodeOrException}",
-                                            retryAttempt, settings.MaxRetries, request.RequestUri, timespan.TotalSeconds, outcome.Exception?.Message ?? outcome.Result?.StatusCode.ToString());
-                                    });
+                            return RetryPolicies.GetHttpRetryPolicy(settings, logger);
                         });
 
                     services.AddSingleton<IAgentSocketClient, AgentSocketClient>();
 
-                    // --- Đăng ký Monitoring ---
-                    services.AddTransient<IHardwareCollector, HardwareCollector>(); // Transient vì thường chỉ dùng 1 lần khi cần
-                    services.AddSingleton<IResourceMonitor, ResourceMonitor>(); // Singleton vì chạy nền liên tục
+                    // --- Register Monitoring ---
+                    services.AddTransient<IHardwareCollector, HardwareCollector>(); // Transient because typically used only once when needed
+                    services.AddSingleton<IResourceMonitor, ResourceMonitor>(); // Singleton because runs continuously in background
 
-                    // --- Đăng ký Commands ---
+                    // --- Register Commands ---
                     services.AddSingleton<ICommandHandlerFactory, CommandHandlerFactory>();
                     services.AddTransient<ConsoleCommandHandler>();
                     services.AddTransient<SystemActionCommandHandler>();
                     services.AddTransient<SoftwareInstallCommandHandler>();
                     services.AddTransient<SoftwareUninstallCommandHandler>();
                     services.AddTransient<GetLogsCommandHandler>();
-                    // Đăng ký các ICommandHandler khác ở đây
+                    // Register other ICommandHandlers here
 
                     services.AddSingleton<CommandQueue>();
 
-                    // --- Đăng ký Update ---
-                    // Func<Task> requestServiceShutdown sẽ được tạo và truyền vào từ AgentCoreOrchestrator hoặc AgentWorker
-                    // Hiện tại, ta sẽ để AgentUpdateManager nhận IHostApplicationLifetime để tự yêu cầu dừng
+                    // --- Register Update ---
+                    // Func<Task> requestServiceShutdown will be created and passed from AgentCoreOrchestrator or AgentWorker
+                    // Currently, we'll let AgentUpdateManager receive IHostApplicationLifetime to request stop itself
                     services.AddSingleton<IAgentUpdateManager>(provider =>
                         new AgentUpdateManager(
                             provider.GetRequiredService<ILogger<AgentUpdateManager>>(),
@@ -276,29 +263,29 @@ namespace CMSAgent.Service
                             provider.GetRequiredService<IAgentSocketClient>(),
                             provider.GetRequiredService<IVersionIgnoreManager>(),
                             provider.GetRequiredService<IRuntimeConfigManager>(),
-                            async () => // Đây là Func<Task> requestServiceShutdown
+                            async () => // This is Func<Task> requestServiceShutdown
                             {
                                 var lifetime = provider.GetRequiredService<IHostApplicationLifetime>();
-                                provider.GetRequiredService<ILogger<AgentUpdateManager>>().LogInformation("Yêu cầu dừng service từ AgentUpdateManager...");
-                                lifetime.StopApplication(); // Yêu cầu dừng host
+                                provider.GetRequiredService<ILogger<AgentUpdateManager>>().LogInformation("Requesting service stop from AgentUpdateManager...");
+                                lifetime.StopApplication(); // Request host stop
                                 await Task.CompletedTask;
                             }
                         )
                     );
 
 
-                    // --- Đăng ký Orchestration & Worker ---
+                    // --- Register Orchestration & Worker ---
                     services.AddSingleton<IAgentCoreOrchestrator, AgentCoreOrchestrator>();
-                    services.AddHostedService<AgentWorker>(); // Đăng ký worker chính
+                    services.AddHostedService<AgentWorker>(); // Register main worker
 
-                    Log.Information("Tất cả các dịch vụ đã được đăng ký.");
+                    Log.Information("All services have been registered.");
                 })
                 .ConfigureHostOptions(options =>
                 {
-                    // Đặt thời gian timeout cho việc dừng service
-                    options.ShutdownTimeout = TimeSpan.FromSeconds(30); // Ví dụ: 30 giây
+                    // Set timeout for service shutdown
+                    options.ShutdownTimeout = TimeSpan.FromSeconds(30); // Example: 30 seconds
                 })
-                .UseWindowsService(options => // Cấu hình để chạy như Windows Service
+                .UseWindowsService(options => // Configure to run as Windows Service
                 {
                     options.ServiceName = AgentConstants.ServiceName;
                 });

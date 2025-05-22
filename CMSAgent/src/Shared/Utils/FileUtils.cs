@@ -161,6 +161,44 @@ namespace CMSAgent.Shared.Utils
         }
 
         /// <summary>
+        /// Safely move a directory asynchronously, including deleting the destination directory if it exists.
+        /// </summary>
+        /// <param name="sourceDirName">Source directory path.</param>
+        /// <param name="destDirName">Destination directory path.</param>
+        /// <param name="overwrite">If true, delete the destination directory if it exists.</param>
+        public static async Task DirectoryMoveAsync(string sourceDirName, string destDirName, bool overwrite = true)
+        {
+            if (!Directory.Exists(sourceDirName))
+            {
+                Log.Error("DirectoryMoveAsync: Source directory not found: {SourceDir}", sourceDirName);
+                throw new DirectoryNotFoundException($"Source directory not found: {sourceDirName}");
+            }
+
+            if (Directory.Exists(destDirName))
+            {
+                if (overwrite)
+                {
+                    Log.Warning("DirectoryMoveAsync: Destination directory {DestDir} exists and will be overwritten.", destDirName);
+                    await Task.Run(() => Directory.Delete(destDirName, true));
+                }
+                else
+                {
+                    Log.Error("DirectoryMoveAsync: Destination directory {DestDir} already exists and overwrite is false.", destDirName);
+                    throw new IOException($"Destination directory already exists: {destDirName}");
+                }
+            }
+
+            var parentDir = Path.GetDirectoryName(destDirName);
+            if (!string.IsNullOrEmpty(parentDir))
+            {
+                Directory.CreateDirectory(parentDir);
+            }
+
+            await Task.Run(() => Directory.Move(sourceDirName, destDirName));
+            Log.Information("DirectoryMoveAsync: Moved directory from {SourceDir} to {DestDir}", sourceDirName, destDirName);
+        }
+
+        /// <summary>
         /// Recursively copy a directory.
         /// </summary>
         /// <param name="sourceDir">Source directory path.</param>
@@ -185,6 +223,41 @@ namespace CMSAgent.Shared.Utils
             {
                 string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
                 CopyDirectory(subDir.FullName, newDestinationDir, overwrite);
+            }
+        }
+
+        /// <summary>
+        /// Recursively copy a directory asynchronously.
+        /// </summary>
+        /// <param name="sourceDir">Source directory path.</param>
+        /// <param name="destinationDir">Destination directory path.</param>
+        /// <param name="overwrite">True to overwrite files if they exist.</param>
+        public static async Task CopyDirectoryAsync(string sourceDir, string destinationDir, bool overwrite = true)
+        {
+            var dir = new DirectoryInfo(sourceDir);
+            if (!dir.Exists)
+                throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
+
+            DirectoryInfo[] dirs = dir.GetDirectories();
+            Directory.CreateDirectory(destinationDir);
+
+            var copyTasks = new List<Task>();
+
+            // Copy files
+            foreach (FileInfo file in dir.GetFiles())
+            {
+                string targetFilePath = Path.Combine(destinationDir, file.Name);
+                copyTasks.Add(Task.Run(() => file.CopyTo(targetFilePath, overwrite)));
+            }
+
+            // Wait for all file copies to complete
+            await Task.WhenAll(copyTasks);
+
+            // Copy subdirectories
+            foreach (DirectoryInfo subDir in dirs)
+            {
+                string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
+                await CopyDirectoryAsync(subDir.FullName, newDestinationDir, overwrite);
             }
         }
 
@@ -234,6 +307,52 @@ namespace CMSAgent.Shared.Utils
                 Log.Error(ex, "WriteStringToFileAsync: Error writing to file {FilePath}", filePath);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Safely delete a file with logging.
+        /// </summary>
+        /// <param name="filePath">Path to the file to delete.</param>
+        /// <param name="logger">Logger instance for logging operations.</param>
+        public static void TryDeleteFile(string filePath, ILogger logger)
+        {
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                    logger.LogInformation("Successfully deleted file: {FilePath}", filePath);
+                }
+                else
+                {
+                    logger.LogDebug("File does not exist, no deletion needed: {FilePath}", filePath);
+                }
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                logger.LogError(ex, "Access denied when attempting to delete file: {FilePath}", filePath);
+            }
+            catch (IOException ex)
+            {
+                logger.LogError(ex, "I/O error occurred while deleting file: {FilePath}", filePath);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Unexpected error occurred while deleting file: {FilePath}", filePath);
+            }
+        }
+
+        /// <summary>
+        /// Check if a file path is safe to access by ensuring it is within an allowed base directory.
+        /// </summary>
+        /// <param name="filePath">The file path to check.</param>
+        /// <param name="allowedBaseDirectory">The base directory that the file path must be within.</param>
+        /// <returns>True if the file path is within the allowed base directory, false otherwise.</returns>
+        public static bool IsPathSafe(string filePath, string allowedBaseDirectory)
+        {
+            var fullPath = Path.GetFullPath(filePath); // Chuẩn hóa đường dẫn
+            var fullAllowedBase = Path.GetFullPath(allowedBaseDirectory);
+            return fullPath.StartsWith(fullAllowedBase, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

@@ -1,4 +1,6 @@
-using CMSAgent.Shared.Models; 
+using CMSAgent.Shared.Models;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Serilog;
 
 namespace CMSAgent.Shared.Utils
@@ -8,6 +10,13 @@ namespace CMSAgent.Shared.Utils
     /// </summary>
     public static class ErrorReportingUtils
     {
+        private static readonly JsonSerializerOptions _jsonOptions = new()
+        {
+            WriteIndented = true,
+            ReferenceHandler = ReferenceHandler.IgnoreCycles,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+
         /// <summary>
         /// Create an AgentErrorReport object.
         /// </summary>
@@ -38,13 +47,7 @@ namespace CMSAgent.Shared.Utils
             {
                 detailsPayload = new
                 {
-                    ExceptionInfo = new
-                    {
-                        Type = exception.GetType().FullName,
-                        exception.Message,
-                        exception.StackTrace,
-                        InnerException = exception.InnerException != null ? new { Type = exception.InnerException.GetType().FullName, exception.InnerException.Message, exception.InnerException.StackTrace } : null
-                    },
+                    ExceptionInfo = ExtractExceptionInfo(exception),
                     CustomInfo = customDetails
                 };
             }
@@ -52,13 +55,7 @@ namespace CMSAgent.Shared.Utils
             {
                 detailsPayload = new
                 {
-                    ExceptionInfo = new
-                    {
-                        Type = exception.GetType().FullName,
-                        exception.Message,
-                        exception.StackTrace,
-                        InnerException = exception.InnerException != null ? new { Type = exception.InnerException.GetType().FullName, exception.InnerException.Message, exception.InnerException.StackTrace } : null
-                    }
+                    ExceptionInfo = ExtractExceptionInfo(exception)
                 };
             }
             else if (customDetails != null)
@@ -68,18 +65,62 @@ namespace CMSAgent.Shared.Utils
 
             if (detailsPayload != null)
             {
-                try
-                {
-                    report.Details = detailsPayload;
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "Failed to serialize error report details for error type {ErrorType}", errorType);
-                    report.Details = $"Failed to serialize details: {ex.Message}";
-                }
+                report.Details = SerializeDetailsSafely(detailsPayload, errorType);
             }
 
             return report;
+        }
+
+        private static object ExtractExceptionInfo(Exception exception, int depth = 0)
+        {
+            if (depth > 5) // Giới hạn độ sâu của inner exceptions
+            {
+                return new { Message = "Inner exception chain too deep" };
+            }
+
+            var info = new
+            {
+                Type = exception.GetType().FullName,
+                exception.Message,
+                exception.StackTrace,
+                Source = exception.Source,
+                HResult = exception.HResult,
+                InnerException = exception.InnerException != null 
+                    ? ExtractExceptionInfo(exception.InnerException, depth + 1) 
+                    : null
+            };
+
+            return info;
+        }
+
+        private static object SerializeDetailsSafely(object detailsPayload, string errorType)
+        {
+            try
+            {
+                // Thử serialize thành JSON string để đảm bảo tính hợp lệ
+                var jsonString = JsonSerializer.Serialize(detailsPayload, _jsonOptions);
+                
+                // Nếu detailsPayload là một đối tượng phức tạp, trả về nó trực tiếp
+                if (detailsPayload.GetType().IsClass && detailsPayload.GetType() != typeof(string))
+                {
+                    return detailsPayload;
+                }
+                
+                // Nếu là kiểu dữ liệu đơn giản, trả về JSON string
+                return new { SerializedDetails = jsonString };
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "JSON serialization failed for error type {ErrorType}, using minimal details", errorType);
+                
+                // Fallback: chỉ lưu thông tin cơ bản
+                return new
+                {
+                    Error = "Failed to serialize details",
+                    ErrorMessage = ex.Message,
+                    OriginalType = detailsPayload.GetType().FullName
+                };
+            }
         }
     }
 }

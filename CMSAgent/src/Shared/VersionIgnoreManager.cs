@@ -13,7 +13,8 @@ namespace CMSAgent.Shared
         private readonly string _ignoredVersionsFilePath;
         private HashSet<string> _ignoredVersions;
         private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
-        private readonly object _fileLock = new();
+        private readonly ReaderWriterLockSlim _rwLock = new();
+        private readonly SemaphoreSlim _ioLock = new(1, 1);
         private readonly ILogger<VersionIgnoreManager> _logger;
 
         /// <summary>
@@ -34,70 +35,86 @@ namespace CMSAgent.Shared
             string runtimeConfigDir = Path.Combine(agentProgramDataPath, AgentConstants.RuntimeConfigSubFolderName);
             _ignoredVersionsFilePath = Path.Combine(runtimeConfigDir, AgentConstants.IgnoredVersionsFileName);
             _ignoredVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            
-            LoadIgnoredVersions();
         }
 
-        private void LoadIgnoredVersions()
+        /// <summary>
+        /// Initializes the VersionIgnoreManager by loading the ignored versions asynchronously.
+        /// </summary>
+        public async Task InitializeAsync()
         {
-            lock (_fileLock)
+            await LoadIgnoredVersionsAsync();
+        }
+
+        private async Task LoadIgnoredVersionsAsync()
+        {
+            try
             {
-                try
+                if (File.Exists(_ignoredVersionsFilePath))
                 {
-                    if (File.Exists(_ignoredVersionsFilePath))
+                    string json = await File.ReadAllTextAsync(_ignoredVersionsFilePath);
+                    if (string.IsNullOrWhiteSpace(json))
                     {
-                        string json = File.ReadAllText(_ignoredVersionsFilePath);
-                        if (string.IsNullOrWhiteSpace(json))
-                        {
-                            _logger.LogInformation("Ignored versions file {FilePath} is empty. Initializing empty list.", _ignoredVersionsFilePath);
-                            _ignoredVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                            return;
-                        }
-                        var versions = JsonSerializer.Deserialize<List<string>>(json);
-                        if (versions != null)
-                        {
-                            _ignoredVersions = new HashSet<string>(versions, StringComparer.OrdinalIgnoreCase);
-                            _logger.LogInformation("Loaded {Count} ignored versions from {FilePath}.", _ignoredVersions.Count, _ignoredVersionsFilePath);
-                        }
-                        else
-                        {
-                            _logger.LogWarning("Could not deserialize content from ignored versions file {FilePath}. Initializing empty list.", _ignoredVersionsFilePath);
-                            _ignoredVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        }
+                        _logger.LogInformation("Ignored versions file {FilePath} is empty. Initializing empty list.", _ignoredVersionsFilePath);
+                        _ignoredVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        return;
+                    }
+                    var versions = JsonSerializer.Deserialize<List<string>>(json);
+                    if (versions != null)
+                    {
+                        _ignoredVersions = new HashSet<string>(versions, StringComparer.OrdinalIgnoreCase);
+                        _logger.LogInformation("Loaded {Count} ignored versions from {FilePath}.", _ignoredVersions.Count, _ignoredVersionsFilePath);
                     }
                     else
                     {
-                        _logger.LogInformation("Ignored versions file not found at {FilePath}. Initializing empty list.", _ignoredVersionsFilePath);
+                        _logger.LogWarning("Could not deserialize content from ignored versions file {FilePath}. Initializing empty list.", _ignoredVersionsFilePath);
                         _ignoredVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     }
                 }
-                catch (Exception ex)
+                else
                 {
-                    _logger.LogError(ex, "Error loading ignored versions from {FilePath}. Initializing empty list.", _ignoredVersionsFilePath);
+                    _logger.LogInformation("Ignored versions file not found at {FilePath}. Initializing empty list.", _ignoredVersionsFilePath);
                     _ignoredVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error loading ignored versions from {FilePath}. Initializing empty list.", _ignoredVersionsFilePath);
+                _ignoredVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             }
         }
         
         private async Task SaveIgnoredVersionsAsync()
         {
             List<string> versionsToSave;
-            lock (_fileLock) 
+            _rwLock.EnterReadLock();
+            try
             {
-                 versionsToSave = [.. _ignoredVersions];
+                versionsToSave = [.. _ignoredVersions];
+            }
+            finally
+            {
+                _rwLock.ExitReadLock();
             }
 
             try
             {
-                string json = JsonSerializer.Serialize(versionsToSave, _jsonOptions);
-                bool success = await FileUtils.WriteStringToFileAsync(_ignoredVersionsFilePath, json);
-                if(success)
+                await _ioLock.WaitAsync();
+                try
                 {
-                    _logger.LogInformation("Successfully saved {Count} ignored versions to {FilePath}.", versionsToSave.Count, _ignoredVersionsFilePath);
+                    string json = JsonSerializer.Serialize(versionsToSave, _jsonOptions);
+                    bool success = await FileUtils.WriteStringToFileAsync(_ignoredVersionsFilePath, json);
+                    if(success)
+                    {
+                        _logger.LogInformation("Successfully saved {Count} ignored versions to {FilePath}.", versionsToSave.Count, _ignoredVersionsFilePath);
+                    }
+                    else
+                    {
+                        _logger.LogError("Failed to save ignored versions to {FilePath} (using FileUtils).", _ignoredVersionsFilePath);
+                    }
                 }
-                else
+                finally
                 {
-                    _logger.LogError("Failed to save ignored versions to {FilePath} (using FileUtils).", _ignoredVersionsFilePath);
+                    _ioLock.Release();
                 }
             }
             catch (Exception ex)
@@ -115,9 +132,14 @@ namespace CMSAgent.Shared
             if (string.IsNullOrWhiteSpace(version)) return;
 
             bool added;
-            lock (_fileLock)
+            _rwLock.EnterWriteLock();
+            try
             {
                 added = _ignoredVersions.Add(version);
+            }
+            finally
+            {
+                _rwLock.ExitWriteLock();
             }
 
             if (added)
@@ -136,9 +158,14 @@ namespace CMSAgent.Shared
             if (string.IsNullOrWhiteSpace(version)) return;
 
             bool removed;
-            lock (_fileLock)
+            _rwLock.EnterWriteLock();
+            try
             {
                 removed = _ignoredVersions.Remove(version);
+            }
+            finally
+            {
+                _rwLock.ExitWriteLock();
             }
             
             if (removed)
@@ -156,9 +183,15 @@ namespace CMSAgent.Shared
         public bool IsVersionIgnored(string version)
         {
             if (string.IsNullOrWhiteSpace(version)) return false;
-            lock (_fileLock)
+            
+            _rwLock.EnterReadLock();
+            try
             {
                 return _ignoredVersions.Contains(version);
+            }
+            finally
+            {
+                _rwLock.ExitReadLock();
             }
         }
 
@@ -168,9 +201,14 @@ namespace CMSAgent.Shared
         /// <returns>An enumerable of ignored version strings.</returns>
         public IEnumerable<string> GetIgnoredVersions()
         {
-            lock (_fileLock)
+            _rwLock.EnterReadLock();
+            try
             {
                 return [.. _ignoredVersions];
+            }
+            finally
+            {
+                _rwLock.ExitReadLock();
             }
         }
 
@@ -180,7 +218,8 @@ namespace CMSAgent.Shared
         public async Task ClearIgnoredVersionsAsync()
         {
             bool changed = false;
-            lock (_fileLock)
+            _rwLock.EnterWriteLock();
+            try
             {
                 if (_ignoredVersions.Count != 0)
                 {
@@ -188,40 +227,55 @@ namespace CMSAgent.Shared
                     changed = true;
                 }
             }
+            finally
+            {
+                _rwLock.ExitWriteLock();
+            }
+            
             if (changed)
             {
                 _logger.LogInformation("All versions have been removed from the ignore list.");
                 await SaveIgnoredVersionsAsync();
             }
         }
+
+        public void Dispose()
+        {
+            _rwLock.Dispose();
+            _ioLock.Dispose();
+        }
     }
 
     /// <summary>
     /// Interface for managing ignored versions.
     /// </summary>
-    public interface IVersionIgnoreManager
+    public interface IVersionIgnoreManager : IDisposable
     {
         /// <summary>
         /// Adds a version to the ignore list asynchronously.
         /// </summary>
         /// <param name="version">The version string to ignore.</param>
         Task IgnoreVersionAsync(string version);
+
         /// <summary>
         /// Removes a version from the ignore list asynchronously.
         /// </summary>
         /// <param name="version">The version string to remove from the ignore list.</param>
         Task UnignoreVersionAsync(string version);
+
         /// <summary>
         /// Checks if a version is in the ignore list.
         /// </summary>
         /// <param name="version">The version string to check.</param>
         /// <returns>True if the version is ignored; otherwise, false.</returns>
         bool IsVersionIgnored(string version);
+
         /// <summary>
         /// Gets all ignored versions.
         /// </summary>
         /// <returns>An enumerable of ignored version strings.</returns>
         IEnumerable<string> GetIgnoredVersions();
+
         /// <summary>
         /// Clears all ignored versions asynchronously.
         /// </summary>

@@ -70,8 +70,10 @@ export const SocketProvider = ({ children }) => {
             "[SocketContext] WebSocket connected. Socket ID:",
             newSocket.id
           );
-          console.log("[SocketContext] Emitting frontend:authenticate");
-          newSocket.emit("frontend:authenticate", { token: user.token });
+          setIsSocketReady(true);
+          setIsConnecting(false);
+          setComputerStatuses({});
+
         });
 
         newSocket.on("disconnect", (reason) => {

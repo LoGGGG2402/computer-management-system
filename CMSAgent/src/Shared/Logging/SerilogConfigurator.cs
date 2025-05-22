@@ -3,6 +3,7 @@ using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
 using CMSAgent.Shared.Constants;
+using System.Security.Principal;
 
 namespace CMSAgent.Shared.Logging
 {
@@ -39,6 +40,15 @@ namespace CMSAgent.Shared.Logging
                 );
             }
 
+            ConfigureFileLogging(loggerConfiguration, agentProgramDataPath, logFilePrefix);
+            ConfigureEventLogging(loggerConfiguration);
+
+            Log.Logger = loggerConfiguration.CreateLogger();
+            Log.Information("Serilog has been configured. Debug mode: {IsDebugMode}", runningInDebugMode);
+        }
+
+        private static void ConfigureFileLogging(LoggerConfiguration loggerConfiguration, string agentProgramDataPath, string logFilePrefix)
+        {
             string logDirectory = Path.Combine(agentProgramDataPath, AgentConstants.LogsSubFolderName);
             try
             {
@@ -47,12 +57,7 @@ namespace CMSAgent.Shared.Logging
                     Directory.CreateDirectory(logDirectory);
                 }
 
-                string logFilePathFormat = Path.Combine(logDirectory, $"{logFilePrefix}{AgentConstants.LogFileDateFormat}.log");
-                if (logFilePrefix == AgentConstants.UpdaterLogFilePrefix)
-                {
-                     logFilePathFormat = Path.Combine(logDirectory, $"{logFilePrefix}{DateTime.Now.ToString(AgentConstants.UpdaterLogFileDateTimeFormat)}.log");
-                }
-
+                string logFilePathFormat = GetLogFilePath(logDirectory, logFilePrefix);
                 loggerConfiguration.WriteTo.File(
                     logFilePathFormat,
                     outputTemplate: OutputTemplate,
@@ -65,7 +70,26 @@ namespace CMSAgent.Shared.Logging
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"File log configuration error: {ex.Message}");
+                Log.Error(ex, "Failed to configure file logging. Log directory: {LogDirectory}", logDirectory);
+                throw; // Rethrow to ensure logging configuration is properly handled
+            }
+        }
+
+        private static string GetLogFilePath(string logDirectory, string logFilePrefix)
+        {
+            if (logFilePrefix == AgentConstants.UpdaterLogFilePrefix)
+            {
+                return Path.Combine(logDirectory, $"{logFilePrefix}{DateTime.Now.ToString(AgentConstants.UpdaterLogFileDateTimeFormat)}.log");
+            }
+            return Path.Combine(logDirectory, $"{logFilePrefix}{AgentConstants.LogFileDateFormat}.log");
+        }
+
+        private static void ConfigureEventLogging(LoggerConfiguration loggerConfiguration)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                Log.Debug("Event logging is only supported on Windows");
+                return;
             }
 
             try
@@ -73,22 +97,49 @@ namespace CMSAgent.Shared.Logging
                 string eventLogSource = AgentConstants.ServiceName;
                 if (!System.Diagnostics.EventLog.SourceExists(eventLogSource))
                 {
-                    System.Diagnostics.EventLog.CreateEventSource(eventLogSource, "Application");
+                    if (!IsAdministrator())
+                    {
+                        Log.Warning("Cannot create Event Log source {EventLogSource} - requires administrator privileges", eventLogSource);
+                        return;
+                    }
+
+                    try
+                    {
+                        System.Diagnostics.EventLog.CreateEventSource(eventLogSource, "Application");
+                        Log.Information("Created Event Log source: {EventLogSource}", eventLogSource);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "Failed to create Event Log source {EventLogSource}", eventLogSource);
+                        return;
+                    }
                 }
+
                 loggerConfiguration.WriteTo.EventLog(
                     source: eventLogSource,
-                    manageEventSource: true,
+                    manageEventSource: false, // Set to false since we manage it ourselves
                     outputTemplate: "{Message:lj}{NewLine}{Exception}",
                     restrictedToMinimumLevel: LogEventLevel.Warning
                 );
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Windows Event Log configuration error: {ex.Message}");
+                Log.Error(ex, "Failed to configure Windows Event Log");
             }
+        }
 
-            Log.Logger = loggerConfiguration.CreateLogger();
-            Log.Information("Serilog has been configured. Debug mode: {IsDebugMode}", runningInDebugMode);
+        private static bool IsAdministrator()
+        {
+            try
+            {
+                using var identity = WindowsIdentity.GetCurrent();
+                var principal = new WindowsPrincipal(identity);
+                return principal.IsInRole(WindowsBuiltInRole.Administrator);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>

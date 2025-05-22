@@ -24,7 +24,7 @@ namespace CMSAgent.Service.Communication.Http
         private readonly AppSettings _appSettings;
         private readonly JsonSerializerOptions _jsonSerializerOptions;
 
-        // Thông tin xác thực hiện tại
+        // Current authentication information
         private string? _currentAgentId;
         private string? _currentAgentToken;
 
@@ -37,10 +37,10 @@ namespace CMSAgent.Service.Communication.Http
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _appSettings = appSettingsOptions?.Value ?? throw new ArgumentNullException(nameof(appSettingsOptions));
 
-            // Cấu hình HttpClient base address và headers mặc định
+            // Configure HttpClient base address and default headers
             if (string.IsNullOrWhiteSpace(_appSettings.ServerUrl))
             {
-                throw new InvalidOperationException("ServerUrl không được cấu hình trong appsettings.");
+                throw new InvalidOperationException("ServerUrl is not configured in appsettings.");
             }
             _httpClient.BaseAddress = new Uri(_appSettings.ServerUrl);
             _httpClient.DefaultRequestHeaders.Accept.Clear();
@@ -48,19 +48,19 @@ namespace CMSAgent.Service.Communication.Http
 
             _jsonSerializerOptions = new JsonSerializerOptions
             {
-                PropertyNameCaseInsensitive = true, // Quan trọng khi deserialize
+                PropertyNameCaseInsensitive = true, // Important for deserialization
                 DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
             };
         }
 
         /// <summary>
-        /// Cập nhật thông tin xác thực được sử dụng cho các request sau này.
+        /// Updates authentication information to be used for subsequent requests.
         /// </summary>
         public void SetAuthenticationCredentials(string agentId, string agentToken)
         {
             _currentAgentId = agentId;
             _currentAgentToken = agentToken;
-            _logger.LogInformation("Thông tin xác thực API client đã được cập nhật cho AgentId: {AgentId}", agentId);
+            _logger.LogInformation("API client authentication information has been updated for AgentId: {AgentId}", agentId);
         }
 
         private void AddAuthHeadersToRequest(HttpRequestMessage request)
@@ -77,7 +77,7 @@ namespace CMSAgent.Service.Communication.Http
         }
 
         public async Task<(string Status, string? AgentToken, string? ErrorMessage)> IdentifyAgentAsync(
-            string agentId, PositionInfo positionInfo, bool forceRenewToken = false, CancellationToken cancellationToken = default)
+            string agentId, PositionInfo positionInfo, CancellationToken cancellationToken = default)
         {
             var requestPayload = new
             {
@@ -86,7 +86,7 @@ namespace CMSAgent.Service.Communication.Http
             };
 
             string apiUrl = $"{_appSettings.ApiPath}/agent/identify";
-            _logger.LogInformation("Đang gửi yêu cầu IdentifyAgent đến {ApiUrl} cho AgentId: {AgentId}", apiUrl, agentId);
+            _logger.LogInformation("Sending IdentifyAgent request to {ApiUrl} for AgentId: {AgentId}", apiUrl, agentId);
 
             try
             {
@@ -97,73 +97,22 @@ namespace CMSAgent.Service.Communication.Http
                     var identifyResponse = await response.Content.ReadFromJsonAsync<IdentifyResponsePayload>(_jsonSerializerOptions, cancellationToken);
                     if (identifyResponse != null)
                     {
-                        _logger.LogInformation("IdentifyAgent thành công. Status: {Status}, AgentToken được trả về: {HasToken}",
+                        _logger.LogInformation("IdentifyAgent successful. Status: {Status}, AgentToken returned: {HasToken}",
                             identifyResponse.Status, !string.IsNullOrEmpty(identifyResponse.AgentToken));
                         return (identifyResponse.Status, identifyResponse.AgentToken, identifyResponse.Message);
                     }
-                    _logger.LogError("IdentifyAgent: Phản hồi thành công nhưng không thể parse nội dung JSON.");
+                    _logger.LogError("IdentifyAgent: Successful response but could not parse JSON content.");
                     return ("error", null, "Failed to parse server response.");
                 }
-                else
+                else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                 {
-                    var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                    _logger.LogError("IdentifyAgent thất bại. StatusCode: {StatusCode}, Response: {ErrorContent}", response.StatusCode, errorContent);
-                     try
-                    {
-                        var errorResponse = JsonSerializer.Deserialize<ErrorResponsePayload>(errorContent, _jsonSerializerOptions);
-                        return (errorResponse?.Status ?? "error", null, errorResponse?.Message ?? $"HTTP Error: {response.StatusCode}");
-                    }
-                    catch (JsonException)
-                    {
-                        return ("error", null, $"HTTP Error: {response.StatusCode} - {response.ReasonPhrase}");
-                    }
-                }
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogError(ex, "IdentifyAgent: Lỗi HttpRequestException khi gọi API.");
-                return ("error", null, $"Network error: {ex.Message}");
-            }
-            catch (TaskCanceledException ex)
-            {
-                _logger.LogWarning(ex, "IdentifyAgent: Yêu cầu bị hủy.");
-                return ("error", null, "Request canceled.");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "IdentifyAgent: Lỗi không xác định.");
-                return ("error", null, $"Unexpected error: {ex.Message}");
-            }
-        }
-
-
-        public async Task<(string Status, string? AgentToken, string? ErrorMessage)> VerifyMfaAsync(
-            string agentId, string mfaCode, CancellationToken cancellationToken = default)
-        {
-            var requestPayload = new { agentId, mfaCode };
-            string apiUrl = $"{_appSettings.ApiPath}/agent/verify-mfa";
-            _logger.LogInformation("Đang gửi yêu cầu VerifyMfa đến {ApiUrl} cho AgentId: {AgentId}", apiUrl, agentId);
-
-            try
-            {
-                HttpResponseMessage response = await _httpClient.PostAsJsonAsync(apiUrl, requestPayload, _jsonSerializerOptions, cancellationToken);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var mfaResponse = await response.Content.ReadFromJsonAsync<MfaResponsePayload>(_jsonSerializerOptions, cancellationToken);
-                    if (mfaResponse != null && mfaResponse.Status == "success" && !string.IsNullOrEmpty(mfaResponse.AgentToken))
-                    {
-                        _logger.LogInformation("VerifyMfa thành công cho AgentId: {AgentId}", agentId);
-                        return (mfaResponse.Status, mfaResponse.AgentToken, null);
-                    }
-                    _logger.LogError("VerifyMfa: Phản hồi thành công nhưng nội dung không hợp lệ. Status: {Status}, Token: {Token}",
-                        mfaResponse?.Status, mfaResponse?.AgentToken);
-                    return (mfaResponse?.Status ?? "error", null, mfaResponse?.Message ?? "Invalid MFA response content.");
+                    _logger.LogError("IdentifyAgent: Invalid token. Please run configure command again.");
+                    return ("unauthorized", null, "Token is invalid. Please run configure command again.");
                 }
                 else
                 {
                     var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                    _logger.LogError("VerifyMfa thất bại. StatusCode: {StatusCode}, Response: {ErrorContent}", response.StatusCode, errorContent);
+                    _logger.LogError("IdentifyAgent failed. StatusCode: {StatusCode}, Response: {ErrorContent}", response.StatusCode, errorContent);
                     try
                     {
                         var errorResponse = JsonSerializer.Deserialize<ErrorResponsePayload>(errorContent, _jsonSerializerOptions);
@@ -177,17 +126,72 @@ namespace CMSAgent.Service.Communication.Http
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "VerifyMfa: Lỗi HttpRequestException.");
+                _logger.LogError(ex, "IdentifyAgent: HttpRequestException when calling API.");
                 return ("error", null, $"Network error: {ex.Message}");
             }
             catch (TaskCanceledException ex)
             {
-                _logger.LogWarning(ex, "VerifyMfa: Yêu cầu bị hủy.");
+                _logger.LogWarning(ex, "IdentifyAgent: Request was canceled.");
                 return ("error", null, "Request canceled.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "VerifyMfa: Lỗi không xác định.");
+                _logger.LogError(ex, "IdentifyAgent: Unexpected error.");
+                return ("error", null, $"Unexpected error: {ex.Message}");
+            }
+        }
+
+        public async Task<(string Status, string? AgentToken, string? ErrorMessage)> VerifyMfaAsync(
+            string agentId, string mfaCode, CancellationToken cancellationToken = default)
+        {
+            var requestPayload = new { agentId, mfaCode };
+            string apiUrl = $"{_appSettings.ApiPath}/agent/verify-mfa";
+            _logger.LogInformation("Sending VerifyMfa request to {ApiUrl} for AgentId: {AgentId}", apiUrl, agentId);
+
+            try
+            {
+                HttpResponseMessage response = await _httpClient.PostAsJsonAsync(apiUrl, requestPayload, _jsonSerializerOptions, cancellationToken);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var mfaResponse = await response.Content.ReadFromJsonAsync<MfaResponsePayload>(_jsonSerializerOptions, cancellationToken);
+                    if (mfaResponse != null && mfaResponse.Status == "success" && !string.IsNullOrEmpty(mfaResponse.AgentToken))
+                    {
+                        _logger.LogInformation("VerifyMfa successful for AgentId: {AgentId}", agentId);
+                        return (mfaResponse.Status, mfaResponse.AgentToken, null);
+                    }
+                    _logger.LogError("VerifyMfa: Successful response but invalid content. Status: {Status}, Token: {Token}",
+                        mfaResponse?.Status, mfaResponse?.AgentToken);
+                    return (mfaResponse?.Status ?? "error", null, mfaResponse?.Message ?? "Invalid MFA response content.");
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                    _logger.LogError("VerifyMfa failed. StatusCode: {StatusCode}, Response: {ErrorContent}", response.StatusCode, errorContent);
+                    try
+                    {
+                        var errorResponse = JsonSerializer.Deserialize<ErrorResponsePayload>(errorContent, _jsonSerializerOptions);
+                        return (errorResponse?.Status ?? "error", null, errorResponse?.Message ?? $"HTTP Error: {response.StatusCode}");
+                    }
+                    catch (JsonException)
+                    {
+                        return ("error", null, $"HTTP Error: {response.StatusCode} - {response.ReasonPhrase}");
+                    }
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "VerifyMfa: HttpRequestException.");
+                return ("error", null, $"Network error: {ex.Message}");
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogWarning(ex, "VerifyMfa: Request was canceled.");
+                return ("error", null, "Request canceled.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "VerifyMfa: Unexpected error.");
                 return ("error", null, $"Unexpected error: {ex.Message}");
             }
         }
@@ -195,7 +199,7 @@ namespace CMSAgent.Service.Communication.Http
         public async Task<bool> ReportHardwareInfoAsync(HardwareInfo hardwareInfo, CancellationToken cancellationToken = default)
         {
             string apiUrl = $"{_appSettings.ApiPath}/agent/hardware-info";
-            _logger.LogInformation("Đang gửi thông tin phần cứng đến {ApiUrl}", apiUrl);
+            _logger.LogInformation("Sending hardware information to {ApiUrl}", apiUrl);
 
             var request = new HttpRequestMessage(HttpMethod.Post, apiUrl)
             {
@@ -206,21 +210,21 @@ namespace CMSAgent.Service.Communication.Http
             try
             {
                 HttpResponseMessage response = await _httpClient.SendAsync(request, cancellationToken);
-                if (response.IsSuccessStatusCode) // API trả về 204 No Content
+                if (response.IsSuccessStatusCode) // API returns 204 No Content
                 {
-                    _logger.LogInformation("Gửi thông tin phần cứng thành công.");
+                    _logger.LogInformation("Hardware information sent successfully.");
                     return true;
                 }
                 else
                 {
                     var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                    _logger.LogError("Gửi thông tin phần cứng thất bại. StatusCode: {StatusCode}, Response: {ErrorContent}", response.StatusCode, errorContent);
+                    _logger.LogError("Failed to send hardware information. StatusCode: {StatusCode}, Response: {ErrorContent}", response.StatusCode, errorContent);
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi gửi thông tin phần cứng.");
+                _logger.LogError(ex, "Error sending hardware information.");
                 return false;
             }
         }
@@ -228,7 +232,7 @@ namespace CMSAgent.Service.Communication.Http
         public async Task<bool> ReportErrorAsync(AgentErrorReport errorReport, CancellationToken cancellationToken = default)
         {
             string apiUrl = $"{_appSettings.ApiPath}/agent/report-error";
-            _logger.LogInformation("Đang gửi báo cáo lỗi loại '{ErrorType}' đến {ApiUrl}", errorReport.Type, apiUrl);
+            _logger.LogInformation("Sending error report of type '{ErrorType}' to {ApiUrl}", errorReport.Type, apiUrl);
 
             var request = new HttpRequestMessage(HttpMethod.Post, apiUrl)
             {
@@ -239,21 +243,21 @@ namespace CMSAgent.Service.Communication.Http
             try
             {
                 HttpResponseMessage response = await _httpClient.SendAsync(request, cancellationToken);
-                if (response.IsSuccessStatusCode) // API trả về 204 No Content
+                if (response.IsSuccessStatusCode) // API returns 204 No Content
                 {
-                    _logger.LogInformation("Gửi báo cáo lỗi thành công.");
+                    _logger.LogInformation("Error report sent successfully.");
                     return true;
                 }
                 else
                 {
                     var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                    _logger.LogError("Gửi báo cáo lỗi thất bại. StatusCode: {StatusCode}, Response: {ErrorContent}", response.StatusCode, errorContent);
+                    _logger.LogError("Failed to send error report. StatusCode: {StatusCode}, Response: {ErrorContent}", response.StatusCode, errorContent);
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi gửi báo cáo lỗi.");
+                _logger.LogError(ex, "Error sending error report.");
                 return false;
             }
         }
@@ -261,7 +265,7 @@ namespace CMSAgent.Service.Communication.Http
         public async Task<UpdateNotification?> CheckForUpdatesAsync(string currentVersion, CancellationToken cancellationToken = default)
         {
             string apiUrl = $"{_appSettings.ApiPath}/agent/check-update?current_version={Uri.EscapeDataString(currentVersion)}";
-            _logger.LogInformation("Đang kiểm tra cập nhật từ {ApiUrl} cho phiên bản {CurrentVersion}", apiUrl, currentVersion);
+            _logger.LogInformation("Checking for updates at {ApiUrl}", apiUrl);
 
             var request = new HttpRequestMessage(HttpMethod.Get, apiUrl);
             AddAuthHeadersToRequest(request);
@@ -269,34 +273,32 @@ namespace CMSAgent.Service.Communication.Http
             try
             {
                 HttpResponseMessage response = await _httpClient.SendAsync(request, cancellationToken);
-
                 if (response.IsSuccessStatusCode)
                 {
-                    if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
-                    {
-                        _logger.LogInformation("Không có cập nhật mới.");
-                        return null; // Không có cập nhật
-                    }
-                    // API trả về 200 OK với payload nếu có cập nhật
                     var updateInfo = await response.Content.ReadFromJsonAsync<UpdateNotification>(_jsonSerializerOptions, cancellationToken);
-                    if (updateInfo != null && updateInfo.UpdateAvailable)
+                    if (updateInfo != null)
                     {
-                        _logger.LogInformation("Có cập nhật mới: Version {NewVersion}, URL: {DownloadUrl}", updateInfo.Version, updateInfo.DownloadUrl);
+                        _logger.LogInformation("Update check successful. New version available: {HasUpdate}", updateInfo.HasUpdate);
                         return updateInfo;
                     }
-                    _logger.LogWarning("Kiểm tra cập nhật: Phản hồi thành công nhưng nội dung không hợp lệ hoặc không có update_available=true.");
+                    _logger.LogError("Update check: Successful response but could not parse JSON content.");
+                    return null;
+                }
+                else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.LogInformation("No updates available for current version: {CurrentVersion}", currentVersion);
                     return null;
                 }
                 else
                 {
                     var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                    _logger.LogError("Kiểm tra cập nhật thất bại. StatusCode: {StatusCode}, Response: {ErrorContent}", response.StatusCode, errorContent);
+                    _logger.LogError("Update check failed. StatusCode: {StatusCode}, Response: {ErrorContent}", response.StatusCode, errorContent);
                     return null;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi kiểm tra cập nhật.");
+                _logger.LogError(ex, "Error checking for updates.");
                 return null;
             }
         }
@@ -304,7 +306,7 @@ namespace CMSAgent.Service.Communication.Http
         public async Task<bool> DownloadAgentPackageAsync(string filename, string destinationPath, CancellationToken cancellationToken = default)
         {
             string apiUrl = $"{_appSettings.ApiPath}/agent/agent-packages/{Uri.EscapeDataString(filename)}";
-            _logger.LogInformation("Đang tải gói cập nhật {Filename} từ {ApiUrl} về {DestinationPath}", filename, apiUrl, destinationPath);
+            _logger.LogInformation("Downloading agent package from {ApiUrl} to {DestinationPath}", apiUrl, destinationPath);
 
             var request = new HttpRequestMessage(HttpMethod.Get, apiUrl);
             AddAuthHeadersToRequest(request);
@@ -312,52 +314,57 @@ namespace CMSAgent.Service.Communication.Http
             try
             {
                 HttpResponseMessage response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-                response.EnsureSuccessStatusCode(); // Ném lỗi nếu status code không thành công
-
-                await using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken))
-                await using (var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true))
+                if (response.IsSuccessStatusCode)
                 {
+                    using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    using var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
                     await contentStream.CopyToAsync(fileStream, cancellationToken);
+                    _logger.LogInformation("Agent package downloaded successfully to {DestinationPath}", destinationPath);
+                    return true;
                 }
-                _logger.LogInformation("Tải gói cập nhật {Filename} thành công.", filename);
-                return true;
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                    _logger.LogError("Failed to download agent package. StatusCode: {StatusCode}, Response: {ErrorContent}", response.StatusCode, errorContent);
+                    return false;
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi tải gói cập nhật {Filename}.", filename);
-                // Cân nhắc xóa file đích nếu tải thất bại
-                if (File.Exists(destinationPath))
-                {
-                    try { File.Delete(destinationPath); } catch (Exception deleteEx) { _logger.LogError(deleteEx, "Không thể xóa file tải lỗi: {DestinationPath}", destinationPath); }
-                }
+                _logger.LogError(ex, "Error downloading agent package.");
                 return false;
             }
         }
 
-        // Lớp nội bộ để deserialize phản hồi từ /identify và /verify-mfa
         private class IdentifyResponsePayload
         {
             [JsonPropertyName("status")]
             public string Status { get; set; } = string.Empty;
+
             [JsonPropertyName("agentToken")]
             public string? AgentToken { get; set; }
+
             [JsonPropertyName("message")]
-            public string? Message { get; set; } // Cho position_error
+            public string? Message { get; set; }
         }
 
         private class MfaResponsePayload
         {
             [JsonPropertyName("status")]
             public string Status { get; set; } = string.Empty;
+
             [JsonPropertyName("agentToken")]
             public string? AgentToken { get; set; }
-            [JsonPropertyName("message")] // Có thể có message nếu lỗi
+
+            [JsonPropertyName("message")] // May have message if error
             public string? Message { get; set; }
         }
-        private class ErrorResponsePayload // Dùng chung cho các lỗi API trả về JSON
+
+        private class ErrorResponsePayload // Common for API error responses in JSON
         {
             [JsonPropertyName("status")]
-            public string? Status { get; set; }
+            public string Status { get; set; } = string.Empty;
+
             [JsonPropertyName("message")]
             public string? Message { get; set; }
         }

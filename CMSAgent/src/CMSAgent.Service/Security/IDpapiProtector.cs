@@ -1,27 +1,27 @@
- // CMSAgent.Service/Security/IDpapiProtector.cs
+// CMSAgent.Service/Security/IDpapiProtector.cs
 namespace CMSAgent.Service.Security
 {
     /// <summary>
-    /// Interface định nghĩa các phương thức để mã hóa và giải mã dữ liệu
-    /// sử dụng Windows Data Protection API (DPAPI).
-    /// Mục đích chính là để bảo vệ agentToken.
+    /// Interface defining methods to encrypt and decrypt data
+    /// using Windows Data Protection API (DPAPI).
+    /// Main purpose is to protect agentToken.
     /// </summary>
     public interface IDpapiProtector
     {
         /// <summary>
-        /// Mã hóa một chuỗi văn bản gốc (plaintext).
+        /// Encrypt a plaintext string.
         /// </summary>
-        /// <param name="plainText">Chuỗi cần mã hóa.</param>
-        /// <param name="optionalEntropy">Một mảng byte tùy chọn để tăng cường độ bảo mật (có thể là null).</param>
-        /// <returns>Chuỗi đã được mã hóa dưới dạng Base64, hoặc null nếu có lỗi.</returns>
+        /// <param name="plainText">String to encrypt.</param>
+        /// <param name="optionalEntropy">Optional byte array to enhance security (can be null).</param>
+        /// <returns>Encrypted string in Base64 format, or null if there is an error.</returns>
         string? Protect(string plainText, byte[]? optionalEntropy = null);
 
         /// <summary>
-        /// Giải mã một chuỗi đã được mã hóa (ciphertext) trở lại văn bản gốc.
+        /// Decrypt an encrypted string (ciphertext) back to plaintext.
         /// </summary>
-        /// <param name="encryptedTextBase64">Chuỗi đã mã hóa (dưới dạng Base64) cần giải mã.</param>
-        /// <param name="optionalEntropy">Mảng byte tùy chọn đã được sử dụng khi mã hóa (phải giống hệt, có thể là null).</param>
-        /// <returns>Chuỗi văn bản gốc đã được giải mã, hoặc null nếu có lỗi (ví dụ: sai entropy, dữ liệu hỏng).</returns>
+        /// <param name="encryptedTextBase64">Encrypted string (in Base64 format) to decrypt.</param>
+        /// <param name="optionalEntropy">Optional byte array used during encryption (must be identical, can be null).</param>
+        /// <returns>Decrypted plaintext string, or null if there is an error (e.g., wrong entropy, corrupted data).</returns>
         string? Unprotect(string encryptedTextBase64, byte[]? optionalEntropy = null);
     }
 }

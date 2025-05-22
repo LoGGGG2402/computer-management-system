@@ -1,4 +1,4 @@
- // CMSAgent.Service/Commands/Handlers/ConsoleCommandHandler.cs
+// CMSAgent.Service/Commands/Handlers/ConsoleCommandHandler.cs
 using CMSAgent.Service.Commands.Models;
 using CMSAgent.Shared.Utils; // For ProcessUtils
 using Microsoft.Extensions.Logging;
@@ -24,19 +24,7 @@ namespace CMSAgent.Service.Commands.Handlers
         protected override async Task<CommandOutputResult> ExecuteInternalAsync(CommandRequest commandRequest, CancellationToken cancellationToken)
         {
             string commandToExecute = commandRequest.Command;
-            bool usePowerShell = false;
-            // int timeoutSec = _appSettings.CommandExecution.DefaultCommandTimeoutSeconds; // Lấy từ base class
-
-            if (commandRequest.Parameters != null)
-            {
-                if (commandRequest.Parameters.TryGetValue("use_powershell", out var usePsObj) &&
-                    usePsObj is JsonElement usePsJson &&
-                    usePsJson.TryGetBoolean(out bool psFlag))
-                {
-                    usePowerShell = psFlag;
-                }
-                // timeout_sec đã được xử lý ở CommandHandlerBase
-            }
+            bool usePowerShell = CommandParameterHelper.GetBool(commandRequest.Parameters, "use_powershell", false, Logger);
 
             string fileName = usePowerShell ? "powershell.exe" : "cmd.exe";
             string arguments = usePowerShell ? $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"{commandToExecute.Replace("\"", "\\\"")}\""
@@ -47,7 +35,7 @@ namespace CMSAgent.Service.Commands.Handlers
             var (stdout, stderr, exitCode) = await ProcessUtils.ExecuteCommandAsync(
                 fileName,
                 arguments,
-                cancellationToken: cancellationToken // Timeout đã được xử lý bởi CancellationTokenSource trong base class
+                cancellationToken: cancellationToken // Timeout is handled by CancellationTokenSource in base class
             );
 
             return new CommandOutputResult
@@ -61,15 +49,8 @@ namespace CMSAgent.Service.Commands.Handlers
 
         protected override int GetDefaultCommandTimeoutSeconds(CommandRequest commandRequest)
         {
-            if (commandRequest.Parameters != null &&
-                commandRequest.Parameters.TryGetValue("timeout_sec", out var timeoutObj) &&
-                timeoutObj is JsonElement timeoutJson &&
-                timeoutJson.TryGetInt32(out int timeoutSec) &&
-                timeoutSec > 0)
-            {
-                return timeoutSec;
-            }
-            return _appSettings.CommandExecution.DefaultCommandTimeoutSeconds;
+            int timeoutSec = CommandParameterHelper.GetInt(commandRequest.Parameters, "timeout_sec", 0, Logger);
+            return timeoutSec > 0 ? timeoutSec : _appSettings.CommandExecution.DefaultCommandTimeoutSeconds;
         }
     }
 }

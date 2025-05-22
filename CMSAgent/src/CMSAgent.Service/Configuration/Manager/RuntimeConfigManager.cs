@@ -1,4 +1,3 @@
- // CMSAgent.Service/Configuration/Manager/RuntimeConfigManager.cs
 using CMSAgent.Service.Configuration.Models;
 using CMSAgent.Shared.Constants; // For AgentConstants
 using CMSAgent.Shared.Utils;     // For FileUtils
@@ -12,44 +11,44 @@ using System.Threading.Tasks;
 namespace CMSAgent.Service.Configuration.Manager
 {
     /// <summary>
-    /// Quản lý việc đọc và ghi file cấu hình runtime (runtime_config.json).
+    /// Manages reading and writing runtime configuration file (runtime_config.json).
     /// </summary>
     public class RuntimeConfigManager : IRuntimeConfigManager
     {
         private readonly ILogger<RuntimeConfigManager> _logger;
         private readonly string _runtimeConfigFilePath;
         private readonly string _agentProgramDataPath;
-        private static readonly SemaphoreSlim _fileLock = new SemaphoreSlim(1, 1); // Đồng bộ truy cập file
+        private static readonly SemaphoreSlim _fileLock = new SemaphoreSlim(1, 1); // Synchronize file access
         private readonly JsonSerializerOptions _jsonSerializerOptions;
 
         public RuntimeConfigManager(ILogger<RuntimeConfigManager> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-            // Xác định đường dẫn đến thư mục ProgramData của Agent
-            // Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData) trả về "C:\ProgramData" trên Windows
+            // Determine path to Agent's ProgramData directory
+            // Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData) returns "C:\ProgramData" on Windows
             _agentProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), AgentConstants.AgentProgramDataFolderName);
 
-            // Đảm bảo thư mục runtime_config tồn tại
+            // Ensure runtime_config directory exists
             string runtimeConfigDir = Path.Combine(_agentProgramDataPath, AgentConstants.RuntimeConfigSubFolderName);
             try
             {
-                Directory.CreateDirectory(runtimeConfigDir); // Tạo nếu chưa có
+                Directory.CreateDirectory(runtimeConfigDir); // Create if not exists
             }
             catch (Exception ex)
             {
-                _logger.LogCritical(ex, "Không thể tạo hoặc truy cập thư mục cấu hình runtime: {RuntimeConfigDir}", runtimeConfigDir);
-                // Ném lỗi nghiêm trọng vì không thể hoạt động nếu không có thư mục này
-                throw new InvalidOperationException($"Không thể tạo hoặc truy cập thư mục cấu hình runtime: {runtimeConfigDir}", ex);
+                _logger.LogCritical(ex, "Cannot create or access runtime configuration directory: {RuntimeConfigDir}", runtimeConfigDir);
+                // Throw critical error as we cannot operate without this directory
+                throw new InvalidOperationException($"Cannot create or access runtime configuration directory: {runtimeConfigDir}", ex);
             }
 
             _runtimeConfigFilePath = Path.Combine(runtimeConfigDir, AgentConstants.RuntimeConfigFileName);
-            _logger.LogInformation("Đường dẫn file cấu hình runtime: {RuntimeConfigFilePath}", _runtimeConfigFilePath);
+            _logger.LogInformation("Runtime configuration file path: {RuntimeConfigFilePath}", _runtimeConfigFilePath);
 
             _jsonSerializerOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
-                WriteIndented = true, // Ghi file JSON cho dễ đọc
+                WriteIndented = true, // Write JSON file for readability
                 DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
             };
         }
@@ -65,36 +64,36 @@ namespace CMSAgent.Service.Configuration.Manager
             {
                 if (!File.Exists(_runtimeConfigFilePath))
                 {
-                    _logger.LogWarning("File runtime_config.json không tìm thấy tại {FilePath}. Trả về cấu hình mặc định.", _runtimeConfigFilePath);
-                    return new RuntimeConfig(); // Trả về đối tượng rỗng/mặc định
+                    _logger.LogWarning("Runtime configuration file not found at {FilePath}. Returning default configuration.", _runtimeConfigFilePath);
+                    return new RuntimeConfig(); // Return empty/default object
                 }
 
-                _logger.LogDebug("Đang đọc file runtime_config.json từ {FilePath}", _runtimeConfigFilePath);
-                string jsonContent = await File.ReadAllTextAsync(_runtimeConfigFilePath);
+                _logger.LogDebug("Reading runtime_config.json from {FilePath}", _runtimeConfigFilePath);
+                string? jsonContent = await FileUtils.ReadFileAsStringAsync(_runtimeConfigFilePath);
                 if (string.IsNullOrWhiteSpace(jsonContent))
                 {
-                    _logger.LogWarning("File runtime_config.json rỗng tại {FilePath}. Trả về cấu hình mặc định.", _runtimeConfigFilePath);
+                    _logger.LogWarning("Runtime configuration file is empty at {FilePath}. Returning default configuration.", _runtimeConfigFilePath);
                     return new RuntimeConfig();
                 }
 
                 var config = JsonSerializer.Deserialize<RuntimeConfig>(jsonContent, _jsonSerializerOptions);
                 if (config == null)
                 {
-                     _logger.LogError("Không thể deserialize runtime_config.json từ {FilePath}. Nội dung có thể không hợp lệ. Trả về cấu hình mặc định.", _runtimeConfigFilePath);
+                     _logger.LogError("Cannot deserialize runtime_config.json from {FilePath}. Content may be invalid. Returning default configuration.", _runtimeConfigFilePath);
                     return new RuntimeConfig();
                 }
-                _logger.LogInformation("Tải cấu hình runtime thành công từ {FilePath}", _runtimeConfigFilePath);
+                _logger.LogInformation("Successfully loaded runtime configuration from {FilePath}", _runtimeConfigFilePath);
                 return config;
             }
             catch (JsonException jsonEx)
             {
-                 _logger.LogError(jsonEx, "Lỗi JSON khi đọc runtime_config.json từ {FilePath}. Trả về cấu hình mặc định.", _runtimeConfigFilePath);
-                return new RuntimeConfig(); // Trả về mặc định nếu lỗi parse JSON
+                 _logger.LogError(jsonEx, "JSON error while reading runtime_config.json from {FilePath}. Returning default configuration.", _runtimeConfigFilePath);
+                return new RuntimeConfig(); // Return default if JSON parse error
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi không xác định khi đọc runtime_config.json từ {FilePath}. Trả về cấu hình mặc định.", _runtimeConfigFilePath);
-                return new RuntimeConfig(); // Trả về mặc định nếu có lỗi khác
+                _logger.LogError(ex, "Unknown error while reading runtime_config.json from {FilePath}. Returning default configuration.", _runtimeConfigFilePath);
+                return new RuntimeConfig(); // Return default for other errors
             }
             finally
             {
@@ -109,26 +108,26 @@ namespace CMSAgent.Service.Configuration.Manager
             await _fileLock.WaitAsync();
             try
             {
-                _logger.LogDebug("Đang ghi cấu hình runtime vào file: {FilePath}", _runtimeConfigFilePath);
+                _logger.LogDebug("Writing runtime configuration to file: {FilePath}", _runtimeConfigFilePath);
                 string jsonContent = JsonSerializer.Serialize(config, _jsonSerializerOptions);
 
-                // Ghi vào file tạm trước, sau đó rename để đảm bảo tính toàn vẹn (atomic write)
+                // Write to temporary file first, then rename to ensure integrity (atomic write)
                 string tempFilePath = _runtimeConfigFilePath + ".tmp";
-                await File.WriteAllTextAsync(tempFilePath, jsonContent);
+                bool writeSuccess = await FileUtils.WriteStringToFileAsync(tempFilePath, jsonContent);
+                if (!writeSuccess)
+                {
+                    _logger.LogError("Cannot write temporary file {TempFilePath}", tempFilePath);
+                    return false;
+                }
 
-                // Xóa file backup cũ nếu có (tùy chọn)
-                // string backupFilePath = _runtimeConfigFilePath + ".bak";
-                // if (File.Exists(backupFilePath)) File.Delete(backupFilePath);
-                // if (File.Exists(_runtimeConfigFilePath)) File.Move(_runtimeConfigFilePath, backupFilePath);
+                File.Move(tempFilePath, _runtimeConfigFilePath, overwrite: true); // Overwrite old file
 
-                File.Move(tempFilePath, _runtimeConfigFilePath, overwrite: true); // Ghi đè file cũ
-
-                _logger.LogInformation("Lưu cấu hình runtime thành công vào {FilePath}", _runtimeConfigFilePath);
+                _logger.LogInformation("Successfully saved runtime configuration to {FilePath}", _runtimeConfigFilePath);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi lưu runtime_config.json vào {FilePath}.", _runtimeConfigFilePath);
+                _logger.LogError(ex, "Error while saving runtime_config.json to {FilePath}.", _runtimeConfigFilePath);
                 return false;
             }
             finally
@@ -157,25 +156,29 @@ namespace CMSAgent.Service.Configuration.Manager
 
         public async Task UpdateAgentIdAsync(string agentId)
         {
-            if (string.IsNullOrWhiteSpace(agentId)) throw new ArgumentException("Agent ID không thể rỗng.", nameof(agentId));
+            if (string.IsNullOrWhiteSpace(agentId)) throw new ArgumentException("Agent ID cannot be empty.", nameof(agentId));
             var config = await LoadConfigAsync();
             if (config.AgentId != agentId)
             {
                 config.AgentId = agentId;
                 await SaveConfigAsync(config);
-                _logger.LogInformation("Agent ID đã được cập nhật thành: {AgentId}", agentId);
+                _logger.LogInformation("Agent ID has been updated to: {AgentId}", agentId);
             }
         }
 
         public async Task UpdateEncryptedAgentTokenAsync(string encryptedToken)
         {
-            // encryptedToken có thể là null nếu agent bị thu hồi token
+            if (string.IsNullOrWhiteSpace(encryptedToken))
+            {
+                throw new ArgumentException("Encrypted token cannot be empty or null.", nameof(encryptedToken));
+            }
+
             var config = await LoadConfigAsync();
             if (config.AgentTokenEncrypted != encryptedToken)
             {
-                config.AgentTokenEncrypted = encryptedToken; // Cho phép gán null
+                config.AgentTokenEncrypted = encryptedToken;
                 await SaveConfigAsync(config);
-                _logger.LogInformation("Token đã mã hóa của Agent đã được cập nhật.");
+                _logger.LogInformation("Agent's encrypted token has been updated.");
             }
         }
 
@@ -183,7 +186,7 @@ namespace CMSAgent.Service.Configuration.Manager
         {
             if (positionInfo == null) throw new ArgumentNullException(nameof(positionInfo));
             var config = await LoadConfigAsync();
-            // Cần một cách so sánh PositionInfo hiệu quả
+            // Need an efficient way to compare PositionInfo
             if (config.RoomConfig == null ||
                 config.RoomConfig.RoomName != positionInfo.RoomName ||
                 config.RoomConfig.PosX != positionInfo.PosX ||
@@ -191,7 +194,7 @@ namespace CMSAgent.Service.Configuration.Manager
             {
                 config.RoomConfig = positionInfo;
                 await SaveConfigAsync(config);
-                _logger.LogInformation("Thông tin vị trí của Agent đã được cập nhật: Room={Room}, X={X}, Y={Y}",
+                _logger.LogInformation("Agent's position information has been updated: Room={Room}, X={X}, Y={Y}",
                     positionInfo.RoomName, positionInfo.PosX, positionInfo.PosY);
             }
         }

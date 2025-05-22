@@ -1,7 +1,7 @@
- // CMSAgent.Service/Commands/CommandQueue.cs
+// CMSAgent.Service/Commands/CommandQueue.cs
 using CMSAgent.Service.Commands.Factory;
 using CMSAgent.Service.Commands.Models;
-using CMSAgent.Service.Communication.WebSocket; // For IAgentSocketClient (để gửi kết quả)
+using CMSAgent.Service.Communication.WebSocket; // For IAgentSocketClient (to send results)
 using CMSAgent.Service.Configuration.Models; // For AppSettings
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -14,7 +14,7 @@ using System.Collections.Generic; // For List of Tasks
 namespace CMSAgent.Service.Commands
 {
     /// <summary>
-    /// Quản lý hàng đợi và thực thi các lệnh nhận được từ Server.
+    /// Manages queue and execution of commands received from Server.
     /// </summary>
     public class CommandQueue : IAsyncDisposable
     {
@@ -37,34 +37,34 @@ namespace CMSAgent.Service.Commands
             _socketClient = socketClient ?? throw new ArgumentNullException(nameof(socketClient));
             _appSettings = appSettingsOptions?.Value ?? throw new ArgumentNullException(nameof(appSettingsOptions));
 
-            // Tạo Channel với giới hạn kích thước từ AppSettings
+            // Create Channel with size limit from AppSettings
             var channelOptions = new BoundedChannelOptions(_appSettings.CommandExecution.MaxQueueSize)
             {
-                FullMode = BoundedChannelFullMode.Wait, // Chờ nếu hàng đợi đầy (hoặc DropWrite)
-                SingleReader = false, // Nhiều worker có thể đọc
-                SingleWriter = true   // Chỉ có một nguồn ghi (ví dụ: từ WebSocket event)
+                FullMode = BoundedChannelFullMode.Wait, // Wait if queue is full (or DropWrite)
+                SingleReader = false, // Multiple workers can read
+                SingleWriter = true   // Only one source can write (e.g., from WebSocket event)
             };
             _queue = Channel.CreateBounded<CommandRequest>(channelOptions);
             _workerTasks = new List<Task>();
         }
 
         /// <summary>
-        /// Bắt đầu các worker để xử lý lệnh từ hàng đợi.
+        /// Starts workers to process commands from the queue.
         /// </summary>
-        /// <param name="cancellationToken">Token để dừng các worker.</param>
+        /// <param name="cancellationToken">Token to stop workers.</param>
         public void StartProcessing(CancellationToken cancellationToken)
         {
             if (_cts != null && !_cts.IsCancellationRequested)
             {
-                _logger.LogWarning("CommandQueue processing đã được bắt đầu.");
+                _logger.LogWarning("CommandQueue processing has already started.");
                 return;
             }
 
             _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             int numberOfWorkers = _appSettings.CommandExecution.MaxParallelCommands;
-            if (numberOfWorkers <= 0) numberOfWorkers = 1; // Ít nhất 1 worker
+            if (numberOfWorkers <= 0) numberOfWorkers = 1; // At least 1 worker
 
-            _logger.LogInformation("Bắt đầu {NumberOfWorkers} worker(s) để xử lý hàng đợi lệnh.", numberOfWorkers);
+            _logger.LogInformation("Starting {NumberOfWorkers} worker(s) to process command queue.", numberOfWorkers);
 
             for (int i = 0; i < numberOfWorkers; i++)
             {
@@ -74,20 +74,20 @@ namespace CMSAgent.Service.Commands
         }
 
         /// <summary>
-        /// Dừng xử lý hàng đợi và chờ các worker hoàn thành.
+        /// Stops queue processing and waits for workers to complete.
         /// </summary>
         public async Task StopProcessingAsync()
         {
-            _logger.LogInformation("Đang yêu cầu dừng xử lý hàng đợi lệnh...");
-            _queue.Writer.Complete(); // Báo hiệu không còn item nào được thêm vào
+            _logger.LogInformation("Requesting to stop command queue processing...");
+            _queue.Writer.Complete(); // Signal no more items will be added
 
             if (_cts != null && !_cts.IsCancellationRequested)
             {
-                _cts.Cancel(); // Gửi tín hiệu hủy cho các worker
+                _cts.Cancel(); // Send cancellation signal to workers
             }
 
-            // Chờ tất cả các worker task hoàn thành
-            // Có thể thêm timeout ở đây nếu cần
+            // Wait for all worker tasks to complete
+            // Can add timeout here if needed
             if (_workerTasks.Count > 0)
             {
                 try
@@ -96,79 +96,79 @@ namespace CMSAgent.Service.Commands
                 }
                 catch (OperationCanceledException)
                 {
-                    _logger.LogInformation("Một hoặc nhiều command worker đã bị hủy.");
+                    _logger.LogInformation("One or more command workers were cancelled.");
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Lỗi khi chờ các command worker dừng.");
+                    _logger.LogError(ex, "Error while waiting for command workers to stop.");
                 }
                 _workerTasks.Clear();
             }
-            _logger.LogInformation("Xử lý hàng đợi lệnh đã dừng.");
+            _logger.LogInformation("Command queue processing has stopped.");
         }
 
         /// <summary>
-        /// Thêm một yêu cầu lệnh vào hàng đợi.
+        /// Adds a command request to the queue.
         /// </summary>
-        /// <param name="commandRequest">Yêu cầu lệnh.</param>
-        /// <returns>True nếu thêm thành công, False nếu hàng đợi đã đóng hoặc bị hủy.</returns>
+        /// <param name="commandRequest">Command request.</param>
+        /// <returns>True if added successfully, False if queue is closed or cancelled.</returns>
         public async Task<bool> EnqueueCommandAsync(CommandRequest commandRequest)
         {
             if (commandRequest == null)
             {
-                _logger.LogWarning("Không thể thêm command request null vào hàng đợi.");
+                _logger.LogWarning("Cannot add null command request to queue.");
                 return false;
             }
 
             if (_queue.Writer.Completion.IsCompleted)
             {
-                _logger.LogWarning("Không thể thêm lệnh vào hàng đợi đã đóng. CommandId: {CommandId}", commandRequest.CommandId);
+                _logger.LogWarning("Cannot add command to closed queue. CommandId: {CommandId}", commandRequest.CommandId);
                 return false;
             }
 
             try
             {
-                // Thử ghi vào channel, có thể chờ nếu hàng đợi đầy (tùy theo BoundedChannelFullMode)
+                // Try to write to channel, may wait if queue is full (depending on BoundedChannelFullMode)
                 await _queue.Writer.WriteAsync(commandRequest, _cts?.Token ?? CancellationToken.None);
-                _logger.LogInformation("Đã thêm lệnh ID: {CommandId}, Type: {CommandType} vào hàng đợi.", commandRequest.CommandId, commandRequest.CommandType);
+                _logger.LogInformation("Added command ID: {CommandId}, Type: {CommandType} to queue.", commandRequest.CommandId, commandRequest.CommandType);
                 return true;
             }
             catch (ChannelClosedException)
             {
-                _logger.LogWarning("Không thể thêm lệnh vào hàng đợi đã đóng. CommandId: {CommandId}", commandRequest.CommandId);
+                _logger.LogWarning("Cannot add command to closed queue. CommandId: {CommandId}", commandRequest.CommandId);
                 return false;
             }
             catch (OperationCanceledException)
             {
-                 _logger.LogWarning("Thao tác thêm lệnh vào hàng đợi bị hủy. CommandId: {CommandId}", commandRequest.CommandId);
+                 _logger.LogWarning("Command queue operation was cancelled. CommandId: {CommandId}", commandRequest.CommandId);
                 return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thêm lệnh vào hàng đợi. CommandId: {CommandId}", commandRequest.CommandId);
+                _logger.LogError(ex, "Error adding command to queue. CommandId: {CommandId}", commandRequest.CommandId);
                 return false;
             }
         }
 
         private async Task ProcessQueueAsync(int workerId, CancellationToken cancellationToken)
         {
-            _logger.LogInformation("Command worker {WorkerId} đã bắt đầu.", workerId);
+            _logger.LogInformation("Command worker {WorkerId} has started.", workerId);
             try
             {
-                // Đọc từ channel cho đến khi nó bị đóng và rỗng
+                // Read from channel until it's closed and empty
                 await foreach (var commandRequest in _queue.Reader.ReadAllAsync(cancellationToken))
                 {
                     if (cancellationToken.IsCancellationRequested) break;
 
-                    _logger.LogInformation("Worker {WorkerId} đang xử lý lệnh ID: {CommandId}, Type: {CommandType}",
+                    _logger.LogInformation("Worker {WorkerId} is processing command ID: {CommandId}, Type: {CommandType}",
                         workerId, commandRequest.CommandId, commandRequest.CommandType);
 
                     ICommandHandler? handler = _handlerFactory.CreateHandler(commandRequest.CommandType);
                     if (handler == null)
                     {
-                        _logger.LogWarning("Worker {WorkerId}: Không tìm thấy handler cho CommandType: {CommandType}, CommandId: {CommandId}. Bỏ qua lệnh.",
+                        _logger.LogWarning("Worker {WorkerId}: No handler found for CommandType: {CommandType}, CommandId: {CommandId}. Skipping command.",
                             workerId, commandRequest.CommandType, commandRequest.CommandId);
-                        // Gửi kết quả lỗi về server
+                        // Send error result to server
                         var errorResult = new CommandResult
                         {
                             CommandId = commandRequest.CommandId,
@@ -183,26 +183,26 @@ namespace CMSAgent.Service.Commands
                     CommandResult result = await handler.ExecuteAsync(commandRequest, cancellationToken);
                     await SendResultToServerAsync(result);
 
-                    _logger.LogInformation("Worker {WorkerId} đã xử lý xong lệnh ID: {CommandId}. Success: {Success}",
+                    _logger.LogInformation("Worker {WorkerId} has completed processing command ID: {CommandId}. Success: {Success}",
                         workerId, commandRequest.CommandId, result.Success);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                _logger.LogInformation("Command worker {WorkerId} bị hủy bỏ.", workerId);
+                _logger.LogInformation("Command worker {WorkerId} was cancelled.", workerId);
             }
-            catch (ChannelClosedException) // Channel đã bị đóng khi đang đọc (ReadAllAsync)
+            catch (ChannelClosedException) // Channel was closed while reading (ReadAllAsync)
             {
-                _logger.LogInformation("Command worker {WorkerId}: Channel đã đóng, kết thúc xử lý.", workerId);
+                _logger.LogInformation("Command worker {WorkerId}: Channel is closed, ending processing.", workerId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi nghiêm trọng trong command worker {WorkerId}.", workerId);
-                // Cân nhắc có nên dừng toàn bộ service nếu worker bị lỗi không thể phục hồi
+                _logger.LogError(ex, "Serious error in command worker {WorkerId}.", workerId);
+                // Consider whether to stop the entire service if worker has unrecoverable error
             }
             finally
             {
-                _logger.LogInformation("Command worker {WorkerId} đã dừng.", workerId);
+                _logger.LogInformation("Command worker {WorkerId} has stopped.", workerId);
             }
         }
 
@@ -213,24 +213,23 @@ namespace CMSAgent.Service.Commands
                 try
                 {
                     await _socketClient.SendCommandResultAsync(result);
+                    _logger.LogInformation("Successfully sent command result ID: {CommandId} to server.", result.CommandId);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Lỗi khi gửi kết quả lệnh ID: {CommandId} về server.", result.CommandId);
-                    // Cân nhắc lưu kết quả vào hàng đợi offline nếu gửi thất bại
+                    _logger.LogError(ex, "Error sending command result ID: {CommandId} to server.", result.CommandId);
                 }
             }
             else
             {
-                _logger.LogWarning("WebSocket không kết nối. Không thể gửi kết quả lệnh ID: {CommandId} về server.", result.CommandId);
-                // Lưu kết quả vào hàng đợi offline
+                _logger.LogWarning("WebSocket not connected. Command result ID: {CommandId} could not be sent.", result.CommandId);
             }
         }
 
         public async ValueTask DisposeAsync()
         {
             _logger.LogInformation("Disposing CommandQueue...");
-            await StopProcessingAsync(); // Đảm bảo các worker đã dừng
+            await StopProcessingAsync(); // Ensure workers have stopped
             _cts?.Dispose();
             _logger.LogInformation("CommandQueue disposed.");
             GC.SuppressFinalize(this);

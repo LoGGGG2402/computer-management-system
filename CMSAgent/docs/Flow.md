@@ -168,8 +168,11 @@ flowchart TD
     subgraph "Luồng CMSUpdater"
         direction TB
         UPDATER_A[Bắt đầu]:::start --> UPDATER_B[Ghi Log]:::process
-        UPDATER_B --> UPDATER_C{Chờ Agent Dừng}:::decision
-        UPDATER_C --> UPDATER_D[Sao lưu]:::process
+        UPDATER_B --> UPDATER_C{Dừng Service Cũ}:::decision
+        UPDATER_C --> UPDATER_C1[Gọi sc.exe stop CMSAgentService]:::process
+        UPDATER_C1 --> UPDATER_C2{Đợi Service Dừng}:::decision
+        UPDATER_C2 -- Timeout --> UPDATER_C3[Báo lỗi]:::error
+        UPDATER_C2 -- Thành công --> UPDATER_D[Sao lưu]:::process
         UPDATER_D --> UPDATER_E[Thay thế File]:::process
         UPDATER_E --> UPDATER_F{Khởi động Mới}:::decision
         UPDATER_F -- Thành công --> UPDATER_H{Watchdog}:::decision

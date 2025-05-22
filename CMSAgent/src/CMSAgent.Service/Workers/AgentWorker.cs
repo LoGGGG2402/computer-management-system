@@ -1,4 +1,4 @@
- // CMSAgent.Service/Workers/AgentWorker.cs
+// CMSAgent.Service/Workers/AgentWorker.cs
 using CMSAgent.Service.Orchestration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -9,8 +9,8 @@ using System.Threading.Tasks;
 namespace CMSAgent.Service.Workers
 {
     /// <summary>
-    /// Worker chính của Agent Service, kế thừa từ BackgroundService.
-    /// Chịu trách nhiệm khởi chạy và quản lý vòng đời của AgentCoreOrchestrator.
+    /// Main worker of Agent Service, inherits from BackgroundService.
+    /// Responsible for launching and managing the lifecycle of AgentCoreOrchestrator.
     /// </summary>
     public class AgentWorker : BackgroundService
     {
@@ -29,109 +29,109 @@ namespace CMSAgent.Service.Workers
         }
 
         /// <summary>
-        /// Phương thức chính được gọi khi HostedService bắt đầu.
-        /// Nó sẽ khởi chạy AgentCoreOrchestrator và giữ cho worker chạy cho đến khi nhận được tín hiệu dừng.
+        /// Main method called when HostedService starts.
+        /// It will launch AgentCoreOrchestrator and keep the worker running until a stop signal is received.
         /// </summary>
-        /// <param name="stoppingToken">Token được kích hoạt khi service được yêu cầu dừng.</param>
+        /// <param name="stoppingToken">Token triggered when service is requested to stop.</param>
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("AgentWorker đang bắt đầu lúc: {time}", DateTimeOffset.Now);
+            _logger.LogInformation("AgentWorker is starting at: {time}", DateTimeOffset.Now);
 
-            // Đăng ký một callback khi ứng dụng được yêu cầu dừng (ví dụ: Ctrl+C, shutdown)
-            // để có thể gọi StopAsync của orchestrator một cách an toàn.
+            // Register a callback when application is requested to stop (e.g., Ctrl+C, shutdown)
+            // to safely call StopAsync of orchestrator.
             stoppingToken.Register(async () =>
             {
-                _logger.LogInformation("AgentWorker nhận được tín hiệu dừng từ stoppingToken.");
+                _logger.LogInformation("AgentWorker received stop signal from stoppingToken.");
                 await StopOrchestratorAsync();
             });
 
             try
             {
-                // Khởi chạy logic chính của Agent thông qua Orchestrator
-                // Orchestrator.StartAsync sẽ chứa vòng lặp chính hoặc các tác vụ nền dài hạn.
-                // Nó cũng nên tôn trọng stoppingToken được truyền vào.
+                // Launch main Agent logic through Orchestrator
+                // Orchestrator.StartAsync will contain the main loop or long-running background tasks.
+                // It should also respect the stoppingToken passed in.
                 await _orchestrator.StartAsync(stoppingToken);
 
-                // Nếu StartAsync của orchestrator kết thúc mà không có lỗi và stoppingToken chưa được yêu cầu,
-                // điều đó có thể có nghĩa là orchestrator đã hoàn thành công việc của nó một cách bất thường (nếu nó được thiết kế để chạy vô hạn).
-                // Hoặc, nếu orchestrator được thiết kế để chạy một lần rồi kết thúc, thì đây là hành vi bình thường.
-                // Trong trường hợp của một agent chạy nền liên tục, StartAsync thường không nên kết thúc trừ khi có lỗi hoặc stoppingToken được kích hoạt.
+                // If orchestrator's StartAsync ends without error and stoppingToken hasn't been requested,
+                // it might mean orchestrator completed its work abnormally (if it's designed to run indefinitely).
+                // Or, if orchestrator is designed to run once and finish, then this is normal behavior.
+                // In the case of a continuously running background agent, StartAsync typically shouldn't end unless there's an error or stoppingToken is triggered.
                 if (!stoppingToken.IsCancellationRequested)
                 {
-                    _logger.LogWarning("AgentCoreOrchestrator.StartAsync đã kết thúc mà không có yêu cầu dừng. Service có thể sẽ dừng.");
-                    // Nếu orchestrator kết thúc sớm, ta có thể muốn dừng toàn bộ host application.
+                    _logger.LogWarning("AgentCoreOrchestrator.StartAsync ended without stop request. Service may stop.");
+                    // If orchestrator ends early, we may want to stop the entire host application.
                     _hostApplicationLifetime.StopApplication();
                 }
             }
             catch (OperationCanceledException)
             {
-                // Điều này xảy ra khi stoppingToken được kích hoạt trong khi StartAsync đang chạy.
-                _logger.LogInformation("Hoạt động của AgentWorker bị hủy bỏ (OperationCanceledException).");
-                // StopOrchestratorAsync đã được đăng ký với stoppingToken.Register, nên không cần gọi lại ở đây.
+                // This occurs when stoppingToken is triggered while StartAsync is running.
+                _logger.LogInformation("AgentWorker operation cancelled (OperationCanceledException).");
+                // StopOrchestratorAsync is already registered with stoppingToken.Register, so no need to call it here.
             }
             catch (Exception ex)
             {
-                _logger.LogCritical(ex, "Lỗi nghiêm trọng không xử lý được trong AgentWorker.ExecuteAsync. Service sẽ dừng.");
-                // Trong trường hợp lỗi nghiêm trọng, dừng toàn bộ ứng dụng.
+                _logger.LogCritical(ex, "Unhandled critical error in AgentWorker.ExecuteAsync. Service will stop.");
+                // In case of critical error, stop the entire application.
                 _hostApplicationLifetime.StopApplication();
             }
             finally
             {
-                _logger.LogInformation("AgentWorker.ExecuteAsync đã kết thúc.");
+                _logger.LogInformation("AgentWorker.ExecuteAsync has ended.");
             }
         }
 
         /// <summary>
-        /// Được gọi khi service bắt đầu.
+        /// Called when service starts.
         /// </summary>
         public override async Task StartAsync(CancellationToken cancellationToken)
         {
-            _logger.LogInformation("AgentWorker.StartAsync được gọi.");
-            // Thực hiện các tác vụ khởi tạo bổ sung nếu cần, trước khi ExecuteAsync được gọi.
-            // Ví dụ: kiểm tra các điều kiện tiên quyết.
-            // Tuy nhiên, logic khởi tạo chính của agent nên nằm trong _orchestrator.StartAsync().
+            _logger.LogInformation("AgentWorker.StartAsync called.");
+            // Perform additional initialization tasks if needed, before ExecuteAsync is called.
+            // For example: check prerequisites.
+            // However, main agent initialization logic should be in _orchestrator.StartAsync().
             await base.StartAsync(cancellationToken);
         }
 
         /// <summary>
-        /// Được gọi khi service được yêu cầu dừng.
-        /// Phương thức này nên giải phóng tài nguyên và dừng các tác vụ đang chạy một cách an toàn.
+        /// Called when service is requested to stop.
+        /// This method should release resources and safely stop running tasks.
         /// </summary>
         public override async Task StopAsync(CancellationToken cancellationToken)
         {
-            _logger.LogInformation("AgentWorker.StopAsync được gọi.");
+            _logger.LogInformation("AgentWorker.StopAsync called.");
 
-            // Gọi StopOrchestratorAsync để đảm bảo orchestrator được dừng đúng cách.
-            // stoppingToken trong ExecuteAsync đã đăng ký việc này, nhưng gọi ở đây để chắc chắn.
-            // Truyền cancellationToken của StopAsync vào để có giới hạn thời gian cho việc dừng.
+            // Call StopOrchestratorAsync to ensure orchestrator is stopped properly.
+            // This is already registered in ExecuteAsync with stoppingToken, but calling here to be sure.
+            // Pass StopAsync's cancellationToken to have a time limit for stopping.
             await StopOrchestratorAsync(cancellationToken);
 
             await base.StopAsync(cancellationToken);
-            _logger.LogInformation("AgentWorker đã dừng hoàn toàn.");
+            _logger.LogInformation("AgentWorker has completely stopped.");
         }
 
         /// <summary>
-        /// Phương thức helper để dừng Orchestrator một cách an toàn.
+        /// Helper method to safely stop Orchestrator.
         /// </summary>
         private async Task StopOrchestratorAsync(CancellationToken externalToken = default)
         {
-            _logger.LogInformation("Đang cố gắng dừng AgentCoreOrchestrator...");
+            _logger.LogInformation("Attempting to stop AgentCoreOrchestrator...");
             try
             {
-                // Tạo một CancellationTokenSource với timeout nếu cần,
-                // để đảm bảo việc dừng không bị treo vô hạn.
-                // Hoặc sử dụng externalToken nếu được cung cấp.
+                // Create a CancellationTokenSource with timeout if needed,
+                // to ensure stopping doesn't hang indefinitely.
+                // Or use externalToken if provided.
                 CancellationToken effectiveToken = externalToken == default ? new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token : externalToken;
                 await _orchestrator.StopAsync(effectiveToken);
-                _logger.LogInformation("AgentCoreOrchestrator đã được dừng.");
+                _logger.LogInformation("AgentCoreOrchestrator has been stopped.");
             }
             catch (OperationCanceledException)
             {
-                 _logger.LogWarning("Quá trình dừng AgentCoreOrchestrator bị hủy (timeout hoặc yêu cầu từ bên ngoài).");
+                 _logger.LogWarning("AgentCoreOrchestrator stop process cancelled (timeout or external request).");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi dừng AgentCoreOrchestrator.");
+                _logger.LogError(ex, "Error stopping AgentCoreOrchestrator.");
             }
         }
     }

@@ -1,4 +1,4 @@
- // CMSAgent.Service/Monitoring/ResourceMonitor.cs
+// CMSAgent.Service/Monitoring/ResourceMonitor.cs
 using Microsoft.Extensions.Logging;
 using System;
 using System.Diagnostics; // For PerformanceCounter
@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 namespace CMSAgent.Service.Monitoring
 {
     /// <summary>
-    /// Giám sát tài nguyên hệ thống (CPU, RAM, Disk) và báo cáo định kỳ.
+    /// Monitor system resources (CPU, RAM, Disk) and report periodically.
     /// </summary>
     public class ResourceMonitor : IResourceMonitor
     {
@@ -23,12 +23,11 @@ namespace CMSAgent.Service.Monitoring
         // Performance Counters
         private PerformanceCounter? _cpuCounter;
         private PerformanceCounter? _ramCounter;
-        // Disk usage sẽ được tính toán thủ công vì PerformanceCounter cho % Free Space có thể phức tạp
-        private string _mainDriveLetter = "C"; // Mặc định là ổ C
+        // Disk usage will be calculated manually because PerformanceCounter for % Free Space can be complex
+        private string _mainDriveLetter = "C"; // Default is C drive
 
         private bool _isMonitoring = false;
         private readonly object _lock = new object();
-
 
         public ResourceMonitor(ILogger<ResourceMonitor> logger)
         {
@@ -43,19 +42,19 @@ namespace CMSAgent.Service.Monitoring
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
                     _cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total", true);
-                    // Lấy một giá trị ban đầu để "khởi động" counter
+                    // Get an initial value to "warm up" the counter
                     _cpuCounter.NextValue();
 
                     _ramCounter = new PerformanceCounter("Memory", "% Committed Bytes In Use", null, true);
-                    // _ramCounter = new PerformanceCounter("Memory", "Available MBytes", null, true); // Cách khác để tính % RAM
+                    // _ramCounter = new PerformanceCounter("Memory", "Available MBytes", null, true); // Alternative way to calculate % RAM
                 }
                 else
                 {
-                    _logger.LogWarning("PerformanceCounters không được hỗ trợ đầy đủ trên hệ điều hành này. Giám sát tài nguyên có thể bị hạn chế.");
-                    // Cần tìm giải pháp thay thế cho Linux/macOS nếu hỗ trợ
+                    _logger.LogWarning("PerformanceCounters are not fully supported on this operating system. Resource monitoring may be limited.");
+                    // Need to find alternative solutions for Linux/macOS if support is needed
                 }
 
-                // Xác định ổ đĩa chính
+                // Determine main drive
                 DriveInfo? cDrive = DriveInfo.GetDrives().FirstOrDefault(d =>
                     d.DriveType == DriveType.Fixed &&
                     (d.Name.StartsWith("C:", StringComparison.OrdinalIgnoreCase) ||
@@ -65,13 +64,12 @@ namespace CMSAgent.Service.Monitoring
                 {
                     _mainDriveLetter = cDrive.Name.Substring(0, 1);
                 }
-                 _logger.LogInformation("Sẽ giám sát ổ đĩa: {DriveLetter}:\\", _mainDriveLetter);
-
+                _logger.LogInformation("Will monitor drive: {DriveLetter}:\\", _mainDriveLetter);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi khởi tạo PerformanceCounters. Giám sát tài nguyên có thể không hoạt động chính xác.");
-                // Vô hiệu hóa counter nếu lỗi
+                _logger.LogError(ex, "Error initializing PerformanceCounters. Resource monitoring may not work correctly.");
+                // Disable counters if error
                 _cpuCounter?.Dispose();
                 _cpuCounter = null;
                 _ramCounter?.Dispose();
@@ -85,20 +83,19 @@ namespace CMSAgent.Service.Monitoring
             {
                 if (_isMonitoring)
                 {
-                    _logger.LogWarning("Resource monitor đã chạy. Bỏ qua yêu cầu StartMonitoringAsync.");
+                    _logger.LogWarning("Resource monitor is already running. Ignoring StartMonitoringAsync request.");
                     return Task.CompletedTask;
                 }
 
-                _logger.LogInformation("Bắt đầu giám sát tài nguyên với khoảng thời gian báo cáo là {Interval} giây.", reportIntervalSeconds);
+                _logger.LogInformation("Starting resource monitoring with report interval of {Interval} seconds.", reportIntervalSeconds);
                 _statusUpdateAction = statusUpdateAction ?? throw new ArgumentNullException(nameof(statusUpdateAction));
                 _cancellationToken = cancellationToken;
                 _cancellationToken.Register(() => StopMonitoringAsync().ConfigureAwait(false).GetAwaiter().GetResult());
 
-
                 _timer = new Timer(
                     async state => await ReportStatusAsync(),
                     null,
-                    TimeSpan.Zero, // Bắt đầu ngay lập tức
+                    TimeSpan.Zero, // Start immediately
                     TimeSpan.FromSeconds(reportIntervalSeconds)
                 );
                 _isMonitoring = true;
@@ -112,16 +109,16 @@ namespace CMSAgent.Service.Monitoring
             {
                 if (!_isMonitoring)
                 {
-                    _logger.LogInformation("Resource monitor chưa chạy hoặc đã dừng.");
+                    _logger.LogInformation("Resource monitor is not running or has already stopped.");
                     return Task.CompletedTask;
                 }
 
-                _logger.LogInformation("Đang dừng giám sát tài nguyên.");
-                _timer?.Change(Timeout.Infinite, 0); // Dừng timer
+                _logger.LogInformation("Stopping resource monitoring.");
+                _timer?.Change(Timeout.Infinite, 0); // Stop timer
                 _timer?.Dispose();
                 _timer = null;
                 _isMonitoring = false;
-                _statusUpdateAction = null; // Xóa action để tránh gọi nhầm
+                _statusUpdateAction = null; // Clear action to avoid accidental calls
             }
             return Task.CompletedTask;
         }
@@ -130,9 +127,9 @@ namespace CMSAgent.Service.Monitoring
         {
             if (!_isMonitoring || _cancellationToken.IsCancellationRequested)
             {
-                if (_isMonitoring) // Nếu vẫn isMonitoring nhưng token đã bị hủy
+                if (_isMonitoring) // If still isMonitoring but token is cancelled
                 {
-                   await StopMonitoringAsync();
+                    await StopMonitoringAsync();
                 }
                 return;
             }
@@ -143,7 +140,7 @@ namespace CMSAgent.Service.Monitoring
                 float ramUsage = GetCurrentRamUsage();
                 float diskUsage = GetCurrentDiskUsage();
 
-                _logger.LogDebug("Trạng thái tài nguyên: CPU={Cpu}%, RAM={Ram}%, Disk={Disk}%", cpuUsage, ramUsage, diskUsage);
+                _logger.LogDebug("Resource status: CPU={Cpu}%, RAM={Ram}%, Disk={Disk}%", cpuUsage, ramUsage, diskUsage);
 
                 if (_statusUpdateAction != null)
                 {
@@ -152,8 +149,8 @@ namespace CMSAgent.Service.Monitoring
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi trong quá trình ReportStatusAsync.");
-                // Cân nhắc dừng monitor nếu lỗi lặp lại nhiều lần
+                _logger.LogError(ex, "Error in ReportStatusAsync.");
+                // Consider stopping monitor if errors occur repeatedly
             }
         }
 
@@ -161,14 +158,14 @@ namespace CMSAgent.Service.Monitoring
         {
             try
             {
-                // Cần gọi NextValue() hai lần với một khoảng trễ nhỏ để có giá trị chính xác cho CPU
-                // Lần gọi đầu tiên trong InitializePerformanceCounters() hoặc ở đây nếu _cpuCounter mới được tạo.
-                // Tuy nhiên, với timer chạy định kỳ, giá trị sẽ ổn định hơn sau vài lần gọi.
+                // Need to call NextValue() twice with a small delay to get accurate CPU value
+                // First call is in InitializePerformanceCounters() or here if _cpuCounter was just created.
+                // However, with timer running periodically, values will stabilize after a few calls.
                 return _cpuCounter?.NextValue() ?? 0f;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Không thể đọc giá trị CPU usage.");
+                _logger.LogWarning(ex, "Cannot read CPU usage value.");
                 return 0f;
             }
         }
@@ -177,12 +174,12 @@ namespace CMSAgent.Service.Monitoring
         {
             try
             {
-                // "% Committed Bytes In Use" là tỷ lệ bộ nhớ đã cam kết đang được sử dụng.
-                // Nó bao gồm cả RAM vật lý và page file.
-                // Đây là một chỉ số tốt về áp lực bộ nhớ.
+                // "% Committed Bytes In Use" is the ratio of committed memory in use.
+                // It includes both physical RAM and page file.
+                // This is a good indicator of memory pressure.
                 return _ramCounter?.NextValue() ?? 0f;
 
-                // Nếu muốn tính % RAM vật lý sử dụng:
+                // If want to calculate physical RAM usage %:
                 // if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 // {
                 //     using (var pcTotalRam = new PerformanceCounter("Memory", "Total Commit Limit", null, true)) // KB
@@ -190,13 +187,13 @@ namespace CMSAgent.Service.Monitoring
                 //     {
                 //         float totalRamMb = pcTotalRam.NextValue() / 1024;
                 //         float committedMb = pcCommitted.NextValue() / (1024 * 1024);
-                //         // Cần thêm logic để lấy tổng RAM vật lý thực sự
+                //         // Need additional logic to get actual total physical RAM
                 //     }
                 // }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Không thể đọc giá trị RAM usage.");
+                _logger.LogWarning(ex, "Cannot read RAM usage value.");
                 return 0f;
             }
         }
@@ -219,7 +216,7 @@ namespace CMSAgent.Service.Monitoring
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Không thể đọc giá trị Disk usage cho ổ {Drive}:\\.", _mainDriveLetter);
+                _logger.LogWarning(ex, "Cannot read Disk usage value for drive {Drive}:\\.", _mainDriveLetter);
             }
             return 0f;
         }
@@ -227,7 +224,7 @@ namespace CMSAgent.Service.Monitoring
         public void Dispose()
         {
             _logger.LogInformation("Disposing ResourceMonitor...");
-            StopMonitoringAsync().ConfigureAwait(false).GetAwaiter().GetResult(); // Dừng timer trước
+            StopMonitoringAsync().ConfigureAwait(false).GetAwaiter().GetResult(); // Stop timer first
             _cpuCounter?.Dispose();
             _ramCounter?.Dispose();
             GC.SuppressFinalize(this);

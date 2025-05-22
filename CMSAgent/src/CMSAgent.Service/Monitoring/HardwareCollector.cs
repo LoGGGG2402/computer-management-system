@@ -1,4 +1,4 @@
- // CMSAgent.Service/Monitoring/HardwareCollector.cs
+// CMSAgent.Service/Monitoring/HardwareCollector.cs
 using CMSAgent.Service.Models;
 using Microsoft.Extensions.Logging;
 using System;
@@ -6,14 +6,14 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Management; // Cần thêm package System.Management
+using System.Management; // Need to add System.Management package
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace CMSAgent.Service.Monitoring
 {
     /// <summary>
-    /// Thu thập thông tin phần cứng chi tiết của máy client.
+    /// Collect detailed hardware information of the client machine.
     /// </summary>
     public class HardwareCollector : IHardwareCollector
     {
@@ -26,24 +26,24 @@ namespace CMSAgent.Service.Monitoring
 
         public async Task<HardwareInfo?> CollectHardwareInfoAsync()
         {
-            _logger.LogInformation("Bắt đầu thu thập thông tin phần cứng.");
+            _logger.LogInformation("Starting hardware information collection.");
             try
             {
                 var hardwareInfo = new HardwareInfo
                 {
                     OsInfo = await GetOsInfoAsync(),
                     CpuInfo = await GetCpuInfoAsync(),
-                    GpuInfo = await GetGpuInfoStringAsync(), // API yêu cầu string
+                    GpuInfo = await GetGpuInfoStringAsync(), // API requires string
                     TotalRamMb = GetTotalRamMb(),
-                    TotalDiskSpaceMb = GetTotalDiskSpaceMb() // API yêu cầu một giá trị tổng
+                    TotalDiskSpaceMb = GetTotalDiskSpaceMb() // API requires a single total value
                 };
 
-                _logger.LogInformation("Thu thập thông tin phần cứng hoàn tất.");
+                _logger.LogInformation("Hardware information collection completed.");
                 return hardwareInfo;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi nghiêm trọng khi thu thập thông tin phần cứng.");
+                _logger.LogError(ex, "Critical error while collecting hardware information.");
                 return null;
             }
         }
@@ -52,14 +52,14 @@ namespace CMSAgent.Service.Monitoring
         {
             try
             {
-                // Sử dụng Environment và RuntimeInformation để có thông tin cơ bản
-                string osDescription = RuntimeInformation.OSDescription; // Ví dụ: Microsoft Windows 10.0.19045
+                // Use Environment and RuntimeInformation for basic information
+                string osDescription = RuntimeInformation.OSDescription; // Example: Microsoft Windows 10.0.19045
                 string osArchitecture = RuntimeInformation.OSArchitecture.ToString();
                 string frameworkDescription = RuntimeInformation.FrameworkDescription; // .NET version
 
-                // Để lấy thông tin chi tiết hơn như Edition (Pro, Home), Version (22H2), Build
-                // bạn có thể cần truy vấn WMI hoặc Registry.
-                // Ví dụ WMI (cần package System.Management):
+                // To get more detailed information like Edition (Pro, Home), Version (22H2), Build
+                // you may need to query WMI or Registry.
+                // Example WMI (requires System.Management package):
                 string caption = "N/A";
                 string version = "N/A"; // Windows version (e.g., 10.0.19045)
                 string buildNumber = "N/A";
@@ -77,12 +77,12 @@ namespace CMSAgent.Service.Monitoring
                         }
                     }
                 }
-                // API yêu cầu một chuỗi os_info
+                // API requires a string for os_info
                 return Task.FromResult<string?>($"{caption}, Arch: {osArchitecture}, Version: {version}, Build: {buildNumber}");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi lấy thông tin hệ điều hành.");
+                _logger.LogError(ex, "Error getting operating system information.");
                 return Task.FromResult<string?>("Error retrieving OS Info");
             }
         }
@@ -105,23 +105,23 @@ namespace CMSAgent.Service.Monitoring
                             cpuName = mo["Name"]?.ToString()?.Trim() ?? "N/A";
                             numberOfCores = (uint)(mo["NumberOfCores"] ?? 0u);
                             numberOfLogicalProcessors = (uint)(mo["NumberOfLogicalProcessors"] ?? 0u);
-                            maxClockSpeed = (uint)(mo["MaxClockSpeed"] ?? 0u); // Thường là MHz
-                            break; // Giả sử chỉ có 1 CPU
+                            maxClockSpeed = (uint)(mo["MaxClockSpeed"] ?? 0u); // Usually in MHz
+                            break; // Assume only 1 CPU
                         }
                     }
                 }
-                else // Fallback cho các OS khác nếu cần
+                else // Fallback for other OS if needed
                 {
                     cpuName = Environment.ProcessorCount > 0 ? $"Generic CPU ({Environment.ProcessorCount} cores)" : "Generic CPU";
-                    numberOfCores = (uint)Environment.ProcessorCount; // Đây là số logical processors
+                    numberOfCores = (uint)Environment.ProcessorCount; // This is number of logical processors
                     numberOfLogicalProcessors = (uint)Environment.ProcessorCount;
                 }
-                // API yêu cầu một chuỗi cpu_info
+                // API requires a string for cpu_info
                 return Task.FromResult<string?>($"{cpuName}, Cores: {numberOfCores}, Threads: {numberOfLogicalProcessors}, Speed: {maxClockSpeed}MHz");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi lấy thông tin CPU.");
+                _logger.LogError(ex, "Error getting CPU information.");
                 return Task.FromResult<string?>("Error retrieving CPU Info");
             }
         }
@@ -138,12 +138,12 @@ namespace CMSAgent.Service.Monitoring
                         foreach (var mo in mos.Get().Cast<ManagementObject>())
                         {
                             string name = mo["Name"]?.ToString()?.Trim() ?? "N/A";
-                            // AdapterRAM trả về bytes, cần chuyển sang MB. Có thể null.
+                            // AdapterRAM returns bytes, need to convert to MB. Can be null.
                             uint? adapterRamMb = mo["AdapterRAM"] != null ? Convert.ToUInt32(mo["AdapterRAM"]) / (1024 * 1024) : (uint?)null;
                             string driverVersion = mo["DriverVersion"]?.ToString()?.Trim() ?? "N/A";
-                            string videoProcessor = mo["VideoProcessor"]?.ToString()?.Trim() ?? ""; // Thường chứa tên GPU
+                            string videoProcessor = mo["VideoProcessor"]?.ToString()?.Trim() ?? ""; // Usually contains GPU name
 
-                            // Ưu tiên VideoProcessor nếu Name chung chung (vd: "Microsoft Basic Display Adapter")
+                            // Prefer VideoProcessor if Name is generic (e.g., "Microsoft Basic Display Adapter")
                             string displayName = name;
                             if (!string.IsNullOrWhiteSpace(videoProcessor) && !videoProcessor.Equals(name, StringComparison.OrdinalIgnoreCase))
                             {
@@ -156,18 +156,17 @@ namespace CMSAgent.Service.Monitoring
                 }
                 if (!gpuInfos.Any())
                 {
-                    return null; // Hoặc "N/A" nếu API yêu cầu string không null
+                    return null; // Or "N/A" if API requires non-null string
                 }
-                // API yêu cầu một chuỗi gpu_info, nếu có nhiều GPU, nối chúng lại
+                // API requires a string for gpu_info, if multiple GPUs, concatenate them
                 return string.Join(" | ", gpuInfos);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi lấy thông tin GPU.");
+                _logger.LogError(ex, "Error getting GPU information.");
                 return "Error retrieving GPU Info";
             }
         }
-
 
         private long GetTotalRamMb()
         {
@@ -179,26 +178,26 @@ namespace CMSAgent.Service.Monitoring
                     {
                         foreach (var mo in mos.Get().Cast<ManagementObject>())
                         {
-                            // TotalVisibleMemorySize là KB, chuyển sang MB
+                            // TotalVisibleMemorySize is in KB, convert to MB
                             return Convert.ToInt64(mo["TotalVisibleMemorySize"]) / 1024;
                         }
                     }
                 }
-                // Fallback (ít chính xác hơn)
-                // Process.GetCurrentProcess().WorkingSet64 có thể không phải là tổng RAM
-                // PerformanceCounter có thể dùng nhưng phức tạp hơn cho việc lấy một lần
+                // Fallback (less accurate)
+                // Process.GetCurrentProcess().WorkingSet64 may not be total RAM
+                // PerformanceCounter could be used but more complex for one-time retrieval
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi lấy tổng dung lượng RAM.");
+                _logger.LogError(ex, "Error getting total RAM capacity.");
             }
-            return 0; // Hoặc giá trị mặc định khác
+            return 0; // Or other default value
         }
 
         private long GetTotalDiskSpaceMb()
         {
-            // API yêu cầu "total_disk_space" là một integer.
-            // Tài liệu nói "usually C: drive". Ta sẽ lấy thông tin ổ C:.
+            // API requires "total_disk_space" to be an integer.
+            // Documentation says "usually C: drive". We'll get C: drive info.
             try
             {
                 DriveInfo cDrive = DriveInfo.GetDrives().FirstOrDefault(d =>
@@ -213,14 +212,14 @@ namespace CMSAgent.Service.Monitoring
                 }
                 else
                 {
-                    _logger.LogWarning("Không tìm thấy ổ C: hoặc ổ đĩa hệ thống, hoặc ổ đĩa chưa sẵn sàng.");
+                    _logger.LogWarning("C: drive or system drive not found, or drive not ready.");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi lấy tổng dung lượng ổ đĩa.");
+                _logger.LogError(ex, "Error getting total disk space.");
             }
-            return 0; // Hoặc giá trị mặc định khác
+            return 0; // Or other default value
         }
     }
 }

@@ -1,4 +1,3 @@
- // CMSAgent.Service/Commands/Factory/CommandHandlerFactory.cs
 using CMSAgent.Service.Commands.Handlers;
 using Microsoft.Extensions.DependencyInjection; // For IServiceProvider
 using Microsoft.Extensions.Logging;
@@ -6,6 +5,9 @@ using System;
 
 namespace CMSAgent.Service.Commands.Factory
 {
+    /// <summary>
+    /// Factory class for creating command handlers
+    /// </summary>
     public class CommandHandlerFactory : ICommandHandlerFactory
     {
         private readonly IServiceProvider _serviceProvider;
@@ -21,14 +23,12 @@ namespace CMSAgent.Service.Commands.Factory
         {
             if (string.IsNullOrWhiteSpace(commandType))
             {
-                _logger.LogWarning("CommandType không được cung cấp hoặc rỗng.");
+                _logger.LogWarning("CommandType is not provided or empty.");
                 return null;
             }
 
-            _logger.LogDebug("Đang tạo handler cho CommandType: {CommandType}", commandType);
+            _logger.LogDebug("Creating handler for CommandType: {CommandType}", commandType);
 
-            // Sử dụng IServiceProvider để resolve các handler.
-            // Điều này yêu cầu các handler phải được đăng ký trong DI container.
             try
             {
                 switch (commandType.ToUpperInvariant())
@@ -43,16 +43,15 @@ namespace CMSAgent.Service.Commands.Factory
                         return _serviceProvider.GetRequiredService<SoftwareUninstallCommandHandler>();
                     case "GET_LOGS":
                         return _serviceProvider.GetRequiredService<GetLogsCommandHandler>();
-                    // Thêm các case khác cho các loại lệnh mới ở đây
                     default:
-                        _logger.LogWarning("Không tìm thấy handler nào cho CommandType: {CommandType}", commandType);
+                        _logger.LogWarning("No handler found for CommandType: {CommandType}", commandType);
                         return null;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi tạo handler cho CommandType: {CommandType}", commandType);
-                return null; // Hoặc ném lỗi tùy theo chính sách xử lý
+                _logger.LogError(ex, "Error creating handler for CommandType: {CommandType}", commandType);
+                return null;    
             }
         }
     }

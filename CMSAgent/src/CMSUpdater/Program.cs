@@ -15,31 +15,29 @@ namespace CMSUpdater
         static async Task<int> Main(string[] args)
         {
             // --- System.CommandLine Configuration ---
-            var pidOption = new Option<int>("-pid", description: "Process ID of the running CMSAgent.Service.") { IsRequired = true };
-            var newVersionOption = new Option<string>("-new-version", description: "New version of the Agent.") { IsRequired = true };
-            var oldVersionOption = new Option<string>("-old-version", description: "Old version of the Agent (for backup).") { IsRequired = true };
-            var sourcePathOption = new Option<string>("-source-path", description: "Path to the directory containing extracted new version files.") { IsRequired = true };
-            var timeoutOption = new Option<int>("-timeout", getDefaultValue: () => 60, description: "Timeout duration (seconds) for service operations.");
-            var watchdogOption = new Option<int>("-watchdog", getDefaultValue: () => 120, description: "Duration (seconds) to monitor new Agent.");
+            var newVersionOption = new Option<string>("-new-version", description: "Version string of the new Agent to be installed.") { IsRequired = true };
+            var oldVersionOption = new Option<string>("-old-version", description: "Version string of the old Agent (for backup).") { IsRequired = true };
+            var sourcePathOption = new Option<string>("-source-path", description: "Path to the directory containing the extracted files of the new Agent version.") { IsRequired = true };
+            var serviceWaitTimeoutOption = new Option<int>("-service-wait-timeout", getDefaultValue: () => 60, description: "Timeout duration (seconds) to wait for old Agent to stop or new Agent to start.");
+            var watchdogPeriodOption = new Option<int>("-watchdog-period", getDefaultValue: () => 120, description: "Duration (seconds) for CMSUpdater to monitor the new Agent after startup.");
 
             var rootCommand = new RootCommand("CMS Agent Updater Utility")
             {
-                pidOption, newVersionOption, oldVersionOption, sourcePathOption,
-                timeoutOption, watchdogOption
+                newVersionOption, oldVersionOption, sourcePathOption,
+                serviceWaitTimeoutOption, watchdogPeriodOption
             };
 
             rootCommand.SetHandler(async (InvocationContext context) =>
             {
                 var config = new UpdaterConfig
                 {
-                    CurrentAgentPid = context.ParseResult.GetValueForOption(pidOption),
                     NewAgentVersion = context.ParseResult.GetValueForOption(newVersionOption)!,
                     OldAgentVersion = context.ParseResult.GetValueForOption(oldVersionOption)!,
                     NewAgentExtractedPath = context.ParseResult.GetValueForOption(sourcePathOption)!,
                     AgentInstallDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), AgentConstants.ServiceName),
                     AgentProgramDataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), AgentConstants.AgentProgramDataFolderName),
-                    ServiceWaitTimeoutSeconds = context.ParseResult.GetValueForOption(timeoutOption),
-                    NewAgentWatchdogPeriodSeconds = context.ParseResult.GetValueForOption(watchdogOption),
+                    ServiceWaitTimeoutSeconds = context.ParseResult.GetValueForOption(serviceWaitTimeoutOption),
+                    NewAgentWatchdogPeriodSeconds = context.ParseResult.GetValueForOption(watchdogPeriodOption)
                 };
                 context.ExitCode = await RunUpdaterLogicAsync(config);
             });
@@ -49,7 +47,6 @@ namespace CMSUpdater
 
         static async Task<int> RunUpdaterLogicAsync(UpdaterConfig config)
         {
-
             Directory.SetCurrentDirectory(config.AgentInstallDirectory); // Ensure appsettings.json is found correctly
             var configuration = new ConfigurationBuilder()
                 .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -68,13 +65,11 @@ namespace CMSUpdater
             });
 
             var loggerForRunner = loggerFactory.CreateLogger<UpdateTaskRunner>();
-            var loggerForVersionManager = loggerFactory.CreateLogger<VersionIgnoreManager>(); // Logger for VersionIgnoreManager
+            var loggerForVersionManager = loggerFactory.CreateLogger<VersionIgnoreManager>();
 
-            // Initialize VersionIgnoreManager
-            // VersionIgnoreManager needs AgentProgramDataPath, available in config.AgentProgramDataDirectory
             IVersionIgnoreManager versionIgnoreManager = new VersionIgnoreManager(config.AgentProgramDataDirectory, loggerForVersionManager);
 
-            var updaterRunner = new UpdateTaskRunner(config, loggerForRunner, versionIgnoreManager); // Pass versionIgnoreManager
+            var updaterRunner = new UpdateTaskRunner(config, loggerForRunner, versionIgnoreManager);
 
             try
             {

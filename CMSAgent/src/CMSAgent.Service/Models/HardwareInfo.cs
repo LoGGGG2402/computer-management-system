@@ -1,55 +1,55 @@
- // CMSAgent.Service/Models/HardwareInfo.cs
+// CMSAgent.Service/Models/HardwareInfo.cs
 using System.Text.Json.Serialization;
-// Không cần using System.Collections.Generic; nữa nếu không có List
+// No need for using System.Collections.Generic; if no List is used
 
 namespace CMSAgent.Service.Models
 {
     /// <summary>
-    /// Model chứa thông tin phần cứng của client machine, được điều chỉnh để phù hợp với API.
-    /// Được gửi đến Server qua API /api/agent/hardware-info.
-    /// Tham khảo: CMSAgent_Doc.md mục 5.1 và agent_api.md.
+    /// Model containing hardware information of the client machine, adjusted to match the API.
+    /// Sent to Server via API /api/agent/hardware-info.
+    /// Reference: CMSAgent_Doc.md section 5.1 and agent_api.md.
     /// </summary>
     public class HardwareInfo
     {
         /// <summary>
-        /// Thông tin hệ điều hành dưới dạng một chuỗi tóm tắt.
-        /// Ví dụ: "Windows 10 Pro 64-bit, Version 22H2, Build 19045.2006"
+        /// Operating system information as a summary string.
+        /// Example: "Windows 10 Pro 64-bit, Version 22H2, Build 19045.2006"
         /// </summary>
         [JsonPropertyName("os_info")]
-        public string? OsInfo { get; set; } // API spec nói là "string"
+        public string? OsInfo { get; set; } // API spec says it's "string"
 
         /// <summary>
-        /// Thông tin CPU dưới dạng một chuỗi tóm tắt.
-        /// Ví dụ: "Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz, 6 Cores, 12 Threads, 3192 MHz"
+        /// CPU information as a summary string.
+        /// Example: "Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz, 6 Cores, 12 Threads, 3192 MHz"
         /// </summary>
         [JsonPropertyName("cpu_info")]
-        public string? CpuInfo { get; set; } // API spec nói là "string"
+        public string? CpuInfo { get; set; } // API spec says it's "string"
 
         /// <summary>
-        /// Thông tin GPU dưới dạng một chuỗi tóm tắt.
-        /// Ví dụ: "NVIDIA GeForce RTX 3070, VRAM: 8192 MB, Driver: 30.0.15.1234"
-        /// Nếu có nhiều GPU, có thể nối chuỗi hoặc chỉ lấy thông tin GPU chính.
+        /// GPU information as a summary string.
+        /// Example: "NVIDIA GeForce RTX 3070, VRAM: 8192 MB, Driver: 30.0.15.1234"
+        /// If multiple GPUs exist, can concatenate strings or only take main GPU info.
         /// </summary>
         [JsonPropertyName("gpu_info")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string? GpuInfo { get; set; } // API spec nói là "string"
+        public string? GpuInfo { get; set; } // API spec says it's "string"
 
         /// <summary>
-        /// Tổng dung lượng RAM vật lý (MB).
+        /// Total physical RAM capacity (MB).
         /// API spec: "total_ram": "integer"
         /// </summary>
-        [JsonPropertyName("total_ram")] // Đổi tên JSON property
+        [JsonPropertyName("total_ram")] // Changed JSON property name
         public long TotalRamMb { get; set; }
 
         /// <summary>
-        /// Tổng dung lượng ổ đĩa (thường là ổ C: hoặc ổ đĩa hệ thống chính) tính bằng MB.
+        /// Total disk space (usually C: drive or main system drive) in MB.
         /// API spec: "total_disk_space": "integer (required)"
         /// </summary>
         [JsonPropertyName("total_disk_space")]
-        public long TotalDiskSpaceMb { get; set; } // Đổi từ List<DiskDriveInfo> thành một giá trị long
+        public long TotalDiskSpaceMb { get; set; } // Changed from List<DiskDriveInfo> to a single long value
 
-        // Các lớp OsInfo, CpuInfo, GpuInfo, DiskDriveInfo đã bị loại bỏ
-        // vì API chỉ yêu cầu các chuỗi tóm tắt hoặc giá trị đơn giản.
-        // Logic để tạo các chuỗi tóm tắt này sẽ nằm trong HardwareCollector.cs.
+        // OsInfo, CpuInfo, GpuInfo, DiskDriveInfo classes have been removed
+        // because API only requires summary strings or simple values.
+        // Logic to create these summary strings will be in HardwareCollector.cs.
     }
 }
