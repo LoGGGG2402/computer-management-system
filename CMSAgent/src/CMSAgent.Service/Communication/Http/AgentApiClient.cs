@@ -1,19 +1,11 @@
-// CMSAgent.Service/Communication/Http/AgentApiClient.cs
-using CMSAgent.Service.Configuration.Models; // For AppSettings, PositionInfo
-using CMSAgent.Service.Models; // For HardwareInfo, UpdateNotification
-using CMSAgent.Shared.Constants; // For AgentConstants
-using CMSAgent.Shared.Models; // For AgentErrorReport
-using Microsoft.Extensions.Logging;
+using CMSAgent.Service.Configuration.Models;
+using CMSAgent.Service.Models;
+using CMSAgent.Shared.Models;
 using Microsoft.Extensions.Options;
-using System;
-using System.IO;
-using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Net.Http.Json; // For ReadFromJsonAsync, PostAsJsonAsync
-using System.Text;
+using System.Net.Http.Json; 
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Text.Json.Serialization;
 
 namespace CMSAgent.Service.Communication.Http
 {
@@ -49,7 +41,7 @@ namespace CMSAgent.Service.Communication.Http
             _jsonSerializerOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true, // Important for deserialization
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             };
         }
 
@@ -77,12 +69,13 @@ namespace CMSAgent.Service.Communication.Http
         }
 
         public async Task<(string Status, string? AgentToken, string? ErrorMessage)> IdentifyAgentAsync(
-            string agentId, PositionInfo positionInfo, CancellationToken cancellationToken = default)
+            string? agentId, PositionInfo positionInfo, bool forceRenewToken = false, CancellationToken cancellationToken = default)
         {
             var requestPayload = new
             {
-                agentId = agentId,
-                positionInfo = positionInfo,
+                agentId,
+                positionInfo,
+                forceRenewToken
             };
 
             string apiUrl = $"{_appSettings.ApiPath}/agent/identify";
@@ -278,7 +271,7 @@ namespace CMSAgent.Service.Communication.Http
                     var updateInfo = await response.Content.ReadFromJsonAsync<UpdateNotification>(_jsonSerializerOptions, cancellationToken);
                     if (updateInfo != null)
                     {
-                        _logger.LogInformation("Update check successful. New version available: {HasUpdate}", updateInfo.HasUpdate);
+                        _logger.LogInformation("Update check successful. New version available: {HasUpdate}", updateInfo.UpdateAvailable);
                         return updateInfo;
                     }
                     _logger.LogError("Update check: Successful response but could not parse JSON content.");

@@ -1,15 +1,11 @@
 // CMSAgent.Service/Commands/CommandQueue.cs
 using CMSAgent.Service.Commands.Factory;
 using CMSAgent.Service.Commands.Models;
+using CMSAgent.Service.Commands.Handlers;
 using CMSAgent.Service.Communication.WebSocket; // For IAgentSocketClient (to send results)
 using CMSAgent.Service.Configuration.Models; // For AppSettings
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System;
-using System.Threading.Channels; // For Channel<T>
-using System.Threading.Tasks;
-using System.Threading; // For CancellationToken
-using System.Collections.Generic; // For List of Tasks
+using System.Threading.Channels; 
 
 namespace CMSAgent.Service.Commands
 {
@@ -120,7 +116,7 @@ namespace CMSAgent.Service.Commands
                 return false;
             }
 
-            if (_queue.Writer.Completion.IsCompleted)
+            if (_queue.Writer.TryComplete())
             {
                 _logger.LogWarning("Cannot add command to closed queue. CommandId: {CommandId}", commandRequest.CommandId);
                 return false;
@@ -163,8 +159,8 @@ namespace CMSAgent.Service.Commands
                     _logger.LogInformation("Worker {WorkerId} is processing command ID: {CommandId}, Type: {CommandType}",
                         workerId, commandRequest.CommandId, commandRequest.CommandType);
 
-                    ICommandHandler? handler = _handlerFactory.CreateHandler(commandRequest.CommandType);
-                    if (handler == null)
+                    ICommandHandler? handler = _handlerFactory.CreateHandler(commandRequest.CommandType.ToString());
+                    if (handler is null)
                     {
                         _logger.LogWarning("Worker {WorkerId}: No handler found for CommandType: {CommandType}, CommandId: {CommandId}. Skipping command.",
                             workerId, commandRequest.CommandType, commandRequest.CommandId);

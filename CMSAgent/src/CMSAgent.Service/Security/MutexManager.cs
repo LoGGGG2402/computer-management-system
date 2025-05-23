@@ -1,11 +1,9 @@
 // CMSAgent.Service/Security/MutexManager.cs
-using CMSAgent.Shared.Constants; // For AgentConstants
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options; // For IOptions<AppSettings>
-using System;
+using CMSAgent.Shared.Constants;
+using Microsoft.Extensions.Options; 
+using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
-using System.Threading;
 using CMSAgent.Service.Configuration.Models; // For AppSettings
 
 namespace CMSAgent.Service.Security
@@ -13,6 +11,8 @@ namespace CMSAgent.Service.Security
     /// <summary>
     /// Manages Mutex to ensure only one instance of Agent Service is running on the system.
     /// </summary>
+    /// 
+    [SupportedOSPlatform("windows")]
     public class MutexManager : IDisposable
     {
         private readonly ILogger<MutexManager> _logger;
@@ -40,77 +40,40 @@ namespace CMSAgent.Service.Security
             _mutexName = $"{AgentConstants.AgentServiceMutexNamePrefix}{appSettings.AgentInstanceGuid}";
             _logger.LogInformation("Using Mutex name: {MutexName}", _mutexName);
         }
-
-        /// <summary>
-        /// Attempt to request Mutex ownership.
-        /// </summary>
-        /// <returns>True if Mutex ownership is obtained (current instance is unique), False if Mutex is already held by another instance.</returns>
         public bool RequestOwnership()
         {
-            if (_hasHandle) // Already holding Mutex
+            // Configure Mutex security to allow all users on the machine to "see" the global Mutex.
+            var mutexSecurity = new MutexSecurity();
+            mutexSecurity.AddAccessRule(new MutexAccessRule(
+                new SecurityIdentifier(WellKnownSidType.WorldSid, null), // Everyone
+                MutexRights.FullControl,
+                AccessControlType.Allow
+            ));
+
+            _mutex = new Mutex(false, _mutexName, out bool createdNew);
+            _mutex.SetAccessControl(mutexSecurity);
+
+            if (createdNew)
             {
+                _logger.LogInformation("Mutex {MutexName} was newly created.", _mutexName);
+            }
+            else
+            {
+                _logger.LogInformation("Mutex {MutexName} already exists. Attempting to obtain ownership...", _mutexName);
+            }
+
+            _hasHandle = _mutex.WaitOne(TimeSpan.Zero, false);
+
+            if (_hasHandle)
+            {
+                _logger.LogInformation("Successfully obtained Mutex ownership: {MutexName}.", _mutexName);
                 return true;
             }
-
-            try
+            else
             {
-                // Configure Mutex security to allow all users on the machine to "see" the global Mutex.
-                // This is important because the service runs under LocalSystem, but there might be other instances
-                // (e.g., running debug from another user) trying to create a Mutex with the same name.
-                var mutexSecurity = new MutexSecurity();
-                mutexSecurity.AddAccessRule(new MutexAccessRule(
-                    new SecurityIdentifier(WellKnownSidType.WorldSid, null), // Everyone
-                    MutexRights.FullControl, // Or at least Synchronize | ReadPermissions
-                    AccessControlType.Allow
-                ));
-
-                _mutex = new Mutex(initiallyOwned: false, name: _mutexName, out bool createdNew, mutexSecurity);
-
-                if (createdNew)
-                {
-                    // If Mutex is newly created, this instance can obtain ownership.
-                    _logger.LogInformation("Mutex {MutexName} was newly created.", _mutexName);
-                }
-                else
-                {
-                    // Mutex already exists, try to obtain ownership with a short timeout.
-                    _logger.LogInformation("Mutex {MutexName} already exists. Attempting to obtain ownership...", _mutexName);
-                }
-
-                // Try to obtain Mutex ownership.
-                // WaitOne(0) will return immediately. True if obtained, False if not.
-                _hasHandle = _mutex.WaitOne(TimeSpan.Zero, false);
-
-                if (_hasHandle)
-                {
-                    _logger.LogInformation("Successfully obtained Mutex ownership: {MutexName}.", _mutexName);
-                    return true;
-                }
-                else
-                {
-                    _logger.LogWarning("Could not obtain Mutex ownership: {MutexName}. Another instance may be running.", _mutexName);
-                    _mutex.Close(); // Close handle if ownership not obtained
-                    _mutex = null;
-                    return false;
-                }
-            }
-            catch (AbandonedMutexException)
-            {
-                // Occurs when another process holding the Mutex terminates without releasing it.
-                // Current instance can obtain ownership.
-                _logger.LogWarning("Mutex {MutexName} was abandoned. Taking ownership.", _mutexName);
-                _hasHandle = true; // Take ownership
-                return true;
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                _logger.LogCritical(ex, "UnauthorizedAccessException error when creating or accessing Mutex {MutexName}. Check service/user permissions.", _mutexName);
-                // This is a critical error, service may not have permission to create global mutex.
-                return false; // Cannot continue if Mutex cannot be created
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unknown error when requesting Mutex {MutexName}.", _mutexName);
+                _logger.LogWarning("Could not obtain Mutex ownership: {MutexName}. Another instance may be running.", _mutexName);
+                _mutex.Close();
+                _mutex = null;
                 return false;
             }
         }

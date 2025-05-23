@@ -1,9 +1,7 @@
-// CMSAgent.Service/Security/DpapiProtector.cs
-using Microsoft.Extensions.Logging;
-using System;
 using System.Security.Cryptography; // Required for ProtectedData
 using System.Text;
 using System.Runtime.InteropServices; // For OSPlatform
+using System.Runtime.Versioning; // For SupportedOSPlatform
 
 namespace CMSAgent.Service.Security
 {
@@ -11,6 +9,7 @@ namespace CMSAgent.Service.Security
     /// Implementation of IDpapiProtector using Windows Data Protection API (DPAPI).
     /// Encrypts data with LocalMachine scope, meaning it can only be decrypted on the same machine.
     /// </summary>
+    [SupportedOSPlatform("windows")]
     public class DpapiProtector : IDpapiProtector
     {
         private readonly ILogger<DpapiProtector> _logger;
@@ -34,6 +33,7 @@ namespace CMSAgent.Service.Security
         /// <param name="plainText">String to encrypt.</param>
         /// <param name="optionalEntropy">Optional byte array to enhance security (can be null).</param>
         /// <returns>Encrypted string in Base64 format, or null if there is an error.</returns>
+        [SupportedOSPlatform("windows")]
         public string? Protect(string plainText, byte[]? optionalEntropy = null)
         {
             if (string.IsNullOrEmpty(plainText))
@@ -75,6 +75,7 @@ namespace CMSAgent.Service.Security
         /// <param name="encryptedTextBase64">Encrypted string (in Base64 format) to decrypt.</param>
         /// <param name="optionalEntropy">Optional byte array used during encryption (must be identical, can be null).</param>
         /// <returns>Decrypted plaintext string, or null if there is an error (e.g., wrong entropy, corrupted data).</returns>
+        [SupportedOSPlatform("windows")]
         public string? Unprotect(string encryptedTextBase64, byte[]? optionalEntropy = null)
         {
             if (string.IsNullOrEmpty(encryptedTextBase64))

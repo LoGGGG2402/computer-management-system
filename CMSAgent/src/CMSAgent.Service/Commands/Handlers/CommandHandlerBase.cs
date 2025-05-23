@@ -1,8 +1,6 @@
 using CMSAgent.Service.Commands.Models;
-using Microsoft.Extensions.Logging;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+using CMSAgent.Shared.Constants;
+using System.Text.Json;
 
 namespace CMSAgent.Service.Commands.Handlers
 {
@@ -44,10 +42,13 @@ namespace CMSAgent.Service.Commands.Handlers
                 Success = false
             };
 
+            CancellationTokenSource? timeoutCts = null;
+            int defaultTimeoutSeconds = 60;
+
             try
             {
-                int defaultTimeoutSeconds = GetDefaultCommandTimeoutSeconds(commandRequest);
-                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(defaultTimeoutSeconds));
+                defaultTimeoutSeconds = GetDefaultCommandTimeoutSeconds(commandRequest);
+                timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(defaultTimeoutSeconds));
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
                 commandResult.Result = await ExecuteInternalAsync(commandRequest, linkedCts.Token);
@@ -64,39 +65,42 @@ namespace CMSAgent.Service.Commands.Handlers
                         commandRequest.CommandId, commandResult.Result.ExitCode, commandResult.Result.ErrorMessage);
                 }
             }
-            catch (OperationCanceledException ex) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException ex) when (timeoutCts?.IsCancellationRequested == true && !cancellationToken.IsCancellationRequested)
             {
                 Logger.LogWarning(ex, "Command ID: {CommandId} timed out after {TimeoutSeconds} seconds.", commandRequest.CommandId, defaultTimeoutSeconds);
-                commandResult.Result = new CommandOutputResult
-                {
-                    ErrorMessage = $"Command timed out after {defaultTimeoutSeconds} seconds.",
-                    ExitCode = AgentConstants.CommandExitCodes.Timeout,
-                    ErrorCode = "COMMAND_TIMEOUT"
-                };
+                commandResult.Result = CommandOutputResult.CreateError(
+                    ErrorCode.TIMEOUT_ERROR,
+                    $"Command timed out after {defaultTimeoutSeconds} seconds.",
+                    null,
+                    AgentConstants.CommandExitCodes.Timeout
+                );
                 commandResult.Success = false;
             }
             catch (OperationCanceledException ex)
             {
                 Logger.LogWarning(ex, "Command ID: {CommandId} was cancelled.", commandRequest.CommandId);
-                commandResult.Result = new CommandOutputResult
-                {
-                    ErrorMessage = "Command execution was canceled.",
-                    ExitCode = AgentConstants.CommandExitCodes.Cancelled,
-                    ErrorCode = "COMMAND_CANCELLED"
-                };
+                commandResult.Result = CommandOutputResult.CreateError(
+                    ErrorCode.COMMAND_EXECUTION_ERROR,
+                    "Command execution was canceled.",
+                    null,
+                    AgentConstants.CommandExitCodes.Cancelled
+                );
                 commandResult.Success = false;
             }
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Unexpected error during command execution ID: {CommandId}.", commandRequest.CommandId);
-                commandResult.Result = new CommandOutputResult
-                {
-                    ErrorMessage = $"Unexpected error: {ex.Message}",
-                    Stderr = ex.ToString(),
-                    ExitCode = AgentConstants.CommandExitCodes.GeneralError,
-                    ErrorCode = "UNEXPECTED_ERROR"
-                };
+                commandResult.Result = CommandOutputResult.CreateError(
+                    ErrorCode.UNKNOWN_ERROR,
+                    $"Unexpected error: {ex.Message}",
+                    ex.ToString(),
+                    AgentConstants.CommandExitCodes.GeneralError
+                );
                 commandResult.Success = false;
+            }
+            finally
+            {
+                timeoutCts?.Dispose();
             }
 
             return commandResult;

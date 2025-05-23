@@ -1,10 +1,6 @@
-// CMSAgent.Service/Communication/Http/RetryPolicies.cs
 using Polly;
 using Polly.Extensions.Http;
-using System;
-using System.Net.Http;
-using CMSAgent.Service.Configuration.Models; // For HttpRetryPolicySettings
-using Microsoft.Extensions.Logging;
+using CMSAgent.Service.Configuration.Models;
 
 namespace CMSAgent.Service.Communication.Http
 {
@@ -40,7 +36,7 @@ namespace CMSAgent.Service.Communication.Http
                     //                                         + TimeSpan.FromMilliseconds(new Random().Next(0, 1000)),
                     onRetry: (outcome, timespan, retryAttempt, context) =>
                     {
-                        var request = outcome.Result?.RequestMessage ?? (outcome.Exception as HttpRequestException)?.HttpRequestMessage;
+                        var request = outcome.Result?.RequestMessage;
                         var uri = request?.RequestUri?.ToString() ?? "N/A";
                         var statusCode = outcome.Result?.StatusCode.ToString() ?? "N/A";
 

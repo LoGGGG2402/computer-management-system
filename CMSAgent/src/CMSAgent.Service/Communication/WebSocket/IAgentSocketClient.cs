@@ -1,6 +1,3 @@
-// CMSAgent.Service/Communication/WebSocket/IAgentSocketClient.cs
-using System;
-using System.Threading.Tasks;
 using CMSAgent.Service.Commands.Models; // For CommandRequest, CommandResult
 using CMSAgent.Service.Models; // For UpdateNotification (if server sends via WS)
 

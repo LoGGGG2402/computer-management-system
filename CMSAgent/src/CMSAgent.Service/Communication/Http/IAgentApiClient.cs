@@ -11,6 +11,13 @@ namespace CMSAgent.Service.Communication.Http
     public interface IAgentApiClient
     {
         /// <summary>
+        /// Updates authentication information to be used for subsequent requests.
+        /// </summary>
+        /// <param name="agentId">ID of the Agent.</param>
+        /// <param name="agentToken">Authentication token of the Agent.</param>
+        void SetAuthenticationCredentials(string agentId, string agentToken);
+
+        /// <summary>
         /// Identifies Agent with Server and gets token or requests MFA.
         /// API: POST /api/agent/identify
         /// </summary>
@@ -19,7 +26,7 @@ namespace CMSAgent.Service.Communication.Http
         /// <param name="forceRenewToken">True if requesting Server to issue a new token (for periodic token renewal).</param>
         /// <param name="cancellationToken">Token to cancel the request.</param>
         /// <returns>A tuple containing status (e.g., "mfa_required", "success", "position_error") and agentToken (if any).</returns>
-        Task<(string Status, string? AgentToken, string? ErrorMessage)> IdentifyAgentAsync(string agentId, PositionInfo positionInfo, bool forceRenewToken = false, CancellationToken cancellationToken = default);
+        Task<(string Status, string? AgentToken, string? ErrorMessage)> IdentifyAgentAsync(string? agentId, PositionInfo positionInfo, bool forceRenewToken = false, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Verifies MFA code for Agent.

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Serilog;
 using System;
 using System.CommandLine; // For System.CommandLine
@@ -26,10 +27,11 @@ using CMSAgent.Service.Commands;
 using CMSAgent.Service.Commands.Factory;
 using CMSAgent.Service.Commands.Handlers;
 using CMSAgent.Service.Update;
-using Polly; // For Polly retry policies
+using System.Runtime.Versioning; // For Polly retry policies
 
 namespace CMSAgent.Service
 {
+    [SupportedOSPlatform("windows")]
     public class Program
     {
         private static MutexManager? _mutexManager; // To release mutex on exit
@@ -218,7 +220,10 @@ namespace CMSAgent.Service
 
                     // --- Register Shared Services ---
                     services.AddSingleton<IVersionIgnoreManager>(provider =>
-                        new VersionIgnoreManager(provider.GetRequiredService<IRuntimeConfigManager>().GetAgentProgramDataPath())
+                        new VersionIgnoreManager(
+                            provider.GetRequiredService<IRuntimeConfigManager>().GetAgentProgramDataPath(),
+                            provider.GetRequiredService<ILogger<VersionIgnoreManager>>()
+                        )
                     );
 
                     // --- Register Security ---
@@ -260,7 +265,6 @@ namespace CMSAgent.Service
                             provider.GetRequiredService<ILogger<AgentUpdateManager>>(),
                             provider.GetRequiredService<IOptions<AppSettings>>(),
                             provider.GetRequiredService<IAgentApiClient>(),
-                            provider.GetRequiredService<IAgentSocketClient>(),
                             provider.GetRequiredService<IVersionIgnoreManager>(),
                             provider.GetRequiredService<IRuntimeConfigManager>(),
                             async () => // This is Func<Task> requestServiceShutdown

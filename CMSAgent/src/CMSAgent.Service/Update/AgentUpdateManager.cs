@@ -5,15 +5,9 @@ using CMSAgent.Service.Configuration.Models; // For AppSettings
 using CMSAgent.Service.Models;
 using CMSAgent.Shared; // For IVersionIgnoreManager
 using CMSAgent.Shared.Constants;
-using CMSAgent.Shared.Models; // For AgentErrorReport
-using CMSAgent.Shared.Utils; // For FileUtils, ProcessUtils
-using Microsoft.Extensions.Logging;
+using CMSAgent.Shared.Utils; 
 using Microsoft.Extensions.Options;
-using System;
 using System.Diagnostics;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using CMSAgent.Service.Configuration.Manager; // For IRuntimeConfigManager (to get AgentProgramDataPath)
 
 
@@ -24,7 +18,6 @@ namespace CMSAgent.Service.Update
         private readonly ILogger<AgentUpdateManager> _logger;
         private readonly AppSettings _appSettings;
         private readonly IAgentApiClient _apiClient;
-        private readonly IAgentSocketClient _socketClient; // To send agent:update_status
         private readonly IVersionIgnoreManager _versionIgnoreManager;
         private readonly IRuntimeConfigManager _runtimeConfigManager; // To get AgentProgramDataPath
         private readonly Func<Task> _requestServiceShutdown; // Action to request service shutdown
@@ -41,7 +34,6 @@ namespace CMSAgent.Service.Update
             ILogger<AgentUpdateManager> logger,
             IOptions<AppSettings> appSettingsOptions,
             IAgentApiClient apiClient,
-            IAgentSocketClient socketClient,
             IVersionIgnoreManager versionIgnoreManager,
             IRuntimeConfigManager runtimeConfigManager,
             Func<Task> requestServiceShutdown)
@@ -49,7 +41,6 @@ namespace CMSAgent.Service.Update
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _appSettings = appSettingsOptions?.Value ?? throw new ArgumentNullException(nameof(appSettingsOptions));
             _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
-            _socketClient = socketClient ?? throw new ArgumentNullException(nameof(socketClient));
             _versionIgnoreManager = versionIgnoreManager ?? throw new ArgumentNullException(nameof(versionIgnoreManager));
             _runtimeConfigManager = runtimeConfigManager ?? throw new ArgumentNullException(nameof(runtimeConfigManager));
             _requestServiceShutdown = requestServiceShutdown ?? throw new ArgumentNullException(nameof(requestServiceShutdown));
@@ -116,7 +107,6 @@ namespace CMSAgent.Service.Update
             _isUpdateInProgress = true;
             try
             {
-                await NotifyUpdateStatusAsync("update_started", updateNotification.Version, null);
 
                 string downloadDir = Path.Combine(_agentProgramDataPath, AgentConstants.UpdatesSubFolderName, AgentConstants.UpdateDownloadSubFolderName);
                 Directory.CreateDirectory(downloadDir); // Ensure directory exists
@@ -209,17 +199,16 @@ namespace CMSAgent.Service.Update
             }
 
             string arguments = $"-new-version \"{newVersion}\" " +
-                             $"-old-version \"{_appSettings.AgentVersion}\" " +
-                             $"-source-path \"{extractedUpdatePath}\" " +
-                             $"-service-wait-timeout {_appSettings.ServiceWaitTimeoutSeconds} " +
-                             $"-watchdog-period {_appSettings.NewAgentWatchdogPeriodSeconds}";
-
+                             $"-old-version \"{_appSettings.Version}\" " +
+                             $"-source-path \"{extractedUpdatePath}\" " ;
             _logger.LogInformation("Launching Updater: \"{UpdaterPath}\" with arguments: {Arguments}", updaterToLaunch, arguments);
 
             try
             {
-                // Launch Updater as a separate process, don't wait for it to finish
-                Process? updaterProcess = ProcessUtils.StartProcess(updaterToLaunch, arguments, Path.GetDirectoryName(updaterToLaunch), createNoWindow: true, useShellExecute: false);
+                // Launch Updater as a separate process using Task.Run to avoid blocking
+                Process? updaterProcess = await Task.Run(() => 
+                    ProcessUtils.StartProcess(updaterToLaunch, arguments, Path.GetDirectoryName(updaterToLaunch), createNoWindow: true, useShellExecute: false),
+                    cancellationToken);
 
                 if (updaterProcess == null || updaterProcess.HasExited) // Checking HasExited immediately may not be accurate if process just started
                 {
@@ -236,41 +225,16 @@ namespace CMSAgent.Service.Update
             }
         }
 
-        private async Task NotifyUpdateStatusAsync(string status, string targetVersion, string? message)
-        {
-            if (!_socketClient.IsConnected)
-            {
-                _logger.LogWarning("Cannot send update status '{Status}' for version {TargetVersion}: WebSocket not connected.", status, targetVersion);
-                return;
-            }
-            try
-            {
-                var payload = new
-                {
-                    status = status,
-                    target_version = targetVersion,
-                    message = message
-                };
-                await _socketClient.SendEventAsync("agent:update_status", payload);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error sending update status '{Status}' for version {TargetVersion}.", status, targetVersion);
-            }
-        }
-
         private async Task ReportUpdateErrorAsync(string errorType, string errorMessage, string targetVersion)
         {
             try
             {
-                var errorReport = new AgentErrorReport
-                {
-                    ErrorType = errorType,
-                    ErrorMessage = errorMessage,
-                    TargetVersion = targetVersion,
-                    Timestamp = DateTime.UtcNow
-                };
-                await _apiClient.ReportUpdateErrorAsync(errorReport);
+                var errorReport = ErrorReportingUtils.CreateErrorReport(
+                    errorType,
+                    errorMessage,
+                    customDetails: new { TargetVersion = targetVersion }
+                );
+                await _apiClient.ReportErrorAsync(errorReport);
             }
             catch (Exception ex)
             {
@@ -281,12 +245,11 @@ namespace CMSAgent.Service.Update
         private async Task HandleUpdateFailureAsync(string errorType, string errorMessage, string targetVersion, bool shouldIgnoreVersionOnError = true)
         {
             _logger.LogError("Update failed: {ErrorMessage}", errorMessage);
-            await NotifyUpdateStatusAsync("update_failed", targetVersion, errorMessage);
             await ReportUpdateErrorAsync(errorType, errorMessage, targetVersion);
 
             if (shouldIgnoreVersionOnError)
             {
-                _versionIgnoreManager.IgnoreVersion(targetVersion);
+                await _versionIgnoreManager.IgnoreVersionAsync(targetVersion);
                 _logger.LogWarning("Version {TargetVersion} has been added to ignore list due to update failure.", targetVersion);
             }
         }

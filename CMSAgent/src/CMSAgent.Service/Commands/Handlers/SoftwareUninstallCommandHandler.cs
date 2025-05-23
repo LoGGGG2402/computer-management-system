@@ -1,7 +1,4 @@
 using CMSAgent.Service.Commands.Models;
-using Microsoft.Extensions.Logging;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace CMSAgent.Service.Commands.Handlers
 {
@@ -11,14 +8,14 @@ namespace CMSAgent.Service.Commands.Handlers
         {
         }
 
-        protected override async Task<CommandOutputResult> ExecuteInternalAsync(CommandRequest commandRequest, CancellationToken cancellationToken)
+        protected override Task<CommandOutputResult> ExecuteInternalAsync(CommandRequest commandRequest, CancellationToken cancellationToken)
         {
-            return new CommandOutputResult
-            {
-                ErrorMessage = "This command handler is currently disabled.",
-                ExitCode = -1,
-                ErrorCode = "HANDLER_DISABLED"
-            };
+            return Task.FromResult(CommandOutputResult.CreateError(
+                ErrorCode.SOFTWARE_UNINSTALL_ERROR,
+                "This command handler is currently disabled.",
+                null,
+                -1
+            ));
         }
     }
 }

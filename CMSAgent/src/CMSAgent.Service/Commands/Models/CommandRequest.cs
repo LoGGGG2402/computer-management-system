@@ -1,6 +1,5 @@
 // CMSAgent.Service/Commands/Models/CommandRequest.cs
 using System.Text.Json.Serialization;
-using System.Collections.Generic; // For Dictionary
 
 namespace CMSAgent.Service.Commands.Models
 {

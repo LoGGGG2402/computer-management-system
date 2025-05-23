@@ -37,7 +37,11 @@
 
     <PackageReference Include="System.Management" Version="8.0.0" Condition="'$(TargetFramework)' == 'net8.0' AND '$([MSBuild]::IsOSPlatform(`Windows`))'" />
     
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="8.0.0" Condition="'$(TargetFramework)' == 'net8.0' AND '$([MSBuild]::IsOSPlatform(`Windows`))'" />
+    
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+    
+    <PackageReference Include="System.Threading.AccessControl" Version="8.0.0" Condition="'$(TargetFramework)' == 'net8.0' AND '$([MSBuild]::IsOSPlatform(`Windows`))'" />
     
     </ItemGroup>
 
@@ -46,16 +50,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="appsettings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <ExcludeFromSingleFile>false</ExcludeFromSingleFile>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <Content Include="appsettings.*.json" DependentUpon="appsettings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <ExcludeFromSingleFile>false</ExcludeFromSingleFile>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
     <Content Remove="Properties\launchSettings.json" />
   </ItemGroup>
 

@@ -1,6 +1,5 @@
 // CMSAgent.Service/Monitoring/IHardwareCollector.cs
-using CMSAgent.Service.Models; // For HardwareInfo
-using System.Threading.Tasks;
+using CMSAgent.Service.Models; 
 
 namespace CMSAgent.Service.Monitoring
 {

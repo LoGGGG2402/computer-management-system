@@ -1,14 +1,6 @@
-// CMSAgent.Service/Monitoring/HardwareCollector.cs
 using CMSAgent.Service.Models;
-using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Management; // Need to add System.Management package
+using System.Management; 
 using System.Runtime.InteropServices;
-using System.Threading.Tasks;
 
 namespace CMSAgent.Service.Monitoring
 {
@@ -126,7 +118,7 @@ namespace CMSAgent.Service.Monitoring
             }
         }
 
-        private async Task<string?> GetGpuInfoStringAsync()
+        private Task<string?> GetGpuInfoStringAsync()
         {
             var gpuInfos = new List<string>();
             try
@@ -156,15 +148,15 @@ namespace CMSAgent.Service.Monitoring
                 }
                 if (!gpuInfos.Any())
                 {
-                    return null; // Or "N/A" if API requires non-null string
+                    return Task.FromResult<string?>(null); // Or "N/A" if API requires non-null string
                 }
                 // API requires a string for gpu_info, if multiple GPUs, concatenate them
-                return string.Join(" | ", gpuInfos);
+                return Task.FromResult<string?>(string.Join(" | ", gpuInfos));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting GPU information.");
-                return "Error retrieving GPU Info";
+                return Task.FromResult<string?>("Error retrieving GPU Info");
             }
         }
 
@@ -200,7 +192,7 @@ namespace CMSAgent.Service.Monitoring
             // Documentation says "usually C: drive". We'll get C: drive info.
             try
             {
-                DriveInfo cDrive = DriveInfo.GetDrives().FirstOrDefault(d =>
+                DriveInfo? cDrive = DriveInfo.GetDrives().FirstOrDefault(d =>
                     d.DriveType == DriveType.Fixed &&
                     (d.Name.Equals("C:\\", StringComparison.OrdinalIgnoreCase) ||
                      (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && d.Name.Equals(Path.GetPathRoot(Environment.SystemDirectory), StringComparison.OrdinalIgnoreCase)))

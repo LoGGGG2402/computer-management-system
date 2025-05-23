@@ -128,6 +128,7 @@ namespace CMSAgent.Shared.Logging
             }
         }
 
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
         private static bool IsAdministrator()
         {
             try

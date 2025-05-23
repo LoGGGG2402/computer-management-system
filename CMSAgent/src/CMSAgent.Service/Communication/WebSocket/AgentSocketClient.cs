@@ -1,18 +1,11 @@
-// CMSAgent.Service/Communication/WebSocket/AgentSocketClient.cs
 using CMSAgent.Service.Commands.Models;
 using CMSAgent.Service.Configuration.Models;
 using CMSAgent.Service.Models;
 using CMSAgent.Shared.Constants;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SocketIOClient; // Assuming using Engyte's SocketIOClient library
+using SocketIOClient; 
 using SocketIOClient.Transport;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace CMSAgent.Service.Communication.WebSocket
 {
@@ -20,7 +13,7 @@ namespace CMSAgent.Service.Communication.WebSocket
     {
         private readonly ILogger<AgentSocketClient> _logger;
         private readonly AppSettings _appSettings;
-        private SocketIO? _socket; // Nullable to allow reinitialization
+        private SocketIOClient.SocketIO? _socket; // Nullable to allow reinitialization
         private string _serverUrl = string.Empty;
         private string _currentAgentId = string.Empty;
         private string _currentAgentToken = string.Empty;
@@ -82,7 +75,7 @@ namespace CMSAgent.Service.Communication.WebSocket
                     await DisposeSocketAsync(_socket);
                 }
 
-                _socket = new SocketIO(_serverUrl, new SocketIOOptions
+                _socket = new SocketIOClient.SocketIO(_serverUrl, new SocketIOOptions
                 {
                     Transport = TransportProtocol.WebSocket, // Use WebSocket only
                     Query = new Dictionary<string, string>
@@ -98,8 +91,8 @@ namespace CMSAgent.Service.Communication.WebSocket
                     },
                     Reconnection = true, // Allow library to automatically reconnect
                     ReconnectionAttempts = _appSettings.WebSocketPolicy.MaxReconnectAttempts < 0 ? int.MaxValue : _appSettings.WebSocketPolicy.MaxReconnectAttempts,
-                    ReconnectionDelay = TimeSpan.FromSeconds(_appSettings.WebSocketPolicy.ReconnectMinBackoffSeconds),
-                    ReconnectionDelayMax = TimeSpan.FromSeconds(_appSettings.WebSocketPolicy.ReconnectMaxBackoffSeconds),
+                    ReconnectionDelay = _appSettings.WebSocketPolicy.ReconnectMinBackoffSeconds, // Use seconds directly
+                    ReconnectionDelayMax = _appSettings.WebSocketPolicy.ReconnectMaxBackoffSeconds, // Use seconds directly
                     ConnectionTimeout = TimeSpan.FromSeconds(_appSettings.WebSocketPolicy.ConnectionTimeoutSeconds)
                 });
 
@@ -136,9 +129,9 @@ namespace CMSAgent.Service.Communication.WebSocket
         {
             if (_socket == null) return;
 
-            _socket.OnConnected += async (sender, e) =>
+            _socket.OnConnected += (sender, e) =>
             {
-                _logger.LogInformation("WebSocket connected successfully! Socket ID: {SocketId}. Endpoint: {Endpoint}", _socket.Id, _socket.ServerUri);
+                _logger.LogInformation("WebSocket connected successfully! Socket ID: {SocketId}. Endpoint: {Endpoint}", _socket.Id, _serverUrl);
                 // API spec says server will send 'agent:ws_auth_success' or 'agent:ws_auth_failed'
                 // Instead of relying on OnConnected directly, we should wait for these events.
                 // However, OnConnected from the library usually means TCP/WS handshake is complete.
@@ -220,7 +213,7 @@ namespace CMSAgent.Service.Communication.WebSocket
                 try
                 {
                     _logger.LogDebug("Received 'command:execute' event: {ResponseText}", response.ToString());
-                    var commandRequest = response.GetValue<CommandRequest>(_jsonSerializerOptions); // Library will deserialize
+                    var commandRequest = response.GetValue<CommandRequest>();
                     if (commandRequest != null && !string.IsNullOrEmpty(commandRequest.CommandId))
                     {
                         _logger.LogInformation("Received command: Type='{CommandType}', ID='{CommandId}'", commandRequest.CommandType, commandRequest.CommandId);
@@ -242,7 +235,7 @@ namespace CMSAgent.Service.Communication.WebSocket
                 try
                 {
                     _logger.LogDebug("Received 'agent:new_version_available' event: {ResponseText}", response.ToString());
-                    var updateNotification = response.GetValue<UpdateNotification>(_jsonSerializerOptions);
+                    var updateNotification = response.GetValue<UpdateNotification>();
                     if (updateNotification != null && !string.IsNullOrEmpty(updateNotification.Version))
                     {
                         _logger.LogInformation("Received new version notification: {Version}", updateNotification.Version);
@@ -338,7 +331,7 @@ namespace CMSAgent.Service.Communication.WebSocket
             await _socket!.EmitAsync("agent:update_status", statusPayload);
         }
 
-        private async Task DisposeSocketAsync(SocketIO? socketToDispose)
+        private async Task DisposeSocketAsync(SocketIOClient.SocketIO? socketToDispose)
         {
             if (socketToDispose == null) return;
 

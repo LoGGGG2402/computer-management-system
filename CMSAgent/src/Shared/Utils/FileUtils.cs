@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using Serilog;
+using Microsoft.Extensions.Logging;
 
 namespace CMSAgent.Shared.Utils
 {
@@ -314,31 +315,29 @@ namespace CMSAgent.Shared.Utils
         /// </summary>
         /// <param name="filePath">Path to the file to delete.</param>
         /// <param name="logger">Logger instance for logging operations.</param>
-        public static void TryDeleteFile(string filePath, ILogger logger)
+        public static void TryDeleteFile(string filePath, Microsoft.Extensions.Logging.ILogger logger)
         {
+            if (string.IsNullOrEmpty(filePath))
+            {
+                logger.LogError("TryDeleteFile: File path is null or empty");
+                return;
+            }
+
             try
             {
                 if (File.Exists(filePath))
                 {
                     File.Delete(filePath);
-                    logger.LogInformation("Successfully deleted file: {FilePath}", filePath);
+                    logger.LogInformation("TryDeleteFile: Successfully deleted file {FilePath}", filePath);
                 }
                 else
                 {
-                    logger.LogDebug("File does not exist, no deletion needed: {FilePath}", filePath);
+                    logger.LogDebug("TryDeleteFile: File does not exist {FilePath}", filePath);
                 }
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                logger.LogError(ex, "Access denied when attempting to delete file: {FilePath}", filePath);
-            }
-            catch (IOException ex)
-            {
-                logger.LogError(ex, "I/O error occurred while deleting file: {FilePath}", filePath);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Unexpected error occurred while deleting file: {FilePath}", filePath);
+                logger.LogError(ex, "TryDeleteFile: Error deleting file {FilePath}", filePath);
             }
         }
 

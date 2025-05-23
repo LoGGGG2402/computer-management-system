@@ -1,12 +1,5 @@
-// CMSAgent.Service/Monitoring/ResourceMonitor.cs
-using Microsoft.Extensions.Logging;
-using System;
-using System.Diagnostics; // For PerformanceCounter
-using System.IO;
-using System.Linq;
+using System.Diagnostics; 
 using System.Runtime.InteropServices;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace CMSAgent.Service.Monitoring
 {
@@ -158,6 +151,12 @@ namespace CMSAgent.Service.Monitoring
         {
             try
             {
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    _logger.LogWarning("CPU usage monitoring is not supported on this platform.");
+                    return 0f;
+                }
+
                 // Need to call NextValue() twice with a small delay to get accurate CPU value
                 // First call is in InitializePerformanceCounters() or here if _cpuCounter was just created.
                 // However, with timer running periodically, values will stabilize after a few calls.
@@ -174,6 +173,12 @@ namespace CMSAgent.Service.Monitoring
         {
             try
             {
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    _logger.LogWarning("RAM usage monitoring is not supported on this platform.");
+                    return 0f;
+                }
+
                 // "% Committed Bytes In Use" is the ratio of committed memory in use.
                 // It includes both physical RAM and page file.
                 // This is a good indicator of memory pressure.

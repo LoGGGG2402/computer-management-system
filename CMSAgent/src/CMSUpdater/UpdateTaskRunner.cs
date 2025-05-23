@@ -45,11 +45,10 @@ namespace CMSUpdater
             _logger.LogInformation("New Version: {NewVersion}, Old Version: {OldVersion}", _config.NewAgentVersion, _config.OldAgentVersion);
             _logger.LogInformation("Agent Installation Directory: {InstallDir}", _config.AgentInstallDirectory);
             _logger.LogInformation("New Version Source Path: {SourcePath}", _config.NewAgentExtractedPath);
-            _logger.LogInformation("Old Agent PID: {AgentPid}", _config.CurrentAgentPid);
 
             try
             {
-                if (!await WaitForOldAgentToStopAsync()) return false;
+                if (!WaitForOldAgentToStop()) return false;
                 if (!await BackupOldAgentAsync()) return false;
                 if (!await ReplaceAgentFilesAsync()) return false;
 
@@ -90,30 +89,30 @@ namespace CMSUpdater
         /// Waits for the old Agent service to stop completely.
         /// </summary>
         /// <returns>True if the old Agent stopped successfully, false otherwise.</returns>
-        private async Task<bool> WaitForOldAgentToStopAsync()
+        private bool WaitForOldAgentToStop()
         {
             _logger.LogInformation("Waiting for old Agent service ({ServiceName}) to stop...", ActualServiceName);
-            
+
             if (OperatingSystem.IsWindows())
             {
                 try
                 {
                     using var serviceController = new ServiceController(ActualServiceName);
-                    
+
                     if (serviceController.Status == ServiceControllerStatus.Running)
                     {
                         _logger.LogInformation("Stopping service {ServiceName}...", ActualServiceName);
                         serviceController.Stop();
-                        
+
                         // Đợi service dừng với timeout
                         serviceController.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(ActualServiceWaitTimeout));
-                        
+
                         if (serviceController.Status != ServiceControllerStatus.Stopped)
                         {
                             _logger.LogWarning("Service {ServiceName} did not stop after {Timeout} seconds.", ActualServiceName, ActualServiceWaitTimeout);
                             return false;
                         }
-                        
+
                         _logger.LogInformation("Service {ServiceName} has stopped successfully.", ActualServiceName);
                     }
                     else

@@ -1,4 +1,3 @@
-// CMSAgent.Service/Orchestration/AgentCoreOrchestrator.cs
 using CMSAgent.Service.Communication.Http;
 using CMSAgent.Service.Communication.WebSocket;
 using CMSAgent.Service.Configuration.Manager;
@@ -8,19 +7,9 @@ using CMSAgent.Service.Security;
 using CMSAgent.Service.Update;
 using CMSAgent.Service.Commands;
 using CMSAgent.Service.Commands.Models; // For CommandRequest
-using CMSAgent.Service.Models; // For UpdateNotification
-using CMSAgent.Shared.Constants;
+using CMSAgent.Service.Models; 
 using CMSAgent.Shared.Enums;
-using CMSAgent.Shared.Models; // For AgentErrorReport
-using CMSAgent.Shared.Utils; // For ErrorReportingUtils
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Linq; // For LINQ operations if any
-
 namespace CMSAgent.Service.Orchestration
 {
     public class AgentCoreOrchestrator : IAgentCoreOrchestrator
@@ -41,7 +30,6 @@ namespace CMSAgent.Service.Orchestration
         private string? _agentId;
         private string? _agentToken; // Decrypted token
         private Timer? _periodicUpdateCheckTimer;
-        private Timer? _periodicTokenRefreshTimer;
         private CancellationTokenSource? _mainLoopCts;
 
         public AgentCoreOrchestrator(
@@ -153,8 +141,6 @@ namespace CMSAgent.Service.Orchestration
             // Stop timers
             _periodicUpdateCheckTimer?.Change(Timeout.Infinite, 0);
             _periodicUpdateCheckTimer?.Dispose();
-            _periodicTokenRefreshTimer?.Change(Timeout.Infinite, 0);
-            _periodicTokenRefreshTimer?.Dispose();
             _logger.LogDebug("Periodic timers have been stopped.");
 
             // Stop Resource Monitor
@@ -307,7 +293,6 @@ namespace CMSAgent.Service.Orchestration
             _logger.LogError("WebSocket authentication failed: {ErrorMessage}. Need to refresh token or reconfigure.", errorMessage);
             SetStatus(AgentStatus.Error, $"WebSocket Auth Failed: {errorMessage}");
             // Try to refresh token
-            await RefreshAgentTokenAsync();
             // After refreshing token, try to reconnect WebSocket
             if (_mainLoopCts != null && !_mainLoopCts.IsCancellationRequested && !string.IsNullOrWhiteSpace(_agentToken))
             {
@@ -357,90 +342,7 @@ namespace CMSAgent.Service.Orchestration
                     TimeSpan.FromSeconds(_appSettings.AutoUpdateIntervalSec)  // Repeat interval
                 );
             }
-
-            // 2. Periodic token refresh timer - only set up if token has expiration
-            if (_appSettings.TokenRefreshIntervalSec > 0 && _appSettings.TokenExpirationSec > 0)
-            {
-                _logger.LogInformation("Setting up periodic token refresh timer every {Interval} seconds.", _appSettings.TokenRefreshIntervalSec);
-                _periodicTokenRefreshTimer = new Timer(
-                    async _ => await RefreshAgentTokenAsync(),
-                    null,
-                    TimeSpan.FromSeconds(_appSettings.TokenRefreshIntervalSec),
-                    TimeSpan.FromSeconds(_appSettings.TokenRefreshIntervalSec)
-                );
-            }
-            else
-            {
-                _logger.LogInformation("Not setting up token refresh timer because token has no expiration or interval not configured.");
-            }
         }
-
-        private async Task RefreshAgentTokenAsync()
-        {
-            _logger.LogInformation("Refreshing Agent Token...");
-            if (string.IsNullOrWhiteSpace(_agentId) || _mainLoopCts == null || _mainLoopCts.IsCancellationRequested)
-            {
-                _logger.LogWarning("Cannot refresh token: AgentId empty or process cancelled.");
-                return;
-            }
-
-            var currentPosition = await _runtimeConfigManager.GetPositionInfoAsync();
-            if (currentPosition == null)
-            {
-                _logger.LogError("Cannot refresh token: Current position information not found.");
-                return;
-            }
-
-            try
-            {
-                var (status, newToken, errorMessage) = await _apiClient.IdentifyAgentAsync(_agentId, currentPosition, forceRenewToken: true, _mainLoopCts.Token);
-
-                if (status == "success" && !string.IsNullOrWhiteSpace(newToken))
-                {
-                    _logger.LogInformation("Agent Token refresh successful.");
-                    _agentToken = newToken;
-                    string encryptedToken = _dpapiProtector.Protect(newToken);
-                    if (!string.IsNullOrWhiteSpace(encryptedToken))
-                    {
-                        await _runtimeConfigManager.UpdateEncryptedAgentTokenAsync(encryptedToken);
-                        _apiClient.SetAuthenticationCredentials(_agentId, _agentToken); // Update for HTTP client
-
-                        // Only reconnect WebSocket if currently disconnected
-                        if (!_socketClient.IsConnected)
-                        {
-                            _logger.LogInformation("Reconnecting WebSocket with new token...");
-                            if (_mainLoopCts != null && !_mainLoopCts.IsCancellationRequested)
-                            {
-                                await ConnectWebSocketAsync(_mainLoopCts.Token);
-                            }
-                        }
-                        else
-                        {
-                            _logger.LogInformation("WebSocket still connected, no need to reconnect.");
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogError("Cannot encrypt new token.");
-                    }
-                }
-                else if (status == "mfa_required")
-                {
-                    _logger.LogWarning("Token refresh requires MFA. Agent cannot automatically handle MFA during automatic token refresh. Manual intervention needed.");
-                    // Send error report to server
-                    await _apiClient.ReportErrorAsync(ErrorReportingUtils.CreateErrorReport("TokenRefreshMfaRequired", "Token refresh requires MFA, manual intervention needed.", customDetails: new { AgentId = _agentId }));
-                }
-                else
-                {
-                    _logger.LogError("Agent Token refresh failed. Status: {Status}, Error: {ErrorMessage}", status, errorMessage);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during Agent Token refresh.");
-            }
-        }
-
         public async Task<bool> RunInitialConfigurationAsync(CancellationToken cancellationToken = default)
         {
             _logger.LogInformation("Starting Agent's initial configuration process...");
@@ -497,7 +399,7 @@ namespace CMSAgent.Service.Orchestration
                 }
 
                 // Retry Identify with MFA code
-                (status, receivedToken, errorMessage) = await _apiClient.IdentifyAgentAsync(agentId, positionInfo, mfaCode: mfaCode, cancellationToken: cancellationToken);
+                (status, receivedToken, errorMessage) = await _apiClient.VerifyMfaAsync(agentId, mfaCode, cancellationToken);
             }
 
             if (status != "success" || string.IsNullOrWhiteSpace(receivedToken))
@@ -515,7 +417,7 @@ namespace CMSAgent.Service.Orchestration
                 await _runtimeConfigManager.UpdatePositionInfoAsync(positionInfo);
 
                 // Encrypt and save token
-                string encryptedToken = _dpapiProtector.Protect(receivedToken);
+                string? encryptedToken = _dpapiProtector.Protect(receivedToken);
                 if (string.IsNullOrWhiteSpace(encryptedToken))
                 {
                     _logger.LogError("Failed to encrypt token.");
@@ -527,7 +429,7 @@ namespace CMSAgent.Service.Orchestration
 
                 _logger.LogInformation("Initial configuration completed successfully.");
                 Console.WriteLine("Configuration completed successfully!");
-                SetStatus(AgentStatus.Configured);
+                SetStatus(AgentStatus.Connected);
                 return true;
             }
             catch (Exception ex)
