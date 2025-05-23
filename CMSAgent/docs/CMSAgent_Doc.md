@@ -317,7 +317,6 @@ The agent updates automatically.
             
 - **Update Procedure (CMSAgent.Service):**
     1. Enters `UPDATING` state.
-    2. Sends `agent:update_status` with `{ "status": "update_started", "target_version": "<new_version>" }`.
     3. Downloads package to `C:\ProgramData\CMSAgent\updates\download`. Reports `DownloadFailed` on error.
     4. Verifies `checksum_sha256`. Reports `ChecksumMismatch` if invalid.
     5. Extracts to `C:\ProgramData\CMSAgent\updates\extracted\<new_version>`. Reports `ExtractionFailed` on error.
@@ -343,8 +342,6 @@ The agent updates automatically.
     6. Starts new service. Rolls back on failure.
     7. Monitors new agent (watchdog, 1-2 minutes). Rolls back if unstable.
     8. Cleans up directories on success.
-- **Success Reporting:**
-    - New agent sends `agent:update_status` with `{ "status": "update_success", "current_version": "<new_version>" }`.
 - **Error Handling:**
     - Skips problematic versions using `VersionIgnoreManager` in `C:\ProgramData\CMSAgent\runtime_config\ignored_versions.json`.
 

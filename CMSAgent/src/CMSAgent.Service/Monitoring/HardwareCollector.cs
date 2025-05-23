@@ -25,9 +25,9 @@ namespace CMSAgent.Service.Monitoring
                 {
                     OsInfo = await GetOsInfoAsync(),
                     CpuInfo = await GetCpuInfoAsync(),
-                    GpuInfo = await GetGpuInfoStringAsync(), // API requires string
-                    TotalRamMb = GetTotalRamMb(),
-                    TotalDiskSpaceMb = GetTotalDiskSpaceMb() // API requires a single total value
+                    GpuInfo = await GetGpuInfoStringAsync(),
+                    TotalRam = GetTotalRamBytes(),
+                    TotalDiskSpace = GetTotalDiskSpaceBytes()
                 };
 
                 _logger.LogInformation("Hardware information collection completed.");
@@ -130,27 +130,24 @@ namespace CMSAgent.Service.Monitoring
                         foreach (var mo in mos.Get().Cast<ManagementObject>())
                         {
                             string name = mo["Name"]?.ToString()?.Trim() ?? "N/A";
-                            // AdapterRAM returns bytes, need to convert to MB. Can be null.
-                            uint? adapterRamMb = mo["AdapterRAM"] != null ? Convert.ToUInt32(mo["AdapterRAM"]) / (1024 * 1024) : (uint?)null;
+                            ulong? adapterRamBytes = mo["AdapterRAM"] != null ? Convert.ToUInt64(mo["AdapterRAM"]) : (ulong?)null;
                             string driverVersion = mo["DriverVersion"]?.ToString()?.Trim() ?? "N/A";
-                            string videoProcessor = mo["VideoProcessor"]?.ToString()?.Trim() ?? ""; // Usually contains GPU name
+                            string videoProcessor = mo["VideoProcessor"]?.ToString()?.Trim() ?? "";
 
-                            // Prefer VideoProcessor if Name is generic (e.g., "Microsoft Basic Display Adapter")
                             string displayName = name;
                             if (!string.IsNullOrWhiteSpace(videoProcessor) && !videoProcessor.Equals(name, StringComparison.OrdinalIgnoreCase))
                             {
                                 displayName = videoProcessor.Contains(name, StringComparison.OrdinalIgnoreCase) ? videoProcessor : $"{videoProcessor} ({name})";
                             }
 
-                            gpuInfos.Add($"{displayName}, VRAM: {(adapterRamMb.HasValue ? adapterRamMb.Value.ToString() + "MB" : "N/A")}, Driver: {driverVersion}");
+                            gpuInfos.Add($"{displayName}, VRAM: {(adapterRamBytes.HasValue ? adapterRamBytes.Value.ToString() + " bytes" : "N/A")}, Driver: {driverVersion}");
                         }
                     }
                 }
                 if (!gpuInfos.Any())
                 {
-                    return Task.FromResult<string?>(null); // Or "N/A" if API requires non-null string
+                    return Task.FromResult<string?>(null);
                 }
-                // API requires a string for gpu_info, if multiple GPUs, concatenate them
                 return Task.FromResult<string?>(string.Join(" | ", gpuInfos));
             }
             catch (Exception ex)
@@ -160,7 +157,7 @@ namespace CMSAgent.Service.Monitoring
             }
         }
 
-        private long GetTotalRamMb()
+        private long GetTotalRamBytes()
         {
             try
             {
@@ -170,26 +167,21 @@ namespace CMSAgent.Service.Monitoring
                     {
                         foreach (var mo in mos.Get().Cast<ManagementObject>())
                         {
-                            // TotalVisibleMemorySize is in KB, convert to MB
-                            return Convert.ToInt64(mo["TotalVisibleMemorySize"]) / 1024;
+                            // TotalVisibleMemorySize is in KB, convert to bytes
+                            return Convert.ToInt64(mo["TotalVisibleMemorySize"]) * 1024;
                         }
                     }
                 }
-                // Fallback (less accurate)
-                // Process.GetCurrentProcess().WorkingSet64 may not be total RAM
-                // PerformanceCounter could be used but more complex for one-time retrieval
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting total RAM capacity.");
             }
-            return 0; // Or other default value
+            return 0;
         }
 
-        private long GetTotalDiskSpaceMb()
+        private long GetTotalDiskSpaceBytes()
         {
-            // API requires "total_disk_space" to be an integer.
-            // Documentation says "usually C: drive". We'll get C: drive info.
             try
             {
                 DriveInfo? cDrive = DriveInfo.GetDrives().FirstOrDefault(d =>
@@ -200,7 +192,7 @@ namespace CMSAgent.Service.Monitoring
 
                 if (cDrive != null && cDrive.IsReady)
                 {
-                    return cDrive.TotalSize / (1024 * 1024); // Bytes to MB
+                    return cDrive.TotalSize; // Already in bytes
                 }
                 else
                 {
@@ -211,7 +203,7 @@ namespace CMSAgent.Service.Monitoring
             {
                 _logger.LogError(ex, "Error getting total disk space.");
             }
-            return 0; // Or other default value
+            return 0;
         }
     }
 }

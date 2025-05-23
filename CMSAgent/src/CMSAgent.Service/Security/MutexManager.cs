@@ -19,6 +19,9 @@ namespace CMSAgent.Service.Security
         private Mutex? _mutex;
         private bool _hasHandle = false;
         private readonly string _mutexName;
+        private readonly object _mutexLock = new object();
+        private bool _isDisposed;
+        private int? _owningThreadId;
 
         /// <summary>
         /// Initialize MutexManager.
@@ -66,6 +69,7 @@ namespace CMSAgent.Service.Security
 
             if (_hasHandle)
             {
+                _owningThreadId = Environment.CurrentManagedThreadId;
                 _logger.LogInformation("Successfully obtained Mutex ownership: {MutexName}.", _mutexName);
                 return true;
             }
@@ -83,32 +87,64 @@ namespace CMSAgent.Service.Security
         /// </summary>
         public void ReleaseOwnership()
         {
-            if (_hasHandle && _mutex != null)
+            if (_isDisposed || _mutex == null)
             {
-                try
+                return;
+            }
+
+            try
+            {
+                if (_hasHandle && _owningThreadId == Environment.CurrentManagedThreadId)
                 {
                     _mutex.ReleaseMutex();
                     _logger.LogInformation("Released Mutex: {MutexName}.", _mutexName);
                 }
-                catch (ApplicationException ex) // Can occur if thread not owning mutex tries to release
+                else
                 {
-                    _logger.LogError(ex, "ApplicationException error when releasing Mutex {MutexName}. This thread may not own the Mutex.", _mutexName);
+                    _logger.LogInformation("No need to release Mutex {MutexName} - not owned by this instance or thread.", _mutexName);
                 }
-                catch (Exception ex)
-                {
-                     _logger.LogError(ex, "Unknown error when releasing Mutex {MutexName}.", _mutexName);
-                }
+            }
+            catch (ApplicationException ex)
+            {
+                _logger.LogError(ex, "ApplicationException error when releasing Mutex {MutexName}. This thread may not own the Mutex.", _mutexName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unknown error when releasing Mutex {MutexName}.", _mutexName);
+            }
+            finally
+            {
                 _hasHandle = false;
+                _owningThreadId = null;
             }
         }
 
         public void Dispose()
         {
-            ReleaseOwnership();
-            _mutex?.Dispose();
-            _mutex = null;
-            GC.SuppressFinalize(this);
-            _logger.LogDebug("MutexManager has been disposed.");
+            lock (_mutexLock)
+            {
+                if (_isDisposed)
+                {
+                    return;
+                }
+
+                try
+                {
+                    ReleaseOwnership();
+                    _mutex?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error disposing MutexManager");
+                }
+                finally
+                {
+                    _mutex = null;
+                    _isDisposed = true;
+                    GC.SuppressFinalize(this);
+                    _logger.LogInformation("MutexManager has been disposed.");
+                }
+            }
         }
     }
 }

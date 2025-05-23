@@ -17,7 +17,9 @@ using CMSAgent.Service.Commands;
 using CMSAgent.Service.Commands.Factory;
 using CMSAgent.Service.Commands.Handlers;
 using CMSAgent.Service.Update;
-using System.Runtime.Versioning; // For Polly retry policies
+using System.Runtime.Versioning;
+using System.Text.Json; // For Polly retry policies
+using Serilog.Events;
 
 namespace CMSAgent.Service
 {
@@ -33,7 +35,7 @@ namespace CMSAgent.Service
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Debug()
                 .Enrich.FromLogContext()
-                .WriteTo.Console()
+                .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
                 .CreateBootstrapLogger(); // Temporary logger
 
             Log.Information("CMSAgent.Service is starting...");
@@ -57,6 +59,7 @@ namespace CMSAgent.Service
 
             configureCommand.SetHandler(async () =>
             {
+                Log.Information("Configure command handler called");
                 await RunAsServiceOrDebugAsync(args, isDebugModeFromArg: false, isConfigureModeFromArg: true);
             });
 
@@ -65,16 +68,19 @@ namespace CMSAgent.Service
                 await RunAsServiceOrDebugAsync(args, isDebugModeFromArg: true, isConfigureModeFromArg: false);
             });
 
-            // If no subcommand is passed (e.g., just running CMSAgent.Service.exe)
-            // then System.CommandLine won't call rootCommand's SetHandler.
-            // Therefore, we need to check args.
-            if (args.Length == 0 || (!args.Contains("configure") && !args.Contains("debug")))
+            // Check if we have any command line arguments
+            if (args.Length > 0)
             {
-                 Log.Information("No 'configure' or 'debug' command. Running in default Windows Service mode.");
+                Log.Information("Processing command line arguments: {Args}", string.Join(" ", args));
+                // If we have args, use System.CommandLine to process them
+                return await rootCommand.InvokeAsync(args);
+            }
+            else
+            {
+                // If no args, run as service
+                Log.Information("No command line arguments. Running in default Windows Service mode.");
                 return await RunAsServiceOrDebugAsync(args, isDebugModeFromArg: false, isConfigureModeFromArg: false);
             }
-
-            return await rootCommand.InvokeAsync(args);
         }
 
         private static async Task<int> RunAsServiceOrDebugAsync(string[] args, bool isDebugModeFromArg, bool isConfigureModeFromArg)
@@ -83,7 +89,10 @@ namespace CMSAgent.Service
             try
             {
                 var hostBuilder = CreateHostBuilder(args, isDebugModeFromArg, isConfigureModeFromArg);
+                Log.Information("Host builder has been created.");
                 host = hostBuilder.Build();
+
+                Log.Information("Host has been built.");
 
                 // --- Check Mutex after ILogger and AppSettings are DI ---
                 // MutexManager needs AppSettings to get AgentInstanceGuid
@@ -171,20 +180,37 @@ namespace CMSAgent.Service
                 })
                 .UseSerilog((hostingContext, services, loggerConfiguration) =>
                 {
-                    // Create temporary instance of RuntimeConfigManager to get ProgramData path
-                    // Note: This is a temporary solution. In the future, should restructure so that
-                    // SerilogConfigurator doesn't directly depend on RuntimeConfigManager
-                    var runtimeConfigManager = new RuntimeConfigManager(
-                        services.GetRequiredService<ILogger<RuntimeConfigManager>>()
-                    );
-                    string agentProgramDataPath = runtimeConfigManager.GetAgentProgramDataPath();
+                    // Configure Serilog with basic settings first
+                    loggerConfiguration
+                        .ReadFrom.Configuration(hostingContext.Configuration)
+                        .Enrich.FromLogContext()
+                        .Enrich.WithThreadId();
 
-                    SerilogConfigurator.Configure(
-                        hostingContext.Configuration,
-                        agentProgramDataPath,
-                        AgentConstants.AgentLogFilePrefix,
-                        isDebugMode || isConfigureMode
+                    // Always enable console logging with debug level
+                    loggerConfiguration.WriteTo.Console(
+                        outputTemplate: "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] [{ThreadId}] {Message:lj}{NewLine}{Exception}",
+                        restrictedToMinimumLevel: LogEventLevel.Debug
                     );
+
+                    // Get the program data path from configuration
+                    var programDataPath = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                        AgentConstants.AgentProgramDataFolderName
+                    );
+
+                    // Configure file logging
+                    var logDirectory = Path.Combine(programDataPath, AgentConstants.LogsSubFolderName);
+                    Directory.CreateDirectory(logDirectory);
+                    var logFilePath = Path.Combine(logDirectory, $"{AgentConstants.AgentLogFilePrefix}{DateTime.Now:yyyyMMdd}.log");
+
+                    loggerConfiguration.WriteTo.File(
+                        logFilePath,
+                        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{ThreadId}] {Message:lj}{NewLine}{Exception}",
+                        rollingInterval: RollingInterval.Day,
+                        retainedFileCountLimit: 30,
+                        shared: true
+                    );
+
                     Log.Information("Serilog has been fully configured.");
                 })
                 .ConfigureServices((hostContext, services) =>
@@ -194,6 +220,7 @@ namespace CMSAgent.Service
                     // Ensure AppSettings is loaded and has AgentInstanceGuid before MutexManager is created
                     // Validate AppSettings, especially AgentInstanceGuid
                     var appSettings = hostContext.Configuration.GetSection("AppSettings").Get<AppSettings>();
+                    Log.Information("AppSettings: {AppSettings}", JsonSerializer.Serialize(appSettings));
                     if (appSettings == null || string.IsNullOrWhiteSpace(appSettings.AgentInstanceGuid))
                     {
                         // Log using temporary logger if ILogger is not ready
@@ -203,7 +230,6 @@ namespace CMSAgent.Service
                         // If not thrown, MutexManager will throw when there's no GUID.
                         // For simplicity, we'll let MutexManager handle it.
                     }
-
 
                     services.AddSingleton<IRuntimeConfigManager, RuntimeConfigManager>();
 
@@ -221,7 +247,8 @@ namespace CMSAgent.Service
 
                     // --- Register Communication ---
                     services.AddHttpClient(); // Register IHttpClientFactory
-                    services.AddHttpClient<IAgentApiClient, AgentApiClient>()
+                    services.AddSingleton<IAgentApiClient, AgentApiClient>(); // Change to singleton
+                    services.AddHttpClient<AgentApiClient>() // Add HttpClient configuration
                         .AddPolicyHandler((serviceProvider, request) =>
                         {
                             var settings = serviceProvider.GetRequiredService<IOptions<AppSettings>>().Value.HttpRetryPolicy;
@@ -266,7 +293,6 @@ namespace CMSAgent.Service
                         )
                     );
 
-
                     // --- Register Orchestration & Worker ---
                     services.AddSingleton<IAgentCoreOrchestrator, AgentCoreOrchestrator>();
                     services.AddHostedService<AgentWorker>(); // Register main worker
@@ -277,10 +303,12 @@ namespace CMSAgent.Service
                 {
                     // Set timeout for service shutdown
                     options.ShutdownTimeout = TimeSpan.FromSeconds(30); // Example: 30 seconds
+                    Log.Information("Host options have been configured.");
                 })
                 .UseWindowsService(options => // Configure to run as Windows Service
                 {
                     options.ServiceName = AgentConstants.ServiceName;
+                    Log.Information("Windows Service options have been configured.");
                 });
     }
 }

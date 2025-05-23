@@ -6,6 +6,7 @@ namespace CMSAgent.Service.Commands.Models
     /// <summary>
     /// Supported command types by the Agent.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum CommandType
     {
         /// <summary>
@@ -61,7 +62,7 @@ namespace CMSAgent.Service.Commands.Models
         /// Type of the command.
         /// </summary>
         [JsonPropertyName("commandType")]
-        public CommandType CommandType { get; set; } = CommandType.UNKNOWN;
+        public CommandType CommandType { get; set; } = CommandType.CONSOLE;
 
         /// <summary>
         /// Additional parameters for the command, as a JSON object (dictionary).

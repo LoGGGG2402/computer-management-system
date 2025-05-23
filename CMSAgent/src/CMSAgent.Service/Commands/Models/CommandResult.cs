@@ -81,7 +81,7 @@ namespace CMSAgent.Service.Commands.Models
 
     /// <summary>
     /// Model representing the result of a command sent from Agent to Server.
-    /// Reference: agent_api.md, "agent:command_result" event and CMSAgent_Doc.md section 7.6.
+    /// Reference: agent_api.md, "agent:command_result" event.
     /// </summary>
     public class CommandResult
     {
@@ -95,7 +95,7 @@ namespace CMSAgent.Service.Commands.Models
         /// Type of the executed command.
         /// </summary>
         [JsonPropertyName("commandType")]
-        public CommandType CommandType { get; set; } = CommandType.UNKNOWN;
+        public CommandType CommandType { get; set; } = CommandType.CONSOLE;
 
         /// <summary>
         /// Indicates whether the command was executed successfully.
@@ -138,19 +138,6 @@ namespace CMSAgent.Service.Commands.Models
         public int ExitCode { get; set; }
 
         /// <summary>
-        /// Error message if success=false.
-        /// </summary>
-        [JsonPropertyName("errorMessage")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string? ErrorMessage { get; set; }
-
-        /// <summary>
-        /// Internal error code of the Agent.
-        /// </summary>
-        [JsonPropertyName("errorCode")]
-        public ErrorCode ErrorCode { get; set; } = ErrorCode.NONE;
-
-        /// <summary>
         /// Creates a successful CommandOutputResult.
         /// </summary>
         public static CommandOutputResult CreateSuccess(string? stdout = null, string? stderr = null, int exitCode = 0)
@@ -159,22 +146,19 @@ namespace CMSAgent.Service.Commands.Models
             {
                 Stdout = stdout,
                 Stderr = stderr,
-                ExitCode = exitCode,
-                ErrorCode = ErrorCode.NONE
+                ExitCode = exitCode
             };
         }
 
         /// <summary>
         /// Creates a failed CommandOutputResult.
         /// </summary>
-        public static CommandOutputResult CreateError(ErrorCode errorCode, string errorMessage, string? stderr = null, int exitCode = -1)
+        public static CommandOutputResult CreateError(string errorMessage, string? stderr = null, int exitCode = -1)
         {
             return new CommandOutputResult
             {
-                Stderr = stderr,
-                ExitCode = exitCode,
-                ErrorMessage = errorMessage,
-                ErrorCode = errorCode
+                Stderr = stderr ?? errorMessage,
+                ExitCode = exitCode
             };
         }
     }

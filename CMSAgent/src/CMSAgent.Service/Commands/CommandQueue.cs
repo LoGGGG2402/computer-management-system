@@ -5,7 +5,8 @@ using CMSAgent.Service.Commands.Handlers;
 using CMSAgent.Service.Communication.WebSocket; // For IAgentSocketClient (to send results)
 using CMSAgent.Service.Configuration.Models; // For AppSettings
 using Microsoft.Extensions.Options;
-using System.Threading.Channels; 
+using System.Threading.Channels;
+using System.Text.Json; // For JsonSerializer
 
 namespace CMSAgent.Service.Commands
 {
@@ -21,6 +22,7 @@ namespace CMSAgent.Service.Commands
         private readonly Channel<CommandRequest> _queue;
         private readonly List<Task> _workerTasks;
         private CancellationTokenSource? _cts; // Dùng để dừng các worker task
+        private bool _isStopping;
 
         public CommandQueue(
             ILogger<CommandQueue> logger,
@@ -42,6 +44,7 @@ namespace CMSAgent.Service.Commands
             };
             _queue = Channel.CreateBounded<CommandRequest>(channelOptions);
             _workerTasks = new List<Task>();
+            _isStopping = false;
         }
 
         /// <summary>
@@ -56,6 +59,7 @@ namespace CMSAgent.Service.Commands
                 return;
             }
 
+            _isStopping = false;
             _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             int numberOfWorkers = _appSettings.CommandExecution.MaxParallelCommands;
             if (numberOfWorkers <= 0) numberOfWorkers = 1; // At least 1 worker
@@ -74,16 +78,21 @@ namespace CMSAgent.Service.Commands
         /// </summary>
         public async Task StopProcessingAsync()
         {
-            _logger.LogInformation("Requesting to stop command queue processing...");
-            _queue.Writer.Complete(); // Signal no more items will be added
+            if (_isStopping)
+            {
+                _logger.LogInformation("Command queue is already stopping.");
+                return;
+            }
 
+            _isStopping = true;
+            _logger.LogInformation("Requesting to stop command queue processing...");
+            
             if (_cts != null && !_cts.IsCancellationRequested)
             {
                 _cts.Cancel(); // Send cancellation signal to workers
             }
 
             // Wait for all worker tasks to complete
-            // Can add timeout here if needed
             if (_workerTasks.Count > 0)
             {
                 try
@@ -100,6 +109,17 @@ namespace CMSAgent.Service.Commands
                 }
                 _workerTasks.Clear();
             }
+
+            // Only complete the channel if it's not already completed
+            try
+            {
+                _queue.Writer.Complete();
+            }
+            catch (ChannelClosedException)
+            {
+                _logger.LogInformation("Channel was already completed.");
+            }
+
             _logger.LogInformation("Command queue processing has stopped.");
         }
 
@@ -116,9 +136,9 @@ namespace CMSAgent.Service.Commands
                 return false;
             }
 
-            if (_queue.Writer.TryComplete())
+            if (_isStopping)
             {
-                _logger.LogWarning("Cannot add command to closed queue. CommandId: {CommandId}", commandRequest.CommandId);
+                _logger.LogWarning("Cannot add command to stopping queue. CommandId: {CommandId}", commandRequest.CommandId);
                 return false;
             }
 
@@ -159,7 +179,7 @@ namespace CMSAgent.Service.Commands
                     _logger.LogInformation("Worker {WorkerId} is processing command ID: {CommandId}, Type: {CommandType}",
                         workerId, commandRequest.CommandId, commandRequest.CommandType);
 
-                    ICommandHandler? handler = _handlerFactory.CreateHandler(commandRequest.CommandType.ToString());
+                    ICommandHandler? handler = _handlerFactory.CreateHandler(commandRequest.CommandType);
                     if (handler is null)
                     {
                         _logger.LogWarning("Worker {WorkerId}: No handler found for CommandType: {CommandType}, CommandId: {CommandId}. Skipping command.",
@@ -170,7 +190,7 @@ namespace CMSAgent.Service.Commands
                             CommandId = commandRequest.CommandId,
                             CommandType = commandRequest.CommandType,
                             Success = false,
-                            Result = new CommandOutputResult { ErrorMessage = $"Unsupported command type: {commandRequest.CommandType}", ExitCode = -100 }
+                            Result = CommandOutputResult.CreateError($"Unsupported command type: {commandRequest.CommandType}")
                         };
                         await SendResultToServerAsync(errorResult);
                         continue;

@@ -1,5 +1,6 @@
 // CMSAgent.Service/Commands/Factory/ICommandHandlerFactory.cs
 using CMSAgent.Service.Commands.Handlers;
+using CMSAgent.Service.Commands.Models;
 
 namespace CMSAgent.Service.Commands.Factory
 {
@@ -11,8 +12,8 @@ namespace CMSAgent.Service.Commands.Factory
         /// <summary>
         /// Creates an ICommandHandler based on the command type.
         /// </summary>
-        /// <param name="commandType">Command type (e.g., "CONSOLE", "SYSTEM_ACTION").</param>
+        /// <param name="commandType">Command type from CommandType enum.</param>
         /// <returns>An instance of the appropriate ICommandHandler, or null if the command type is not supported.</returns>
-        ICommandHandler? CreateHandler(string commandType);
+        ICommandHandler? CreateHandler(CommandType commandType);
     }
 }

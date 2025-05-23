@@ -19,7 +19,7 @@ namespace CMSAgent.Service.Communication.WebSocket
         private string _currentAgentToken = string.Empty;
         private readonly SemaphoreSlim _connectionLock = new SemaphoreSlim(1, 1);
         private CancellationTokenSource? _connectCts;
-        private bool _isDisconnecting; // Added field to track active disconnection state
+        private bool _isDisconnecting;
 
         public event Func<Task>? Connected;
         public event Func<Exception?, Task>? Disconnected;
@@ -31,7 +31,6 @@ namespace CMSAgent.Service.Communication.WebSocket
 
         private readonly JsonSerializerOptions _jsonSerializerOptions;
 
-
         public AgentSocketClient(IOptions<AppSettings> appSettingsOptions, ILogger<AgentSocketClient> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -41,14 +40,13 @@ namespace CMSAgent.Service.Communication.WebSocket
             {
                 throw new InvalidOperationException("ServerUrl is not configured in appsettings for WebSocket.");
             }
-            // URL for Socket.IO is typically the server's base URL.
-            // SocketIOClient library will automatically add "/socket.io/" path.
             _serverUrl = _appSettings.ServerUrl;
 
             _jsonSerializerOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
             };
         }
 
@@ -69,7 +67,6 @@ namespace CMSAgent.Service.Communication.WebSocket
 
                 _logger.LogInformation("Initializing WebSocket connection to {ServerUrl} for AgentId: {AgentId}", _serverUrl, _currentAgentId);
 
-                // Dispose old socket if exists to avoid resource leaks
                 if (_socket != null)
                 {
                     await DisposeSocketAsync(_socket);
@@ -77,31 +74,29 @@ namespace CMSAgent.Service.Communication.WebSocket
 
                 _socket = new SocketIOClient.SocketIO(_serverUrl, new SocketIOOptions
                 {
-                    Transport = TransportProtocol.WebSocket, // Use WebSocket only
-                    Query = new Dictionary<string, string>
-                    {
-                        // Some Socket.IO libraries may need query params instead of headers for initial handshake.
-                        // However, according to API spec, we use headers.
-                    },
+                    Transport = TransportProtocol.WebSocket,
                     ExtraHeaders = new Dictionary<string, string>
                     {
-                        { "X-Client-Type", AgentConstants.HttpClientTypeAgent },
+                        { "X-Client-Type", "agent" },
                         { "X-Agent-ID", _currentAgentId },
                         { "Authorization", $"Bearer {_currentAgentToken}" }
                     },
-                    Reconnection = true, // Allow library to automatically reconnect
+                    Reconnection = true,
                     ReconnectionAttempts = _appSettings.WebSocketPolicy.MaxReconnectAttempts < 0 ? int.MaxValue : _appSettings.WebSocketPolicy.MaxReconnectAttempts,
-                    ReconnectionDelay = _appSettings.WebSocketPolicy.ReconnectMinBackoffSeconds, // Use seconds directly
-                    ReconnectionDelayMax = _appSettings.WebSocketPolicy.ReconnectMaxBackoffSeconds, // Use seconds directly
+                    ReconnectionDelay = _appSettings.WebSocketPolicy.ReconnectMinBackoffSeconds,
+                    ReconnectionDelayMax = _appSettings.WebSocketPolicy.ReconnectMaxBackoffSeconds,
                     ConnectionTimeout = TimeSpan.FromSeconds(_appSettings.WebSocketPolicy.ConnectionTimeoutSeconds)
                 });
+
+                // Configure Socket.IO client to use our custom JSON serializer options
+                _socket.Serializer = new SocketIO.Serializer.SystemTextJson.SystemTextJsonSerializer(_jsonSerializerOptions);
 
                 SetupEventHandlers();
 
                 try
                 {
                     _logger.LogInformation("Attempting WebSocket connection...");
-                    await _socket.ConnectAsync().WaitAsync(_connectCts.Token); // Use WaitAsync with CancellationToken
+                    await _socket.ConnectAsync().WaitAsync(_connectCts.Token);
                 }
                 catch (OperationCanceledException)
                 {
@@ -110,13 +105,13 @@ namespace CMSAgent.Service.Communication.WebSocket
                 }
                 catch (TimeoutException ex)
                 {
-                     _logger.LogError(ex, "Timeout while connecting to WebSocket.");
-                     await HandleDisconnectionAsync(ex);
+                    _logger.LogError(ex, "Timeout while connecting to WebSocket.");
+                    await HandleDisconnectionAsync(ex);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error while connecting to WebSocket.");
-                    await HandleDisconnectionAsync(ex); // Trigger Disconnected event
+                    await HandleDisconnectionAsync(ex);
                 }
             }
             finally
@@ -132,29 +127,24 @@ namespace CMSAgent.Service.Communication.WebSocket
             _socket.OnConnected += async (sender, e) =>
             {
                 _logger.LogInformation("WebSocket connected successfully! Socket ID: {SocketId}. Endpoint: {Endpoint}", _socket.Id, _serverUrl);
-                // OnConnected event from Socket.IO library indicates successful connection
                 if (Connected != null) await Connected.Invoke();
             };
 
-            _socket.OnDisconnected += async (sender, reason) => // reason is string
+            _socket.OnDisconnected += async (sender, reason) =>
             {
                 _logger.LogWarning("WebSocket disconnected. Reason: {Reason}. IsConnected: {IsConnected}", reason, _socket?.Connected);
-                // Library may automatically attempt to reconnect.
-                // Only trigger our Disconnected event if not actively disconnected by us.
                 await HandleDisconnectionAsync(new Exception($"Disconnected by server or network issue: {reason}"));
             };
 
-            _socket.OnError += async (sender, e) => // e is error string
+            _socket.OnError += async (sender, e) =>
             {
                 _logger.LogError("WebSocket error: {ErrorMessage}", e);
-                // Check if this is an authentication error
                 if (e.Contains("auth_error", StringComparison.OrdinalIgnoreCase))
                 {
                     string errorMessage = "WebSocket authentication failed.";
                     try { errorMessage = e; } catch { /* ignore */ }
                     _logger.LogError("WebSocket authentication failed from Server: {ErrorMessage}", errorMessage);
                     if (AuthenticationFailed != null) await AuthenticationFailed.Invoke(errorMessage);
-                    // Disconnect and request reconfiguration
                     await DisconnectAsync();
                 }
             };
@@ -164,13 +154,9 @@ namespace CMSAgent.Service.Communication.WebSocket
                 _logger.LogInformation("Attempting WebSocket reconnection... Attempt: {Attempt}", attempt);
             };
 
-            _socket.OnReconnected += (sender, e) => // e is attempt count
+            _socket.OnReconnected += (sender, e) =>
             {
                 _logger.LogInformation("WebSocket reconnected after {Attempts} attempts!", e);
-                // Need to re-authenticate with server after reconnection.
-                // Or server automatically authenticates based on saved headers/query.
-                // If library doesn't resend headers on reconnect, we need to handle it.
-                // Usually, Socket.IO client library will try to maintain session.
             };
 
             _socket.OnReconnectError += (sender, ex) =>
@@ -181,7 +167,6 @@ namespace CMSAgent.Service.Communication.WebSocket
             _socket.OnReconnectFailed += async (sender, e) =>
             {
                 _logger.LogError("Failed to reconnect WebSocket after multiple attempts.");
-                // Trigger Disconnected event and request reconfiguration
                 await HandleDisconnectionAsync(new Exception("Failed to reconnect after multiple attempts"));
             };
 
@@ -189,7 +174,8 @@ namespace CMSAgent.Service.Communication.WebSocket
             {
                 _logger.LogTrace("WebSocket Ping received.");
             };
-            _socket.OnPong += (sender, e) => 
+
+            _socket.OnPong += (sender, e) =>
             {
                 _logger.LogTrace("WebSocket Pong received. Latency: {Latency}ms", e.TotalMilliseconds);
             };
@@ -241,7 +227,7 @@ namespace CMSAgent.Service.Communication.WebSocket
 
         private async Task HandleDisconnectionAsync(Exception? ex)
         {
-            if (_isDisconnecting) return; // Skip if we're actively disconnecting
+            if (_isDisconnecting) return;
 
             _logger.LogWarning(ex, "Handling WebSocket disconnection.");
             if (Disconnected != null)
@@ -288,7 +274,12 @@ namespace CMSAgent.Service.Communication.WebSocket
                 return;
             }
 
-            var statusPayload = new { cpu_usage = cpuUsage, ram_usage = ramUsage, disk_usage = diskUsage };
+            var statusPayload = new
+            {
+                cpuUsage,
+                ramUsage,
+                diskUsage
+            };            
             _logger.LogDebug("Sending status update: CPU={CpuUsage}%, RAM={RamUsage}%, Disk={DiskUsage}%", cpuUsage, ramUsage, diskUsage);
             await _socket!.EmitAsync("agent:status_update", statusPayload);
         }
@@ -305,25 +296,12 @@ namespace CMSAgent.Service.Communication.WebSocket
             await _socket!.EmitAsync("agent:command_result", commandResult);
         }
 
-        public async Task SendUpdateStatusAsync(object statusPayload)
-        {
-            if (!IsConnected)
-            {
-                _logger.LogWarning("Cannot send update status: WebSocket is not connected.");
-                return;
-            }
-
-            _logger.LogDebug("Sending update status: {StatusPayload}", statusPayload);
-            await _socket!.EmitAsync("agent:update_status", statusPayload);
-        }
-
         private async Task DisposeSocketAsync(SocketIOClient.SocketIO? socketToDispose)
         {
             if (socketToDispose == null) return;
 
             try
             {
-                // Remove all event handlers to prevent memory leaks
                 socketToDispose.OnConnected -= null;
                 socketToDispose.OnDisconnected -= null;
                 socketToDispose.OnError -= null;
@@ -334,9 +312,6 @@ namespace CMSAgent.Service.Communication.WebSocket
                 socketToDispose.OnPing -= null;
                 socketToDispose.OnPong -= null;
 
-                // Remove all event listeners
-                socketToDispose.Off("agent:ws_auth_success");
-                socketToDispose.Off("agent:ws_auth_failed");
                 socketToDispose.Off("command:execute");
                 socketToDispose.Off("agent:new_version_available");
 

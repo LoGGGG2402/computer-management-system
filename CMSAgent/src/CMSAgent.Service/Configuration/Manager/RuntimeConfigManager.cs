@@ -63,7 +63,7 @@ namespace CMSAgent.Service.Configuration.Manager
                     return new RuntimeConfig(); // Return empty/default object
                 }
 
-                _logger.LogDebug("Reading runtime_config.json from {FilePath}", _runtimeConfigFilePath);
+                _logger.LogInformation("Reading runtime_config.json from {FilePath}", _runtimeConfigFilePath);
                 string? jsonContent = await FileUtils.ReadFileAsStringAsync(_runtimeConfigFilePath);
                 if (string.IsNullOrWhiteSpace(jsonContent))
                 {
@@ -103,7 +103,7 @@ namespace CMSAgent.Service.Configuration.Manager
             await _fileLock.WaitAsync();
             try
             {
-                _logger.LogDebug("Writing runtime configuration to file: {FilePath}", _runtimeConfigFilePath);
+                _logger.LogInformation("Writing runtime configuration to file: {FilePath}", _runtimeConfigFilePath);
                 string jsonContent = JsonSerializer.Serialize(config, _jsonSerializerOptions);
 
                 // Write to temporary file first, then rename to ensure integrity (atomic write)

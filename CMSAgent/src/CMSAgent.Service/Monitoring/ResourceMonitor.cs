@@ -133,7 +133,7 @@ namespace CMSAgent.Service.Monitoring
                 float ramUsage = GetCurrentRamUsage();
                 float diskUsage = GetCurrentDiskUsage();
 
-                _logger.LogDebug("Resource status: CPU={Cpu}%, RAM={Ram}%, Disk={Disk}%", cpuUsage, ramUsage, diskUsage);
+                _logger.LogInformation("Resource status: CPU={Cpu}%, RAM={Ram}%, Disk={Disk}%", cpuUsage, ramUsage, diskUsage);
 
                 if (_statusUpdateAction != null)
                 {

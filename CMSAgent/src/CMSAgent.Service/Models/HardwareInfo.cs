@@ -39,14 +39,14 @@ namespace CMSAgent.Service.Models
         /// API spec: "total_ram": "integer"
         /// </summary>
         [JsonPropertyName("total_ram")] // Changed JSON property name
-        public long TotalRamMb { get; set; }
+        public long TotalRam { get; set; }
 
         /// <summary>
         /// Total disk space (usually C: drive or main system drive) in MB.
         /// API spec: "total_disk_space": "integer (required)"
         /// </summary>
         [JsonPropertyName("total_disk_space")]
-        public long TotalDiskSpaceMb { get; set; } // Changed from List<DiskDriveInfo> to a single long value
+        public long TotalDiskSpace { get; set; } // Changed from List<DiskDriveInfo> to a single long value
 
         // OsInfo, CpuInfo, GpuInfo, DiskDriveInfo classes have been removed
         // because API only requires summary strings or simple values.

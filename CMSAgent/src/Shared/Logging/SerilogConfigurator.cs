@@ -88,7 +88,7 @@ namespace CMSAgent.Shared.Logging
                 loggerConfiguration.WriteTo.File(
                     logFilePathFormat,
                     outputTemplate: OutputTemplate,
-                    restrictedToMinimumLevel: LogEventLevel.Information,
+                    restrictedToMinimumLevel: LogEventLevel.Debug,
                     rollingInterval: RollingInterval.Day,
                     retainedFileCountLimit: 30,
                     shared: true,

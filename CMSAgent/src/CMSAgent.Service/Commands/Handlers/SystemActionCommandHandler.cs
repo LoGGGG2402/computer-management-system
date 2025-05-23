@@ -11,7 +11,6 @@ namespace CMSAgent.Service.Commands.Handlers
         protected override Task<CommandOutputResult> ExecuteInternalAsync(CommandRequest commandRequest, CancellationToken cancellationToken)
         {
             return Task.FromResult(CommandOutputResult.CreateError(
-                ErrorCode.COMMAND_EXECUTION_ERROR,
                 "This command handler is currently disabled.",
                 null,
                 -1

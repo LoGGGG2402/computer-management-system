@@ -66,14 +66,6 @@ namespace CMSAgent.Service.Communication.WebSocket
         Task SendCommandResultAsync(CommandResult commandResult);
 
         /// <summary>
-        /// Send notification about Agent's update process status.
-        /// Example: agent:update_status with payload { "status": "update_started", "target_version": "<new_version>" }
-        /// </summary>
-        /// <param name="statusPayload">Object containing update status information.</param>
-        Task SendUpdateStatusAsync(object statusPayload);
-
-
-        /// <summary>
         /// Check if client is currently connected.
         /// </summary>
         bool IsConnected { get; }

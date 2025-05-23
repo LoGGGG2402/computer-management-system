@@ -37,13 +37,16 @@ namespace CMSAgent.Service.Commands.Handlers
                 cancellationToken: cancellationToken // Timeout is handled by CancellationTokenSource in base class
             );
 
-            return new CommandOutputResult
+            if (exitCode != 0)
             {
-                Stdout = stdout,
-                Stderr = stderr,
-                ExitCode = exitCode,
-                ErrorMessage = exitCode != 0 && string.IsNullOrEmpty(stderr) ? $"Command exited with code {exitCode}." : (string.IsNullOrEmpty(stderr) ? null : stderr)
-            };
+                return CommandOutputResult.CreateError(
+                    string.IsNullOrEmpty(stderr) ? $"Command exited with code {exitCode}." : stderr,
+                    null,
+                    exitCode
+                );
+            }
+
+            return CommandOutputResult.CreateSuccess(stdout, stderr, exitCode);
         }
 
         protected override int GetDefaultCommandTimeoutSeconds(CommandRequest commandRequest)

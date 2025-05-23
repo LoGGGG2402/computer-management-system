@@ -1,4 +1,6 @@
 using CMSAgent.Service.Commands.Handlers;
+using CMSAgent.Service.Commands.Models;
+
 namespace CMSAgent.Service.Commands.Factory
 {
     /// <summary>
@@ -15,29 +17,23 @@ namespace CMSAgent.Service.Commands.Factory
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public ICommandHandler? CreateHandler(string commandType)
+        public ICommandHandler? CreateHandler(CommandType commandType)
         {
-            if (string.IsNullOrWhiteSpace(commandType))
-            {
-                _logger.LogWarning("CommandType is not provided or empty.");
-                return null;
-            }
-
-            _logger.LogDebug("Creating handler for CommandType: {CommandType}", commandType);
+            _logger.LogInformation("Creating handler for CommandType: {CommandType}", commandType);
 
             try
             {
-                switch (commandType.ToUpperInvariant())
+                switch (commandType)
                 {
-                    case "CONSOLE":
+                    case CommandType.CONSOLE:
                         return _serviceProvider.GetRequiredService<ConsoleCommandHandler>();
-                    case "SYSTEM_ACTION":
+                    case CommandType.SYSTEM_ACTION:
                         return _serviceProvider.GetRequiredService<SystemActionCommandHandler>();
-                    case "SOFTWARE_INSTALL":
+                    case CommandType.SOFTWARE_INSTALL:
                         return _serviceProvider.GetRequiredService<SoftwareInstallCommandHandler>();
-                    case "SOFTWARE_UNINSTALL":
+                    case CommandType.SOFTWARE_UNINSTALL:
                         return _serviceProvider.GetRequiredService<SoftwareUninstallCommandHandler>();
-                    case "GET_LOGS":
+                    case CommandType.GET_LOGS:
                         return _serviceProvider.GetRequiredService<GetLogsCommandHandler>();
                     default:
                         _logger.LogWarning("No handler found for CommandType: {CommandType}", commandType);

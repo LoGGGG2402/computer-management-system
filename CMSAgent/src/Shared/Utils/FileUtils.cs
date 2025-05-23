@@ -362,7 +362,7 @@ namespace CMSAgent.Shared.Utils
                 }
                 else
                 {
-                    logger.LogDebug("TryDeleteFile: File does not exist {FilePath}", filePath);
+                    logger.LogInformation("TryDeleteFile: File does not exist {FilePath}", filePath);
                 }
             }
             catch (Exception ex)

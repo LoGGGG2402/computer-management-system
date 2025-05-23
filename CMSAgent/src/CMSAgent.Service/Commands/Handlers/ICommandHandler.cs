@@ -1,4 +1,3 @@
-// CMSAgent.Service/Commands/Handlers/ICommandHandler.cs
 using CMSAgent.Service.Commands.Models;
 namespace CMSAgent.Service.Commands.Handlers
 {

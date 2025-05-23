@@ -52,7 +52,7 @@ namespace CMSAgent.Service.Commands.Handlers
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
                 commandResult.Result = await ExecuteInternalAsync(commandRequest, linkedCts.Token);
-                commandResult.Success = string.IsNullOrEmpty(commandResult.Result.ErrorMessage) && (commandResult.Result.ExitCode == 0 || IsExitCodeSuccessful(commandRequest, commandResult.Result.ExitCode));
+                commandResult.Success = string.IsNullOrEmpty(commandResult.Result.Stderr) && (commandResult.Result.ExitCode == 0 || IsExitCodeSuccessful(commandRequest, commandResult.Result.ExitCode));
 
                 if (commandResult.Success)
                 {
@@ -62,16 +62,15 @@ namespace CMSAgent.Service.Commands.Handlers
                 else
                 {
                     Logger.LogWarning("Command execution ID: {CommandId} failed. ExitCode: {ExitCode}, Error: {ErrorMessage}",
-                        commandRequest.CommandId, commandResult.Result.ExitCode, commandResult.Result.ErrorMessage);
+                        commandRequest.CommandId, commandResult.Result.ExitCode, commandResult.Result.Stderr);
                 }
             }
             catch (OperationCanceledException ex) when (timeoutCts?.IsCancellationRequested == true && !cancellationToken.IsCancellationRequested)
             {
                 Logger.LogWarning(ex, "Command ID: {CommandId} timed out after {TimeoutSeconds} seconds.", commandRequest.CommandId, defaultTimeoutSeconds);
                 commandResult.Result = CommandOutputResult.CreateError(
-                    ErrorCode.TIMEOUT_ERROR,
                     $"Command timed out after {defaultTimeoutSeconds} seconds.",
-                    null,
+                    ex.ToString(),
                     AgentConstants.CommandExitCodes.Timeout
                 );
                 commandResult.Success = false;
@@ -80,9 +79,8 @@ namespace CMSAgent.Service.Commands.Handlers
             {
                 Logger.LogWarning(ex, "Command ID: {CommandId} was cancelled.", commandRequest.CommandId);
                 commandResult.Result = CommandOutputResult.CreateError(
-                    ErrorCode.COMMAND_EXECUTION_ERROR,
                     "Command execution was canceled.",
-                    null,
+                    ex.ToString(),
                     AgentConstants.CommandExitCodes.Cancelled
                 );
                 commandResult.Success = false;
@@ -91,7 +89,6 @@ namespace CMSAgent.Service.Commands.Handlers
             {
                 Logger.LogError(ex, "Unexpected error during command execution ID: {CommandId}.", commandRequest.CommandId);
                 commandResult.Result = CommandOutputResult.CreateError(
-                    ErrorCode.UNKNOWN_ERROR,
                     $"Unexpected error: {ex.Message}",
                     ex.ToString(),
                     AgentConstants.CommandExitCodes.GeneralError

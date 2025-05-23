@@ -21,19 +21,18 @@ namespace CMSAgent.Service.Communication.Http
         /// Identifies Agent with Server and gets token or requests MFA.
         /// API: POST /api/agent/identify
         /// </summary>
-        /// <param name="agentId">ID of the Agent.</param>
+        /// <param name="agentId">ID of the Agent (8-36 characters).</param>
         /// <param name="positionInfo">Position information of the Agent.</param>
-        /// <param name="forceRenewToken">True if requesting Server to issue a new token (for periodic token renewal).</param>
         /// <param name="cancellationToken">Token to cancel the request.</param>
         /// <returns>A tuple containing status (e.g., "mfa_required", "success", "position_error") and agentToken (if any).</returns>
-        Task<(string Status, string? AgentToken, string? ErrorMessage)> IdentifyAgentAsync(string? agentId, PositionInfo positionInfo, bool forceRenewToken = false, CancellationToken cancellationToken = default);
+        Task<(string Status, string? AgentToken, string? ErrorMessage)> IdentifyAgentAsync(string agentId, PositionInfo positionInfo, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Verifies MFA code for Agent.
         /// API: POST /api/agent/verify-mfa
         /// </summary>
-        /// <param name="agentId">ID of the Agent.</param>
-        /// <param name="mfaCode">MFA code entered by user.</param>
+        /// <param name="agentId">ID of the Agent (8-36 characters).</param>
+        /// <param name="mfaCode">MFA code entered by user (6 characters).</param>
         /// <param name="cancellationToken">Token to cancel the request.</param>
         /// <returns>A tuple containing status ("success" or error) and agentToken (if successful).</returns>
         Task<(string Status, string? AgentToken, string? ErrorMessage)> VerifyMfaAsync(string agentId, string mfaCode, CancellationToken cancellationToken = default);

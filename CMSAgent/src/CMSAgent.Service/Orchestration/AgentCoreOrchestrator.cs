@@ -10,6 +10,7 @@ using CMSAgent.Service.Commands.Models; // For CommandRequest
 using CMSAgent.Service.Models; 
 using CMSAgent.Shared.Enums;
 using Microsoft.Extensions.Options;
+using System.Threading.Channels; // For ChannelClosedException
 namespace CMSAgent.Service.Orchestration
 {
     public class AgentCoreOrchestrator : IAgentCoreOrchestrator
@@ -138,25 +139,39 @@ namespace CMSAgent.Service.Orchestration
         
         private async Task PerformShutdownTasksAsync(CancellationToken cancellationToken)
         {
-            // Stop timers
-            _periodicUpdateCheckTimer?.Change(Timeout.Infinite, 0);
-            _periodicUpdateCheckTimer?.Dispose();
-            _logger.LogDebug("Periodic timers have been stopped.");
-
-            // Stop Resource Monitor
-            await _resourceMonitor.StopMonitoringAsync();
-            _logger.LogDebug("Resource Monitor has been stopped.");
-
-            // Stop Command Queue
-            await _commandQueue.StopProcessingAsync(); // Wait for commands being processed to complete (if possible)
-            _logger.LogDebug("Command Queue has been stopped.");
-
-            // Disconnect WebSocket
-            if (_socketClient.IsConnected)
+            try
             {
-                await _socketClient.DisconnectAsync();
+                // Stop timers
+                _periodicUpdateCheckTimer?.Change(Timeout.Infinite, 0);
+                _periodicUpdateCheckTimer?.Dispose();
+                _logger.LogInformation("Periodic timers have been stopped.");
+
+                // Stop Resource Monitor
+                await _resourceMonitor.StopMonitoringAsync();
+                _logger.LogInformation("Resource Monitor has been stopped.");
+
+                // Stop Command Queue - only if not already stopped
+                try
+                {
+                    await _commandQueue.StopProcessingAsync(); // Wait for commands being processed to complete (if possible)
+                    _logger.LogInformation("Command Queue has been stopped.");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error stopping Command Queue.");
+                }
+
+                // Disconnect WebSocket
+                if (_socketClient.IsConnected)
+                {
+                    await _socketClient.DisconnectAsync();
+                }
+                _logger.LogInformation("WebSocket client has been requested to disconnect.");
             }
-            _logger.LogDebug("WebSocket client has been requested to disconnect.");
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during shutdown tasks.");
+            }
         }
 
         private async Task<bool> LoadConfigAndAuthenticateAsync(CancellationToken cancellationToken)
@@ -234,13 +249,21 @@ namespace CMSAgent.Service.Orchestration
             _logger.LogInformation("WebSocket has connected and authenticated successfully!");
             SetStatus(AgentStatus.Connected);
 
+            // Ensure authentication is set before making any API calls
+            if (string.IsNullOrWhiteSpace(_agentId) || string.IsNullOrWhiteSpace(_agentToken))
+            {
+                _logger.LogError("Cannot proceed with API calls: AgentId or AgentToken not set.");
+                return Task.CompletedTask;
+            }
+
+            _apiClient.SetAuthenticationCredentials(_agentId, _agentToken);
+
             // Perform tasks after successful connection
             _ = Task.Run(async () =>
             {
                 try
                 {
                     // 1. Send hardware information (if not sent or needs to be resent)
-                    // Need logic to decide when to resend hardware info. Example: only send once after agent starts and connects.
                     _logger.LogInformation("Collecting and sending hardware information...");
                     var hardwareInfo = await _hardwareCollector.CollectHardwareInfoAsync();
                     if (hardwareInfo != null)
@@ -268,7 +291,7 @@ namespace CMSAgent.Service.Orchestration
                 }
                 catch (Exception ex)
                 {
-                     _logger.LogError(ex, "Error in OnSocketConnected task.");
+                    _logger.LogError(ex, "Error in OnSocketConnected task.");
                 }
             });
             return Task.CompletedTask;
@@ -307,8 +330,24 @@ namespace CMSAgent.Service.Orchestration
         private Task OnCommandReceived(CommandRequest commandRequest)
         {
             _logger.LogInformation("Orchestrator received command: ID={CommandId}, Type={CommandType}", commandRequest.CommandId, commandRequest.CommandType);
+            
             // Queue command for processing
-            _ = _commandQueue.EnqueueCommandAsync(commandRequest); // Don't wait, to not block WebSocket thread
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var success = await _commandQueue.EnqueueCommandAsync(commandRequest);
+                    if (!success)
+                    {
+                        _logger.LogWarning("Failed to enqueue command: ID={CommandId}, Type={CommandType}", commandRequest.CommandId, commandRequest.CommandType);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error enqueueing command: ID={CommandId}, Type={CommandType}", commandRequest.CommandId, commandRequest.CommandType);
+                }
+            });
+
             return Task.CompletedTask;
         }
 

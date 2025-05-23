@@ -64,6 +64,7 @@ namespace CMSAgent.Service.Update
 
             _logger.LogInformation("Checking for updates for Agent version: {CurrentVersion}", currentAgentVersion);
             UpdateNotification? updateInfo = await _apiClient.CheckForUpdatesAsync(currentAgentVersion, cancellationToken);
+            _logger.LogInformation("Update check completed. Update info: {UpdateInfo}", updateInfo);
 
             if (cancellationToken.IsCancellationRequested)
             {
