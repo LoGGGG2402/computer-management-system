@@ -80,7 +80,12 @@ async function handleAgentStatusUpdate(socket, data) {
     return;
   }
 
-  const { cpuUsage, ramUsage, diskUsage } = data;
+  let { cpuUsage, ramUsage, diskUsage } = data;
+  
+  // Round values to 2 decimal places
+  cpuUsage = Number(cpuUsage.toFixed(2));
+  ramUsage = Number(ramUsage.toFixed(2));
+  diskUsage = Number(diskUsage.toFixed(2));
 
   const isValidPercentage = (value) =>
     typeof value === "number" && value >= 0.0 && value <= 100.0;

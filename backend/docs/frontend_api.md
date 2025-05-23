@@ -1301,7 +1301,7 @@ Event broadcast to subscribed clients when a remote command sent to a computer h
   {
     "commandId": "string (uuid)",
     "computerId": "integer",
-    "type": "string",
+    "commandType": "string",
     "success": "boolean",
     "result": "object",
     "timestamp": "timestamp"
@@ -1310,7 +1310,7 @@ Event broadcast to subscribed clients when a remote command sent to a computer h
 - **Field Constraints:**
   - `commandId`: UUID string (RFC4122 compliant, 36 characters) uniquely identifying the command
   - `computerId`: Positive non-zero integer representing a valid computer ID
-  - `type`: String, one of: 'console', 'powershell', 'cmd', 'bash', 'system', 'service'
+  - `commandType`: String, one of: 'console', 'powershell', 'cmd', 'bash', 'system', 'service'
   - `success`: Boolean indicating whether the command executed successfully
   - `result`: JSON object containing command output with fields:
     - `stdout`: String (command standard output, may be empty)

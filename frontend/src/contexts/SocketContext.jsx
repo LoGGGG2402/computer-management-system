@@ -104,6 +104,10 @@ export const SocketProvider = ({ children }) => {
         });
 
         newSocket.on("computer:status_updated", (data) => {
+          console.log(
+            "[SocketContext] Received computer:status_updated event:",
+            data
+          );
           if (data && data.computerId) {
             setComputerStatuses((prev) => ({
               ...prev,

@@ -70,9 +70,12 @@ const ComputerDetailPage = () => {
 
   const computerStatus = getComputerStatus(computerIdInt);
   const isOnline = useMemo(() => {
-    return (isSocketReady && computerStatus?.status === "online") ||
-      (!isSocketReady && computer?.status === "online") ||
-      (computer?.last_update && new Date() - new Date(computer.last_update) < 5 * 60 * 1000);
+    console.log("isOnline", { isSocketReady, computerStatus, computer });
+    // Fallback to last known status from API if socket not ready
+    if (isSocketReady && computerStatus && computerStatus?.status === "online") {
+      return computerStatus?.status === "online";
+    }
+    return false;
   }, [isSocketReady, computerStatus, computer]);
 
   /**

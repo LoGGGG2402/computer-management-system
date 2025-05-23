@@ -114,7 +114,6 @@ const initializeWebSocket = (io) => {
  */
 const handleDisconnect = (socket, reason) => {
   const clientType = socket.data.type;
-
   if (clientType === "agent") {
     handleAgentDisconnect(socket);
   } else if (clientType === "frontend") {

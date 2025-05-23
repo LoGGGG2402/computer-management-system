@@ -382,12 +382,7 @@ class AgentController {
 
       await computerService.updateComputer(computerId, hardwareData);
 
-      logger.info(`Hardware info updated for computer ${computerId}`, {
-        agentId,
-        os: os_info,
-        cpu: cpu_info,
-        ram: total_ram,
-      });
+      logger.info(`Hardware info updated for computer ${computerId}`, hardwareData);
 
       return res.sendStatus(204);
     } catch (error) {

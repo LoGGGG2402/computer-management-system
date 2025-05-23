@@ -26,6 +26,10 @@ const EVENTS = {
 
   // Agent notification events
   NEW_VERSION_AVAILABLE: "agent:new_version_available",
+
+  AGENT_STATUS_UPDATE: "agent:status_update",
+
+  AGENT_COMMAND_RESULT: "agent:command_result",
 };
 
 const PENDING_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
@@ -229,6 +233,7 @@ class WebSocketService {
           logger.info(`Computer ${computerId} confirmed offline after delay.`);
 
           const offlineStatusData = {
+            computerId,
             status: "offline",
             cpuUsage: 0,
             ramUsage: 0,
@@ -447,7 +452,7 @@ class WebSocketService {
       const formattedResult = {
         commandId,
         computerId,
-        type: result.type || "unknown",
+        commandType: result.commandType,
         success: result.success === true,
         result: result.result,
         timestamp: new Date(),
