@@ -13,7 +13,7 @@ namespace CMSAgent.Service.Communication.WebSocket
     {
         private readonly ILogger<AgentSocketClient> _logger;
         private readonly AppSettings _appSettings;
-        private SocketIOClient.SocketIO? _socket; // Nullable to allow reinitialization
+        private SocketIOClient.SocketIO? _socket;
         private string _serverUrl = string.Empty;
         private string _currentAgentId = string.Empty;
         private string _currentAgentToken = string.Empty;
@@ -129,13 +129,11 @@ namespace CMSAgent.Service.Communication.WebSocket
         {
             if (_socket == null) return;
 
-            _socket.OnConnected += (sender, e) =>
+            _socket.OnConnected += async (sender, e) =>
             {
                 _logger.LogInformation("WebSocket connected successfully! Socket ID: {SocketId}. Endpoint: {Endpoint}", _socket.Id, _serverUrl);
-                // API spec says server will send 'agent:ws_auth_success' or 'agent:ws_auth_failed'
-                // Instead of relying on OnConnected directly, we should wait for these events.
-                // However, OnConnected from the library usually means TCP/WS handshake is complete.
-                // Application-level authentication (agentId, token) will be responded by server via separate event.
+                // OnConnected event from Socket.IO library indicates successful connection
+                if (Connected != null) await Connected.Invoke();
             };
 
             _socket.OnDisconnected += async (sender, reason) => // reason is string
@@ -146,10 +144,19 @@ namespace CMSAgent.Service.Communication.WebSocket
                 await HandleDisconnectionAsync(new Exception($"Disconnected by server or network issue: {reason}"));
             };
 
-            _socket.OnError += (sender, e) => // e is error string
+            _socket.OnError += async (sender, e) => // e is error string
             {
                 _logger.LogError("WebSocket error: {ErrorMessage}", e);
-                // Consider whether to trigger Disconnected here, depending on error type.
+                // Check if this is an authentication error
+                if (e.Contains("auth_error", StringComparison.OrdinalIgnoreCase))
+                {
+                    string errorMessage = "WebSocket authentication failed.";
+                    try { errorMessage = e; } catch { /* ignore */ }
+                    _logger.LogError("WebSocket authentication failed from Server: {ErrorMessage}", errorMessage);
+                    if (AuthenticationFailed != null) await AuthenticationFailed.Invoke(errorMessage);
+                    // Disconnect and request reconfiguration
+                    await DisconnectAsync();
+                }
             };
 
             _socket.OnReconnectAttempt += (sender, attempt) =>
@@ -182,31 +189,10 @@ namespace CMSAgent.Service.Communication.WebSocket
             {
                 _logger.LogTrace("WebSocket Ping received.");
             };
-            _socket.OnPong += (sender, e) => // e is TimeSpan (latency)
+            _socket.OnPong += (sender, e) => 
             {
                 _logger.LogTrace("WebSocket Pong received. Latency: {Latency}ms", e.TotalMilliseconds);
             };
-
-
-            // Listen for Server events according to API spec
-            _socket.On("agent:ws_auth_success", async response =>
-            {
-                _logger.LogInformation("WebSocket authentication successful from Server.");
-                if (Connected != null) await Connected.Invoke();
-            });
-
-            _socket.On("agent:ws_auth_failed", async response =>
-            {
-                string errorMessage = "WebSocket authentication failed.";
-                try { errorMessage = response.GetValue<string>() ?? errorMessage; } catch { /* ignore */ }
-                _logger.LogError("WebSocket authentication failed from Server: {ErrorMessage}", errorMessage);
-                if (AuthenticationFailed != null) await AuthenticationFailed.Invoke(errorMessage);
-                // Disconnect and request reconfiguration
-                await DisconnectAsync();
-            });
-            
-            // Old API spec had connect_error, but SocketIOClient uses OnError or ReconnectError/Failed events
-            // Instead, we rely on agent:ws_auth_failed
 
             _socket.On("command:execute", async response =>
             {

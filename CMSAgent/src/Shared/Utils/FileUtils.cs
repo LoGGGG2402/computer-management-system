@@ -7,15 +7,25 @@ using Microsoft.Extensions.Logging;
 namespace CMSAgent.Shared.Utils
 {
     /// <summary>
-    /// Provides utility functions related to file and directory handling.
+    /// Provides a comprehensive set of file system utilities for handling file operations, compression,
+    /// directory management, and security checks. Includes both synchronous and asynchronous methods
+    /// for common file system operations.
     /// </summary>
     public static class FileUtils
     {
         /// <summary>
-        /// Calculate SHA256 checksum for a file.
+        /// Calculates the SHA-256 cryptographic hash of a file asynchronously.
         /// </summary>
-        /// <param name="filePath">Path to the file.</param>
-        /// <returns>SHA256 checksum string (hex string lowercase) or null if error.</returns>
+        /// <param name="filePath">The full path to the file to hash.</param>
+        /// <returns>
+        /// A hexadecimal string representation of the SHA-256 hash, or null if the operation fails.
+        /// </returns>
+        /// <exception cref="UnauthorizedAccessException">Thrown when file access is denied.</exception>
+        /// <exception cref="IOException">Thrown when an I/O error occurs during reading.</exception>
+        /// <remarks>
+        /// Uses streaming to efficiently handle large files without loading them entirely into memory.
+        /// Returns null if the file doesn't exist or cannot be accessed.
+        /// </remarks>
         public static async Task<string?> CalculateSha256ChecksumAsync(string filePath)
         {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
@@ -44,12 +54,17 @@ namespace CMSAgent.Shared.Utils
         }
 
         /// <summary>
-        /// Compress a directory into a ZIP file.
+        /// Compresses a directory into a ZIP file asynchronously.
         /// </summary>
-        /// <param name="sourceDirectoryPath">Path to the directory to compress.</param>
-        /// <param name="zipFilePath">Path to the ZIP file to be created.</param>
-        /// <param name="includeBaseDirectory">True to include the base directory in the ZIP, False to only compress contents.</param>
-        /// <returns>True if compression is successful, False if failed.</returns>
+        /// <param name="sourceDirectoryPath">The path to the directory to compress.</param>
+        /// <param name="zipFilePath">The path where the ZIP file will be created.</param>
+        /// <param name="includeBaseDirectory">
+        /// If true, the base directory is included in the archive; if false, only the directory contents are included.
+        /// </param>
+        /// <returns>
+        /// True if the compression succeeds, false if the source directory doesn't exist, 
+        /// the zip file path is invalid, or compression fails.
+        /// </returns>
         public static async Task<bool> CompressDirectoryAsync(string sourceDirectoryPath, string zipFilePath, bool includeBaseDirectory = false)
         {
             if (string.IsNullOrEmpty(sourceDirectoryPath) || !Directory.Exists(sourceDirectoryPath))
@@ -88,12 +103,15 @@ namespace CMSAgent.Shared.Utils
         }
 
         /// <summary>
-        /// Decompress a ZIP file into a directory.
+        /// Extracts a ZIP file to a specified directory asynchronously.
         /// </summary>
-        /// <param name="zipFilePath">Path to the ZIP file.</param>
-        /// <param name="extractDirectoryPath">Path to the directory to contain the extracted contents.</param>
-        /// <param name="overwriteFiles">True to overwrite files if they exist.</param>
-        /// <returns>True if decompression is successful, False if failed.</returns>
+        /// <param name="zipFilePath">The path to the ZIP file to extract.</param>
+        /// <param name="extractDirectoryPath">The directory where the ZIP contents will be extracted.</param>
+        /// <param name="overwriteFiles">If true, any files in the target directory with the same name will be overwritten.</param>
+        /// <returns>
+        /// True if the extraction succeeds, false if the ZIP file doesn't exist,
+        /// the extract directory path is invalid, or extraction fails.
+        /// </returns>
         public static async Task<bool> DecompressZipFileAsync(string zipFilePath, string extractDirectoryPath, bool overwriteFiles = true)
         {
             if (string.IsNullOrEmpty(zipFilePath) || !File.Exists(zipFilePath))
@@ -126,11 +144,13 @@ namespace CMSAgent.Shared.Utils
         }
 
         /// <summary>
-        /// Safely move a directory, including deleting the destination directory if it exists.
+        /// Moves a directory from one location to another.
         /// </summary>
-        /// <param name="sourceDirName">Source directory path.</param>
-        /// <param name="destDirName">Destination directory path.</param>
-        /// <param name="overwrite">If true, delete the destination directory if it exists.</param>
+        /// <param name="sourceDirName">The source directory path to move.</param>
+        /// <param name="destDirName">The destination directory path.</param>
+        /// <param name="overwrite">If true and the destination exists, it will be overwritten; otherwise, an exception is thrown.</param>
+        /// <exception cref="DirectoryNotFoundException">Thrown when the source directory does not exist.</exception>
+        /// <exception cref="IOException">Thrown when the destination directory exists and overwrite is false.</exception>
         public static void DirectoryMove(string sourceDirName, string destDirName, bool overwrite = true)
         {
             if (!Directory.Exists(sourceDirName))
@@ -162,11 +182,14 @@ namespace CMSAgent.Shared.Utils
         }
 
         /// <summary>
-        /// Safely move a directory asynchronously, including deleting the destination directory if it exists.
+        /// Moves a directory from one location to another asynchronously.
         /// </summary>
-        /// <param name="sourceDirName">Source directory path.</param>
-        /// <param name="destDirName">Destination directory path.</param>
-        /// <param name="overwrite">If true, delete the destination directory if it exists.</param>
+        /// <param name="sourceDirName">The source directory path to move.</param>
+        /// <param name="destDirName">The destination directory path.</param>
+        /// <param name="overwrite">If true and the destination exists, it will be overwritten; otherwise, an exception is thrown.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        /// <exception cref="DirectoryNotFoundException">Thrown when the source directory does not exist.</exception>
+        /// <exception cref="IOException">Thrown when the destination directory exists and overwrite is false.</exception>
         public static async Task DirectoryMoveAsync(string sourceDirName, string destDirName, bool overwrite = true)
         {
             if (!Directory.Exists(sourceDirName))
@@ -200,11 +223,12 @@ namespace CMSAgent.Shared.Utils
         }
 
         /// <summary>
-        /// Recursively copy a directory.
+        /// Recursively copies a directory and all its contents to a new location.
         /// </summary>
-        /// <param name="sourceDir">Source directory path.</param>
-        /// <param name="destinationDir">Destination directory path.</param>
-        /// <param name="overwrite">True to overwrite files if they exist.</param>
+        /// <param name="sourceDir">The source directory to copy.</param>
+        /// <param name="destinationDir">The destination directory path.</param>
+        /// <param name="overwrite">If true, existing files will be overwritten; otherwise, an exception is thrown.</param>
+        /// <exception cref="DirectoryNotFoundException">Thrown when the source directory does not exist.</exception>
         public static void CopyDirectory(string sourceDir, string destinationDir, bool overwrite = true)
         {
             var dir = new DirectoryInfo(sourceDir);
@@ -228,11 +252,13 @@ namespace CMSAgent.Shared.Utils
         }
 
         /// <summary>
-        /// Recursively copy a directory asynchronously.
+        /// Recursively copies a directory and all its contents to a new location asynchronously.
         /// </summary>
-        /// <param name="sourceDir">Source directory path.</param>
-        /// <param name="destinationDir">Destination directory path.</param>
-        /// <param name="overwrite">True to overwrite files if they exist.</param>
+        /// <param name="sourceDir">The source directory to copy.</param>
+        /// <param name="destinationDir">The destination directory path.</param>
+        /// <param name="overwrite">If true, existing files will be overwritten; otherwise, an exception is thrown.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        /// <exception cref="DirectoryNotFoundException">Thrown when the source directory does not exist.</exception>
         public static async Task CopyDirectoryAsync(string sourceDir, string destinationDir, bool overwrite = true)
         {
             var dir = new DirectoryInfo(sourceDir);
@@ -240,21 +266,16 @@ namespace CMSAgent.Shared.Utils
                 throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
 
             DirectoryInfo[] dirs = dir.GetDirectories();
-            Directory.CreateDirectory(destinationDir);
+            Directory.CreateDirectory(destinationDir);            var copyTasks = new List<Task>();
 
-            var copyTasks = new List<Task>();
-
-            // Copy files
             foreach (FileInfo file in dir.GetFiles())
             {
                 string targetFilePath = Path.Combine(destinationDir, file.Name);
                 copyTasks.Add(Task.Run(() => file.CopyTo(targetFilePath, overwrite)));
             }
 
-            // Wait for all file copies to complete
             await Task.WhenAll(copyTasks);
 
-            // Copy subdirectories
             foreach (DirectoryInfo subDir in dirs)
             {
                 string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
@@ -263,10 +284,12 @@ namespace CMSAgent.Shared.Utils
         }
 
         /// <summary>
-        /// Read file content as string.
+        /// Reads a file's contents as a string asynchronously using UTF-8 encoding.
         /// </summary>
-        /// <param name="filePath">Path to the file.</param>
-        /// <returns>File content or null if error.</returns>
+        /// <param name="filePath">The path to the file to read.</param>
+        /// <returns>
+        /// The file contents as a string if successful; otherwise, null if the file doesn't exist or an error occurs.
+        /// </returns>
         public static async Task<string?> ReadFileAsStringAsync(string filePath)
         {
             if (!File.Exists(filePath))
@@ -286,11 +309,14 @@ namespace CMSAgent.Shared.Utils
         }
 
         /// <summary>
-        /// Write a string to a file. Will create directory if not exists and overwrite file if exists.
+        /// Writes a string to a file asynchronously using UTF-8 encoding.
         /// </summary>
-        /// <param name="filePath">Path to the file.</param>
-        /// <param name="content">Content to write.</param>
-        /// <returns>True if write is successful, False if failed.</returns>
+        /// <param name="filePath">The path to the file to write to.</param>
+        /// <param name="content">The content to write to the file.</param>
+        /// <returns>True if the write operation succeeds; otherwise, false.</returns>
+        /// <remarks>
+        /// This method creates any necessary directories in the file path if they don't exist.
+        /// </remarks>
         public static async Task<bool> WriteStringToFileAsync(string filePath, string content)
         {
             try
@@ -311,10 +337,14 @@ namespace CMSAgent.Shared.Utils
         }
 
         /// <summary>
-        /// Safely delete a file with logging.
+        /// Attempts to delete a file and logs the result, but doesn't throw exceptions if the operation fails.
         /// </summary>
-        /// <param name="filePath">Path to the file to delete.</param>
-        /// <param name="logger">Logger instance for logging operations.</param>
+        /// <param name="filePath">The path to the file to delete.</param>
+        /// <param name="logger">The logger instance to use for logging.</param>
+        /// <remarks>
+        /// This method silently handles any exceptions during the file deletion process
+        /// and logs appropriate information about success, failure, or if the file doesn't exist.
+        /// </remarks>
         public static void TryDeleteFile(string filePath, Microsoft.Extensions.Logging.ILogger logger)
         {
             if (string.IsNullOrEmpty(filePath))
@@ -342,14 +372,20 @@ namespace CMSAgent.Shared.Utils
         }
 
         /// <summary>
-        /// Check if a file path is safe to access by ensuring it is within an allowed base directory.
+        /// Determines whether a file path is contained within an allowed base directory to prevent path traversal attacks.
         /// </summary>
         /// <param name="filePath">The file path to check.</param>
-        /// <param name="allowedBaseDirectory">The base directory that the file path must be within.</param>
-        /// <returns>True if the file path is within the allowed base directory, false otherwise.</returns>
+        /// <param name="allowedBaseDirectory">The allowed base directory.</param>
+        /// <returns>
+        /// True if the file path is contained within the allowed base directory; otherwise, false.
+        /// </returns>
+        /// <remarks>
+        /// This method helps prevent directory traversal security vulnerabilities by ensuring
+        /// that file operations are restricted to an approved directory tree.
+        /// </remarks>
         public static bool IsPathSafe(string filePath, string allowedBaseDirectory)
         {
-            var fullPath = Path.GetFullPath(filePath); // Chuẩn hóa đường dẫn
+            var fullPath = Path.GetFullPath(filePath);
             var fullAllowedBase = Path.GetFullPath(allowedBaseDirectory);
             return fullPath.StartsWith(fullAllowedBase, StringComparison.OrdinalIgnoreCase);
         }

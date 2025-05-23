@@ -1,17 +1,7 @@
-// CMSAgent.Service/Program.cs
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Serilog;
-using System;
 using System.CommandLine; // For System.CommandLine
 using System.CommandLine.Invocation;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Threading.Tasks;
 using CMSAgent.Service.Workers;
 using CMSAgent.Service.Orchestration;
 using CMSAgent.Service.Configuration.Models;
@@ -156,7 +146,6 @@ namespace CMSAgent.Service
                 SerilogConfigurator.CloseAndFlush(); // Ensure all logs are written before exit
             }
         }
-
 
         public static IHostBuilder CreateHostBuilder(string[] args, bool isDebugMode, bool isConfigureMode) =>
             Host.CreateDefaultBuilder(args)

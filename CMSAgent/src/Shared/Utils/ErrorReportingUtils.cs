@@ -6,10 +6,14 @@ using Serilog;
 namespace CMSAgent.Shared.Utils
 {
     /// <summary>
-    /// Provides utility methods to create standard error report objects.
+    /// Provides utility methods for generating standardized error reports and handling error information.
+    /// This class centralizes error reporting functionality and ensures consistent error format across the application.
     /// </summary>
     public static class ErrorReportingUtils
     {
+        /// <summary>
+        /// JSON serializer options for consistent error detail serialization across the application.
+        /// </summary>
         private static readonly JsonSerializerOptions _jsonOptions = new()
         {
             WriteIndented = true,
@@ -18,13 +22,18 @@ namespace CMSAgent.Shared.Utils
         };
 
         /// <summary>
-        /// Create an AgentErrorReport object.
+        /// Creates a standardized error report containing detailed information about an error condition.
         /// </summary>
-        /// <param name="errorType">Error type (see AgentConstants for update error types).</param>
-        /// <param name="message">Main error message.</param>
-        /// <param name="exception">Exception object (if any) to extract detailed info.</param>
-        /// <param name="customDetails">An object containing other custom details.</param>
-        /// <returns>An AgentErrorReport object.</returns>
+        /// <param name="errorType">The category or classification of the error.</param>
+        /// <param name="message">The primary error message describing what went wrong.</param>
+        /// <param name="exception">Optional exception object containing additional error details and stack trace.</param>
+        /// <param name="customDetails">Optional object containing any additional context-specific information.</param>
+        /// <returns>A complete AgentErrorReport object containing all provided error information.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when errorType or message is null or whitespace.</exception>
+        /// <remarks>
+        /// This method combines all error information into a single, structured report object.
+        /// If both exception and customDetails are provided, they are combined into a single details object.
+        /// </remarks>
         public static AgentErrorReport CreateErrorReport(
             string errorType,
             string message,
@@ -71,9 +80,19 @@ namespace CMSAgent.Shared.Utils
             return report;
         }
 
+        /// <summary>
+        /// Extracts detailed diagnostic information from an Exception object, including nested exceptions.
+        /// </summary>
+        /// <param name="exception">The exception to process.</param>
+        /// <param name="depth">Current depth in the exception chain, used to prevent infinite recursion.</param>
+        /// <returns>An object containing structured exception information including type, message, stack trace, and inner exceptions.</returns>
+        /// <remarks>
+        /// Processes the exception chain up to 5 levels deep to prevent excessive processing of deeply nested exceptions.
+        /// For each exception, captures the full type name, message, stack trace, source, and HResult.
+        /// </remarks>
         private static object ExtractExceptionInfo(Exception exception, int depth = 0)
         {
-            if (depth > 5) // Giới hạn độ sâu của inner exceptions
+            if (depth > 5) // Limit the depth of inner exceptions
             {
                 return new { Message = "Inner exception chain too deep" };
             }
@@ -85,35 +104,45 @@ namespace CMSAgent.Shared.Utils
                 exception.StackTrace,
                 Source = exception.Source,
                 HResult = exception.HResult,
-                InnerException = exception.InnerException != null 
-                    ? ExtractExceptionInfo(exception.InnerException, depth + 1) 
+                InnerException = exception.InnerException != null
+                    ? ExtractExceptionInfo(exception.InnerException, depth + 1)
                     : null
             };
 
             return info;
         }
 
+        /// <summary>
+        /// Handles the safe serialization of error details to ensure they can be properly stored and transmitted.
+        /// </summary>
+        /// <param name="detailsPayload">The object containing the error details to be serialized.</param>
+        /// <param name="errorType">The type of error being processed, used for logging if serialization fails.</param>
+        /// <returns>
+        /// For complex objects: Returns the original object.
+        /// For simple types: Returns a wrapper containing the JSON serialized string.
+        /// On error: Returns a minimal error object with basic failure information.
+        /// </returns>
+        /// <remarks>
+        /// This method ensures that all error details can be properly serialized while preserving
+        /// as much information as possible, even in failure scenarios.
+        /// </remarks>
         private static object SerializeDetailsSafely(object detailsPayload, string errorType)
         {
             try
             {
-                // Thử serialize thành JSON string để đảm bảo tính hợp lệ
                 var jsonString = JsonSerializer.Serialize(detailsPayload, _jsonOptions);
-                
-                // Nếu detailsPayload là một đối tượng phức tạp, trả về nó trực tiếp
+
                 if (detailsPayload.GetType().IsClass && detailsPayload.GetType() != typeof(string))
                 {
                     return detailsPayload;
                 }
-                
-                // Nếu là kiểu dữ liệu đơn giản, trả về JSON string
+
                 return new { SerializedDetails = jsonString };
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "JSON serialization failed for error type {ErrorType}, using minimal details", errorType);
-                
-                // Fallback: chỉ lưu thông tin cơ bản
+
                 return new
                 {
                     Error = "Failed to serialize details",

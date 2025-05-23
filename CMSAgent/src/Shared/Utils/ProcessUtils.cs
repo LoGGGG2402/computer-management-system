@@ -1,4 +1,3 @@
-// Shared/Utils/ProcessUtils.cs
 using System.Diagnostics;
 using System.Text;
 using CMSAgent.Shared.Constants;
@@ -7,19 +6,30 @@ using Serilog;
 namespace CMSAgent.Shared.Utils
 {
     /// <summary>
-    /// Provides utility functions related to process management and execution.
+    /// Provides comprehensive utility functions for process management and execution.
+    /// Supports command execution, process lifecycle management, and graceful shutdown operations.
     /// </summary>
     public static class ProcessUtils
     {
         /// <summary>
-        /// Executes a command line and returns output, error, and exit code.
+        /// Executes a command asynchronously with comprehensive output capture and timeout support.
         /// </summary>
-        /// <param name="fileName">Executable file name (e.g., "cmd.exe", "powershell.exe" or full path).</param>
-        /// <param name="arguments">Arguments for the command.</param>
-        /// <param name="workingDirectory">Working directory for the process (default is current directory).</param>
-        /// <param name="timeoutMilliseconds">Maximum allowed time (ms) for the command to run. Default is 60 seconds.</param>
-        /// <param name="cancellationToken">Token to cancel the process early.</param>
-        /// <returns>A tuple containing (string standardOutput, string standardError, int exitCode).</returns>
+        /// <param name="fileName">The executable file name or full path to execute (e.g., "cmd.exe", "powershell.exe").</param>
+        /// <param name="arguments">Command line arguments to pass to the executable.</param>
+        /// <param name="workingDirectory">Working directory for process execution. Uses current directory if null.</param>
+        /// <param name="timeoutMilliseconds">Maximum execution time in milliseconds. Default is 60 seconds.</param>
+        /// <param name="cancellationToken">Token to enable early cancellation of the operation.</param>
+        /// <returns>
+        /// A tuple containing:
+        /// - StandardOutput: All text written to standard output stream
+        /// - StandardError: All text written to standard error stream  
+        /// - ExitCode: Process exit code (-1 if timeout/cancellation occurred)
+        /// </returns>
+        /// <exception cref="OperationCanceledException">Thrown when the operation is cancelled via the cancellation token.</exception>
+        /// <remarks>
+        /// This method captures both stdout and stderr asynchronously to prevent deadlocks.
+        /// If the process doesn't exit within the timeout, it attempts graceful shutdown before returning.
+        /// </remarks>
         public static async Task<(string StandardOutput, string StandardError, int ExitCode)> ExecuteCommandAsync(
             string fileName,
             string arguments,
@@ -74,7 +84,6 @@ namespace CMSAgent.Shared.Utils
                     await process.WaitForExitAsync(combinedCts.Token);
                 }
 
-                // Đợi cả output và error stream đóng với timeout
                 var streamTasks = new[] { outputTask.Task, errorTask.Task };
                 var timeoutTask = Task.Delay(TimeSpan.FromSeconds(AgentConstants.DefaultProcessStreamCloseTimeoutSeconds));
                 
@@ -114,11 +123,20 @@ namespace CMSAgent.Shared.Utils
         }
 
         /// <summary>
-        /// Wait for a process (by PID) to exit with a timeout.
+        /// Waits for a process with the specified PID to exit within a given timeout period.
         /// </summary>
-        /// <param name="processId">Process ID to wait for.</param>
-        /// <param name="timeoutMilliseconds">Maximum time (ms) to wait. 0 or negative means wait indefinitely.</param>
-        /// <returns>True if the process exited within the wait time, False if timeout.</returns>
+        /// <param name="processId">The process identifier to wait for.</param>
+        /// <param name="timeoutMilliseconds">Maximum wait time in milliseconds. Values ≤ 0 wait indefinitely.</param>
+        /// <returns>
+        /// True if the process exited within the timeout period or doesn't exist.
+        /// False if the timeout expired or an error occurred during the wait.
+        /// </returns>
+        /// <exception cref="ArgumentException">Thrown when the process ID is invalid.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the process has already exited.</exception>
+        /// <remarks>
+        /// This method safely handles cases where the process doesn't exist or has already terminated.
+        /// Non-existent processes are considered as having "exited" and return true.
+        /// </remarks>
         public static bool WaitForProcessExit(int processId, int timeoutMilliseconds = AgentConstants.DefaultProcessWaitForExitTimeoutSeconds * 1000)
         {
             try
@@ -159,14 +177,22 @@ namespace CMSAgent.Shared.Utils
         }
 
         /// <summary>
-        /// Start a new process.
+        /// Starts a new process with the specified parameters and configuration options.
         /// </summary>
-        /// <param name="filePath">Path to the executable file.</param>
-        /// <param name="arguments">Arguments for the process.</param>
-        /// <param name="workingDirectory">Working directory.</param>
-        /// <param name="createNoWindow">True to not create a window for the process.</param>
-        /// <param name="useShellExecute">True to use the OS shell to launch.</param>
-        /// <returns>Started Process object or null if error.</returns>
+        /// <param name="filePath">Full path to the executable file to start.</param>
+        /// <param name="arguments">Command line arguments to pass to the process. Can be null.</param>
+        /// <param name="workingDirectory">Working directory for the process. Uses executable's directory if null.</param>
+        /// <param name="createNoWindow">When true, prevents creating a visible window for the process.</param>
+        /// <param name="useShellExecute">When true, uses the operating system shell to start the process.</param>
+        /// <returns>
+        /// The started Process object if successful, or null if the process failed to start.
+        /// </returns>
+        /// <exception cref="System.ComponentModel.Win32Exception">Thrown when the executable file is not found.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when there's an error starting the process.</exception>
+        /// <remarks>
+        /// This method provides a simplified interface for starting processes with common configuration options.
+        /// The caller is responsible for disposing of the returned Process object.
+        /// </remarks>
         public static Process? StartProcess(string filePath, string? arguments = null, string? workingDirectory = null, bool createNoWindow = true, bool useShellExecute = false)
         {
             try
@@ -189,22 +215,35 @@ namespace CMSAgent.Shared.Utils
             }
         }
 
+        /// <summary>
+        /// Attempts to close a process gracefully using multiple shutdown strategies before forcing termination.
+        /// </summary>
+        /// <param name="process">The process instance to close gracefully.</param>
+        /// <param name="timeoutMilliseconds">Maximum time to wait for each shutdown attempt in milliseconds.</param>
+        /// <returns>
+        /// True if the process was successfully closed through any method.
+        /// False if all shutdown attempts failed.
+        /// </returns>
+        /// <remarks>
+        /// This method employs a multi-stage shutdown approach:
+        /// 1. Attempts to close the main window gracefully
+        /// 2. On Windows, tries enabling process events for clean shutdown  
+        /// 3. As a last resort, forcefully terminates the process
+        /// Each stage respects the specified timeout before moving to the next approach.
+        /// </remarks>
         private static async Task<bool> CloseProcessGracefully(Process process, int timeoutMilliseconds = 5000)
         {
             try
             {
                 if (process.HasExited) return true;
 
-                // Thử đóng tiến trình một cách nhẹ nhàng trước
                 process.CloseMainWindow();
                 
-                // Đợi tiến trình đóng trong một khoảng thời gian
                 if (await Task.Run(() => process.WaitForExit(timeoutMilliseconds)))
                 {
                     return true;
                 }
 
-                // Nếu không đóng được, thử gửi tín hiệu kết thúc
                 if (OperatingSystem.IsWindows())
                 {
                     try
@@ -224,7 +263,6 @@ namespace CMSAgent.Shared.Utils
                     }
                 }
 
-                // Nếu vẫn không đóng được, mới sử dụng Kill
                 Log.Warning("Process did not exit gracefully, forcing termination");
                 process.Kill(true);
                 return true;

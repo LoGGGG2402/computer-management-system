@@ -10,12 +10,6 @@ namespace CMSAgent.Service.Configuration.Models
     public class AppSettings
     {
         /// <summary>
-        /// Serilog configuration (usually a separate section in JSON).
-        /// Here we can use 'object' type or a specific class if we want to define details.
-        /// </summary>
-        public SerilogSettings Serilog { get; set; } = new SerilogSettings();
-
-        /// <summary>
         /// Management Server URL (e.g., "https://cms.example.com").
         /// </summary>
         [Required(ErrorMessage = "ServerUrl is required.")]
@@ -52,14 +46,6 @@ namespace CMSAgent.Service.Configuration.Models
         /// Default: true.
         /// </summary>
         public bool EnableAutoUpdate { get; set; } = true;
-
-        /// <summary>
-        /// Time interval (seconds) for periodic token refresh.
-        /// Default: 43200 seconds (12 hours).
-        /// </summary>
-        [Range(600, 86400, ErrorMessage = "TokenRefreshIntervalSec must be between 600 and 86400.")]
-        public int TokenRefreshIntervalSec { get; set; } = 43200;
-
         /// <summary>
         /// Configuration for HTTP retry policy (Polly).
         /// </summary>
@@ -76,34 +62,12 @@ namespace CMSAgent.Service.Configuration.Models
         public CommandExecutionSettings CommandExecution { get; set; } = new CommandExecutionSettings();
 
         /// <summary>
-        /// Resource limits, e.g., maximum size of offline data queue.
-        /// </summary>
-        public ResourceLimitSettings ResourceLimits { get; set; } = new ResourceLimitSettings();
-
-        /// <summary>
         /// Unique GUID of Agent, used to create Mutex name.
         /// This value should be randomly generated and unique for each installation.
         /// It can be written to appsettings.json during installation.
         /// </summary>
         public string AgentInstanceGuid { get; set; } = string.Empty; // Will be generated during installation
     }
-
-    /// <summary>
-    /// Detailed configuration for Serilog.
-    /// </summary>
-    public class SerilogSettings
-    {
-        public MinimumLevelSettings MinimumLevel { get; set; } = new MinimumLevelSettings();
-        // Other Serilog configurations can be added here if needed to read from appsettings.json
-        // Example: public List<SerilogSinkSettings> WriteTo { get; set; }
-    }
-
-    public class MinimumLevelSettings
-    {
-        public string Default { get; set; } = "Information";
-        public Dictionary<string, string> Override { get; set; } = new Dictionary<string, string>();
-    }
-
     /// <summary>
     /// Configuration for HTTP retry policy.
     /// </summary>
@@ -121,12 +85,6 @@ namespace CMSAgent.Service.Configuration.Models
         /// </summary>
         [Range(1, 60)]
         public int InitialDelaySeconds { get; set; } = 2;
-
-        /// <summary>
-        /// Maximum delay (seconds) between retries.
-        /// </summary>
-        [Range(5, 300)]
-        public int MaxDelaySeconds { get; set; } = 30;
     }
 
     /// <summary>
@@ -181,17 +139,5 @@ namespace CMSAgent.Service.Configuration.Models
         /// </summary>
         [Range(10, 3600)]
         public int DefaultCommandTimeoutSeconds { get; set; } = 60;
-    }
-
-    /// <summary>
-    /// Resource limit configuration.
-    /// </summary>
-    public class ResourceLimitSettings
-    {
-        /// <summary>
-        /// Maximum size (number of items) of offline data queue.
-        /// </summary>
-        [Range(10, 1000)]
-        public int MaxOfflineQueueSize { get; set; } = 100;
     }
 }
