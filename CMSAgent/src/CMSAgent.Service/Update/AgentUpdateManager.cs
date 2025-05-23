@@ -108,10 +108,9 @@ namespace CMSAgent.Service.Update
             _isUpdateInProgress = true;
             try
             {
-
                 string downloadDir = Path.Combine(_agentProgramDataPath, AgentConstants.UpdatesSubFolderName, AgentConstants.UpdateDownloadSubFolderName);
                 Directory.CreateDirectory(downloadDir); // Ensure directory exists
-                string downloadedPackagePath = Path.Combine(downloadDir, $"CMSAgent_v{updateNotification.Version}.zip"); // Example filename
+                string downloadedPackagePath = Path.Combine(downloadDir, Path.GetFileName(updateNotification.DownloadUrl));
 
                 // 1. Download update package
                 _logger.LogInformation("Downloading update package from: {DownloadUrl}", updateNotification.DownloadUrl);
@@ -151,9 +150,49 @@ namespace CMSAgent.Service.Update
                     return;
                 }
                 _logger.LogInformation("Update package extracted successfully.");
-                FileUtils.TryDeleteFile(downloadedPackagePath, _logger); // Delete zip file after extraction
+                FileUtils.TryDeleteFile(downloadedPackagePath, _logger);
 
-                // 4. Launch CMSUpdater.exe
+                // 4. Verify manifest.json
+                string manifestPath = Path.Combine(extractDir, "manifest.json");
+                if (!File.Exists(manifestPath))
+                {
+                    await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeInvalidPackage, "manifest.json not found in update package.", updateNotification.Version);
+                    return;
+                }
+
+                // Read and verify manifest
+                string manifestContent = await File.ReadAllTextAsync(manifestPath);
+                var manifest = System.Text.Json.JsonSerializer.Deserialize<UpdateManifest>(manifestContent);
+                if (manifest == null || manifest.version != updateNotification.Version)
+                {
+                    await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeInvalidPackage, "Invalid manifest.json or version mismatch.", updateNotification.Version);
+                    return;
+                }
+
+                // Verify all files in manifest exist and have correct checksums
+                foreach (var file in manifest.files)
+                {
+                    string filePath = Path.Combine(extractDir, file.path);
+                    if (!File.Exists(filePath))
+                    {
+                        await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeInvalidPackage, $"File {file.path} not found in update package.", updateNotification.Version);
+                        return;
+                    }
+
+                    string? fileChecksum = await FileUtils.CalculateSha256ChecksumAsync(filePath);
+                    if (string.IsNullOrEmpty(fileChecksum))
+                    {
+                        await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeChecksumMismatch, $"Failed to calculate checksum for file {file.path}", updateNotification.Version);
+                        return;
+                    }
+                    if (fileChecksum.ToLower() != file.checksum.ToLower())
+                    {
+                        await HandleUpdateFailureAsync(AgentConstants.UpdateErrorTypeChecksumMismatch, $"Checksum mismatch for file {file.path}", updateNotification.Version);
+                        return;
+                    }
+                }
+
+                // 5. Launch CMSUpdater.exe
                 _logger.LogInformation("Preparing to launch CMSUpdater.exe for version {NewVersion}", updateNotification.Version);
                 bool updaterLaunched = await LaunchUpdaterAsync(extractDir, updateNotification.Version, cancellationToken);
                 if (!updaterLaunched || cancellationToken.IsCancellationRequested)
@@ -163,10 +202,8 @@ namespace CMSAgent.Service.Update
                 }
                 _logger.LogInformation("CMSUpdater.exe has been launched. Agent Service will stop soon.");
 
-                // 5. Request Agent Service to stop (graceful shutdown)
-                // AgentCoreOrchestrator will handle this
+                // 6. Request Agent Service to stop (graceful shutdown)
                 await _requestServiceShutdown();
-
             }
             catch (OperationCanceledException)
             {
@@ -187,41 +224,83 @@ namespace CMSAgent.Service.Update
 
         private async Task<bool> LaunchUpdaterAsync(string extractedUpdatePath, string newVersion, CancellationToken cancellationToken)
         {
-            string updaterExeName = "CMSUpdater.exe"; // Updater executable filename
-            string updaterPathInNewPackage = Path.Combine(extractedUpdatePath, "Updater", updaterExeName); // Prefer updater in new package
-            string updaterPathInCurrentInstall = Path.Combine(AppContext.BaseDirectory, "Updater", updaterExeName); // Current updater
+            string updaterExeName = "CMSUpdater.exe";
+            string updaterPath = Path.Combine(extractedUpdatePath, "Updater", updaterExeName);
 
-            string updaterToLaunch = File.Exists(updaterPathInNewPackage) ? updaterPathInNewPackage : updaterPathInCurrentInstall;
-
-            if (!File.Exists(updaterToLaunch))
+            if (!File.Exists(updaterPath))
             {
-                _logger.LogError("CMSUpdater.exe not found at '{Path1}' or '{Path2}'.", updaterPathInNewPackage, updaterPathInCurrentInstall);
+                _logger.LogError("CMSUpdater.exe not found at '{Path}'.", updaterPath);
                 return false;
             }
 
             string arguments = $"-new-version \"{newVersion}\" " +
                              $"-old-version \"{_appSettings.Version}\" " +
                              $"-source-path \"{extractedUpdatePath}\" " ;
-            _logger.LogInformation("Launching Updater: \"{UpdaterPath}\" with arguments: {Arguments}", updaterToLaunch, arguments);
+            _logger.LogInformation("Launching Updater: \"{UpdaterPath}\" with arguments: {Arguments}", updaterPath, arguments);
 
             try
             {
-                // Launch Updater as a separate process using Task.Run to avoid blocking
-                Process? updaterProcess = await Task.Run(() => 
-                    ProcessUtils.StartProcess(updaterToLaunch, arguments, Path.GetDirectoryName(updaterToLaunch), createNoWindow: true, useShellExecute: false),
-                    cancellationToken);
-
-                if (updaterProcess == null || updaterProcess.HasExited) // Checking HasExited immediately may not be accurate if process just started
+                var startInfo = new ProcessStartInfo
                 {
-                    _logger.LogError("Cannot launch or CMSUpdater.exe exited immediately. PID: {PID}", updaterProcess?.Id);
-                    return false;
+                    FileName = updaterPath,
+                    Arguments = arguments,
+                    WorkingDirectory = Path.GetDirectoryName(updaterPath),
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+
+                Process? updaterProcess = null;
+                try
+                {
+                    updaterProcess = Process.Start(startInfo);
+                    if (updaterProcess == null)
+                    {
+                        _logger.LogError("Failed to start CMSUpdater.exe process");
+                        return false;
+                    }
+
+                    // Read output and error streams
+                    string output = await updaterProcess.StandardOutput.ReadToEndAsync();
+                    string error = await updaterProcess.StandardError.ReadToEndAsync();
+
+                    if (!string.IsNullOrEmpty(output))
+                    {
+                        _logger.LogInformation("CMSUpdater output: {Output}", output);
+                    }
+                    if (!string.IsNullOrEmpty(error))
+                    {
+                        _logger.LogError("CMSUpdater error: {Error}", error);
+                    }
+
+                    // Wait a short time to verify process is still running
+                    await Task.Delay(1000, cancellationToken);
+                    
+                    if (updaterProcess.HasExited)
+                    {
+                        _logger.LogError("CMSUpdater.exe exited immediately with exit code: {ExitCode}", updaterProcess.ExitCode);
+                        return false;
+                    }
+
+                    _logger.LogInformation("CMSUpdater.exe launched successfully with PID: {UpdaterPID}", updaterProcess.Id);
+                    return true;
                 }
-                _logger.LogInformation("CMSUpdater.exe launched successfully with PID: {UpdaterPID}", updaterProcess.Id);
-                return true;
+                finally
+                {
+                    if (updaterProcess != null && !updaterProcess.HasExited)
+                    {
+                        updaterProcess.EnableRaisingEvents = true;
+                        updaterProcess.Exited += (sender, e) => 
+                        {
+                            _logger.LogInformation("CMSUpdater.exe process exited with code: {ExitCode}", updaterProcess.ExitCode);
+                        };
+                    }
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error launching CMSUpdater.exe.");
+                _logger.LogError(ex, "Error launching CMSUpdater.exe");
                 return false;
             }
         }
@@ -254,5 +333,18 @@ namespace CMSAgent.Service.Update
                 _logger.LogWarning("Version {TargetVersion} has been added to ignore list due to update failure.", targetVersion);
             }
         }
+    }
+
+    public class UpdateManifest
+    {
+        public string version { get; set; } = string.Empty;
+        public string releaseDate { get; set; } = string.Empty;
+        public List<UpdateFile> files { get; set; } = new List<UpdateFile>();
+    }
+
+    public class UpdateFile
+    {
+        public string path { get; set; } = string.Empty;
+        public string checksum { get; set; } = string.Empty;
     }
 }

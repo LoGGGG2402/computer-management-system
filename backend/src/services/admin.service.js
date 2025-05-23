@@ -121,7 +121,7 @@ class AdminService {
 
       if (
         versionData.client_checksum &&
-        versionData.client_checksum !== serverChecksum
+        versionData.client_checksum.toLowerCase() !== serverChecksum.toLowerCase()
       ) {
         if (fs.existsSync(file.path)) {
           fs.unlinkSync(file.path);

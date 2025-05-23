@@ -86,6 +86,7 @@ namespace CMSAgent.Shared.Constants
         public const string UpdateErrorTypeUpdateLaunchFailed = "UpdateLaunchFailed";
         public const string UpdateErrorTypeStartAgentFailed = "StartAgentFailed";
         public const string UpdateErrorTypeUpdateGeneralFailure = "UpdateGeneralFailure";
+        public const string UpdateErrorTypeInvalidPackage = "InvalidPackage";
 
         // --- Log file date format ---
         public const string LogFileDateFormat = "yyyyMMdd";

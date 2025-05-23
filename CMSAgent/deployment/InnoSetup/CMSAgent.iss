@@ -2,6 +2,9 @@
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Computer Management System"
 #define MyAppExeName "CMSAgent.Service.exe"
+#define MyServiceName "CMSAgent"
+#define MyServiceDisplayName "Computer Management System Agent"
+#define MyServiceDescription "Agent collects system information and executes tasks for the Computer Management System."
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
@@ -11,13 +14,19 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
-; Uncomment the following line to run in administrative install mode (install for all users.)
+; Require admin privileges
 PrivilegesRequired=admin
+; Require admin rights for all users
+PrivilegesRequiredOverridesAllowed=dialog
+; Show UAC shield icon
+SetupIconFile=icon.ico
 OutputDir=Output
 OutputBaseFilename=Setup.CMSAgent.v{#MyAppVersion}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+; Add uninstall log
+UninstallLogMode=overwrite
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -27,16 +36,29 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Updater\CMSUpdater.exe"; DestDir: "{app}\Updater"; Flags: ignoreversion
+Source: "appsettings.json"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Parameters: "configure"; Description: "Configure CMSAgent"; Flags: postinstall nowait
+; Run configure first
+Filename: "{app}\{#MyAppExeName}"; Parameters: "configure"; Description: "Configure CMSAgent"; Flags: postinstall waituntilterminated runasoriginaluser
 
 [Code]
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  // Check if running with admin rights
+  if not IsAdmin then
+  begin
+    MsgBox('This setup requires administrator privileges. Please run as administrator.', mbError, MB_OK);
+    Result := False;
+  end;
+end;
+
 procedure InitializeWizard;
 begin
   // Create required directories
@@ -59,6 +81,8 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
 begin
   if CurStep = ssPostInstall then
   begin
@@ -66,9 +90,47 @@ begin
     Exec('icacls.exe', ExpandConstant('"{commonappdata}\CMSAgent" /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /grant "BUILTIN\Administrators:(OI)(CI)RX"'), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     
     // Register Windows Service
-    Exec('sc.exe', 'create CMSAgentService binPath= "' + ExpandConstant('{app}\{#MyAppExeName}') + '" start= auto DisplayName= "Computer Management System Agent"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('sc.exe', 'create {#MyServiceName} binPath= "' + ExpandConstant('{app}\{#MyAppExeName}') + '" start= auto DisplayName= "{#MyServiceDisplayName}"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    
+    // Set service description
+    Exec('sc.exe', 'description {#MyServiceName} "{#MyServiceDescription}"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     
     // Register Event Log Source
-    Exec('eventcreate.exe', '/ID 1 /L APPLICATION /T INFORMATION /SO CMSAgentService /D "Computer Management System Agent Service"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('eventcreate.exe', '/ID 1 /L APPLICATION /T INFORMATION /SO {#MyServiceName} /D "{#MyServiceDescription}"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    
+    // Run configure first
+    Exec(ExpandConstant('{app}\{#MyAppExeName}'), 'configure', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
+    
+    // Only start the service if configure was successful
+    if ResultCode = 0 then
+    begin
+      // Start the service
+      Exec('sc.exe', 'start {#MyServiceName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    end;
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    // Stop and delete service before uninstall
+    Exec('sc.exe', 'stop {#MyServiceName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('sc.exe', 'delete {#MyServiceName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end; 
+
+
+
+
+
+
+
+
+
+
+
+
+

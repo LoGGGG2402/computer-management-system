@@ -43,28 +43,21 @@ class AdminService {
   }
 
   /**
-   * Upload a new agent package version.
-   * Requires admin privileges.
-   * @param {FormData} formData - FormData object containing:
-   * - package {File} - Agent package file (required).
-   * - version {string} - Semantic version string (e.g., '1.0.0') (required).
-   * - notes {string} - Release notes for this version (optional).
-   * @returns {Promise<Object>} Created agent version data.
-   * API Doc Response: { status: "success", message, data: { id, version, ... } }
-   * @throws {Error} If agent package upload fails.
+   * Upload a new agent package
+   * @param {FormData} formData - FormData containing package file and metadata
+   * @returns {Promise<Object>} Created agent version
    */
   async uploadAgentPackage(formData) {
     try {
       const response = await api.post('/admin/agents/versions', formData, {
         headers: {
-          // Axios automatically sets Content-Type to multipart/form-data when data is FormData
+          'Content-Type': 'multipart/form-data',
         },
       });
-      return response.data.data;
+      return response.data;
     } catch (error) {
-      const errorMessage = error.extractedMessage || 'Failed to upload agent package.';
-      console.error('Error uploading agent package:', errorMessage, error);
-      throw new Error(errorMessage);
+      console.error('Error uploading agent package:', error);
+      throw error;
     }
   }
 

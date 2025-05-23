@@ -5,6 +5,7 @@ using System.Runtime.Versioning;
 using CMSAgent.Shared; 
 using CMSAgent.Shared.Utils; 
 using CMSAgent.Shared.Constants; 
+using System.Text.Json;
 
 namespace CMSUpdater
 {
@@ -194,29 +195,97 @@ namespace CMSUpdater
                     return false;
                 }
 
-                // Tạo thư mục tạm thời cho phiên bản mới
-                string tempInstallDir = _config.AgentInstallDirectory + ".new";
-                if (Directory.Exists(tempInstallDir))
+                // Verify manifest.json exists
+                string manifestPath = Path.Combine(_config.NewAgentExtractedPath, "manifest.json");
+                if (!File.Exists(manifestPath))
                 {
-                    _logger.LogWarning("Temporary installation directory exists, will be deleted: {TempDir}", tempInstallDir);
-                    Directory.Delete(tempInstallDir, true);
-                }
-                Directory.CreateDirectory(tempInstallDir);
-
-                // Sao chép các file mới vào thư mục tạm thời
-                _logger.LogInformation("Copying new files to temporary directory: {TempDir}", tempInstallDir);
-                await Task.Run(() => FileUtils.CopyDirectory(_config.NewAgentExtractedPath, tempInstallDir, true));
-
-                // Xóa thư mục cài đặt cũ
-                if (Directory.Exists(_config.AgentInstallDirectory))
-                {
-                    _logger.LogInformation("Deleting old installation directory: {InstallDir}", _config.AgentInstallDirectory);
-                    Directory.Delete(_config.AgentInstallDirectory, true);
+                    _logger.LogError("manifest.json not found in update package: {ManifestPath}", manifestPath);
+                    return false;
                 }
 
-                // Di chuyển thư mục tạm thời thành thư mục cài đặt chính thức
-                _logger.LogInformation("Moving temporary directory to final installation directory");
-                Directory.Move(tempInstallDir, _config.AgentInstallDirectory);
+                // Read and parse manifest.json
+                string manifestContent = await File.ReadAllTextAsync(manifestPath);
+                var manifest = JsonSerializer.Deserialize<UpdateManifest>(manifestContent);
+                if (manifest == null)
+                {
+                    _logger.LogError("Failed to parse manifest.json");
+                    return false;
+                }
+
+                // Create installation directory if it doesn't exist
+                if (!Directory.Exists(_config.AgentInstallDirectory))
+                {
+                    Directory.CreateDirectory(_config.AgentInstallDirectory);
+                }
+
+                // Delete only files listed in manifest
+                _logger.LogInformation("Deleting files listed in manifest from installation directory: {InstallDir}", _config.AgentInstallDirectory);
+                foreach (var file in manifest.files)
+                {
+                    // Skip files in Updater directory
+                    if (file.path.StartsWith("Updater\\", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogInformation("Skipping Updater file: {FilePath}", file.path);
+                        continue;
+                    }
+
+                    string targetPath = Path.Combine(_config.AgentInstallDirectory, file.path);
+                    if (File.Exists(targetPath))
+                    {
+                        try
+                        {
+                            File.Delete(targetPath);
+                            _logger.LogInformation("Deleted file: {FilePath}", file.path);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Could not delete file: {FilePath}", file.path);
+                        }
+                    }
+                }
+
+                // Copy new files from manifest
+                _logger.LogInformation("Moving new files to installation directory: {InstallDir}", _config.AgentInstallDirectory);
+                
+                foreach (var file in manifest.files)
+                {
+                    // Skip files in Updater directory
+                    if (file.path.StartsWith("Updater\\", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogInformation("Skipping Updater file: {FilePath}", file.path);
+                        continue;
+                    }
+
+                    string sourcePath = Path.Combine(_config.NewAgentExtractedPath, file.path);
+                    string targetPath = Path.Combine(_config.AgentInstallDirectory, file.path);
+
+                    // Create target directory if it doesn't exist
+                    string? targetDir = Path.GetDirectoryName(targetPath);
+                    if (!string.IsNullOrEmpty(targetDir) && !Directory.Exists(targetDir))
+                    {
+                        Directory.CreateDirectory(targetDir);
+                    }
+
+                    // Move file instead of copy
+                    if (File.Exists(sourcePath))
+                    {
+                        try
+                        {
+                            File.Move(sourcePath, targetPath, true);
+                            _logger.LogInformation("Moved file: {FilePath}", file.path);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Failed to move file: {FilePath}", file.path);
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogError("File not found in update package: {FilePath}", file.path);
+                        return false;
+                    }
+                }
 
                 _logger.LogInformation("Agent file replacement completed successfully.");
                 return true;
@@ -230,22 +299,6 @@ namespace CMSUpdater
                     new { Step = "ReplaceAgentFilesAsync", SourcePath = _config.NewAgentExtractedPath, InstallDir = _config.AgentInstallDirectory }
                 );
                 _logger.LogError("AgentErrorReport: {@ErrorReport}", errorReport);
-
-                // Dọn dẹp thư mục tạm thời nếu có lỗi
-                string tempInstallDir = _config.AgentInstallDirectory + ".new";
-                if (Directory.Exists(tempInstallDir))
-                {
-                    try
-                    {
-                        Directory.Delete(tempInstallDir, true);
-                        _logger.LogInformation("Cleaned up temporary installation directory after error");
-                    }
-                    catch (Exception cleanupEx)
-                    {
-                        _logger.LogWarning(cleanupEx, "Failed to clean up temporary installation directory: {TempDir}", tempInstallDir);
-                    }
-                }
-
                 return false;
             }
         }
@@ -550,5 +603,19 @@ namespace CMSUpdater
             }
         }
         #endregion
+
+        // Add UpdateManifest class if not exists
+        private class UpdateManifest
+        {
+            public string version { get; set; } = string.Empty;
+            public string releaseDate { get; set; } = string.Empty;
+            public List<UpdateFile> files { get; set; } = new List<UpdateFile>();
+        }
+
+        private class UpdateFile
+        {
+            public string path { get; set; } = string.Empty;
+            public string checksum { get; set; } = string.Empty;
+        }
     }
 }

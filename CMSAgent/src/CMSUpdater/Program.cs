@@ -34,7 +34,7 @@ namespace CMSUpdater
                     NewAgentVersion = context.ParseResult.GetValueForOption(newVersionOption)!,
                     OldAgentVersion = context.ParseResult.GetValueForOption(oldVersionOption)!,
                     NewAgentExtractedPath = context.ParseResult.GetValueForOption(sourcePathOption)!,
-                    AgentInstallDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), AgentConstants.ServiceName),
+                    AgentInstallDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), AgentConstants.ServiceName),
                     AgentProgramDataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), AgentConstants.AgentProgramDataFolderName),
                     ServiceWaitTimeoutSeconds = context.ParseResult.GetValueForOption(serviceWaitTimeoutOption),
                     NewAgentWatchdogPeriodSeconds = context.ParseResult.GetValueForOption(watchdogPeriodOption)
@@ -51,6 +51,10 @@ namespace CMSUpdater
             var configuration = new ConfigurationBuilder()
                 .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                 .Build();
+
+            // Ensure log directory exists
+            var logDirectory = Path.Combine(config.AgentProgramDataDirectory, "logs");
+            Directory.CreateDirectory(logDirectory);
 
             SerilogConfigurator.Configure(
                 configuration,

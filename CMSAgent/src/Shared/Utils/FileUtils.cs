@@ -42,7 +42,7 @@ namespace CMSAgent.Shared.Utils
                 var sb = new StringBuilder();
                 foreach (byte b in hashBytes)
                 {
-                    sb.Append(b.ToString("x2"));
+                    sb.Append(b.ToString("X2"));
                 }
                 return sb.ToString();
             }

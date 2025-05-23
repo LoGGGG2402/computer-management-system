@@ -101,8 +101,8 @@ class AdminController {
         });
       }
 
-      const maxSize = 50 * 1024 * 1024;
-      const regex = /^eag-agent-v\d+\.\d+\.\d+\.(zip|gz|tar|tar\.gz)$/;
+      const maxSize = 1000 * 1024 * 1024;
+      const regex = /^CMSAgent\.v\d+\.\d+\.\d+\.zip$/;
       if (!regex.test(req.file.originalname)) {
         errors.push({
           field: "file",
@@ -112,7 +112,7 @@ class AdminController {
       if (req.file.size > maxSize) {
         errors.push({
           field: "file",
-          message: "File size must not exceed 50MB",
+          message: "File size must not exceed 1000MB",
         });
       }
 
@@ -153,6 +153,18 @@ class AdminController {
       }
 
       if (errors.length > 0) {
+        // Delete the uploaded file if validation fails
+        if (req.file?.path && fs.existsSync(req.file.path)) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch (cleanupError) {
+            logger.error("Error deleting invalid upload file:", {
+              error: cleanupError.message,
+              userId: req.user?.id,
+              filename: req.file.filename,
+            });
+          }
+        }
         return res.status(400).json({
           status: "error",
           message: errors[0].message,

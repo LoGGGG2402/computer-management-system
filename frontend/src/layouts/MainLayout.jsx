@@ -59,18 +59,34 @@ const NotificationHandler = () => {
           <div 
             onClick={async () => {
               try {
-                await navigator.clipboard.writeText(data.mfaCode);
+                // Try using the Clipboard API first
+                if (navigator?.clipboard?.writeText) {
+                  await navigator.clipboard.writeText(data.mfaCode);
+                } else {
+                  // Fallback to older execCommand method
+                  const textArea = document.createElement('textarea');
+                  textArea.value = data.mfaCode;
+                  document.body.appendChild(textArea);
+                  textArea.select();
+                  const successful = document.execCommand('copy');
+                  document.body.removeChild(textArea);
+                  
+                  if (!successful) {
+                    throw new Error('Fallback copy method failed');
+                  }
+                }
                 toast.dismiss(t.id);
                 toast.success('MFA code copied to clipboard!');
               } catch (err) {
-                toast.error('Failed to copy MFA code');
+                console.error('Failed to copy to clipboard:', err);
+                toast.error('Failed to copy MFA code - please copy it manually');
               }
             }}
             className="cursor-pointer p-1"
           >
             <div className="font-bold text-blue-600">New Agent MFA</div>
             <div>Agent requires MFA verification with code:</div>
-            <div className="bg-gray-100 px-2 py-1 rounded my-1 font-mono">{data.mfaCode}</div>
+            <div className="bg-gray-100 px-2 py-1 rounded my-1 font-mono select-all">{data.mfaCode}</div>
             {positionInfoText && (
               <div className="text-sm text-gray-600 mt-1">
                 {positionInfoText.split('\n').map((line, i) => (

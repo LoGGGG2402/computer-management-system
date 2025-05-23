@@ -209,7 +209,7 @@ const agentPackageUpload = multer({
   storage: agentPackageStorage,
   fileFilter: agentPackageFileFilter,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50 MB max file size
+    fileSize: 1000 * 1024 * 1024, // 50 MB max file size
     files: 1, // Maximum one file per request
   },
 });
