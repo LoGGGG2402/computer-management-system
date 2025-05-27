@@ -38,7 +38,9 @@ Write-Host "Updated version in appsettings.json to $version"
 # Build the project
 Write-Host "Building CMSAgent.Service..."
 dotnet publish $projectPath -c $configuration -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true /p:PublishReadyToRun=true /p:ApplicationIcon=$iconPath
-
+# Build the updater
+Write-Host "Building CMSUpdater..."
+dotnet publish src\CMSUpdater\CMSUpdater.csproj -c $configuration -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true /p:PublishReadyToRun=true
 # Create update package directory
 $updatePackageDir = "$updateOutputDir\v$version"
 New-Item -ItemType Directory -Force -Path $updatePackageDir
@@ -52,6 +54,9 @@ Copy-Item "src\CMSAgent.Service\appsettings.json" -Destination $updatePackageDir
 
 # Copy updater
 Copy-Item "src\CMSUpdater\bin\$configuration\net8.0\win-x64\publish\CMSUpdater.exe" -Destination "$updatePackageDir\Updater"
+
+# Copy updater appsettings.json
+Copy-Item "src\CMSUpdater\appsettings.json" -Destination "$updatePackageDir\Updater"
 
 # Verify file integrity
 $serviceHash = Get-FileHash -Path "$updatePackageDir\CMSAgent.Service.exe" -Algorithm SHA256
@@ -75,6 +80,10 @@ $manifest = @{
         @{
             path = "Updater\CMSUpdater.exe"
             checksum = $updaterHash.Hash
+        },
+        @{
+            path = "Updater\appsettings.json"
+            checksum = (Get-FileHash "$updatePackageDir\Updater\appsettings.json" -Algorithm SHA256).Hash
         }
     )
 }
