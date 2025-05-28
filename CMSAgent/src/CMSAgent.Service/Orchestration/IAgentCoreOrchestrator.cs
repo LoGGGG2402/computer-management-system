@@ -1,3 +1,7 @@
+using System.Threading;
+using System.Threading.Tasks;
+using CMSAgent.Shared.Enums;
+
 namespace CMSAgent.Service.Orchestration
 {
     /// <summary>
@@ -18,12 +22,5 @@ namespace CMSAgent.Service.Orchestration
         /// </summary>
         /// <param name="cancellationToken">Token to limit stop time.</param>
         Task StopAsync(CancellationToken cancellationToken);
-
-        /// <summary>
-        /// Run initial configuration process for Agent.
-        /// Called when Agent runs with "configure" parameter.
-        /// </summary>
-        /// <returns>True if configuration is successful, False otherwise.</returns>
-        Task<bool> RunInitialConfigurationAsync(CancellationToken cancellationToken = default);
     }
 }

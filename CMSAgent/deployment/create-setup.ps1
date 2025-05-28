@@ -5,7 +5,7 @@
 $version = "1.0.0" # Update this for each release
 $configuration = "Release"
 $projectPath = "src\CMSAgent.Service\CMSAgent.Service.csproj"
-$innoSetupPath = "C:\Users\longpph\AppData\Local\Programs\Inno Setup 6\ISCC.exe"
+$innoSetupPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 $outputDir = "deployment\output"
 $setupOutputDir = "$outputDir\setup"
 $backupDir = "$outputDir\backup"

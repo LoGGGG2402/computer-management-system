@@ -6,6 +6,7 @@ using CMSAgent.Service.Workers;
 using CMSAgent.Service.Orchestration;
 using CMSAgent.Service.Configuration.Models;
 using CMSAgent.Service.Configuration.Manager;
+using CMSAgent.Service.Configuration;
 using CMSAgent.Shared.Logging;
 using CMSAgent.Shared.Constants;
 using CMSAgent.Shared; // For IVersionIgnoreManager, VersionIgnoreManager
@@ -108,19 +109,18 @@ namespace CMSAgent.Service
                 if (isConfigureModeFromArg)
                 {
                     Log.Information("Running in configuration mode (configure)...");
-                    var orchestrator = host.Services.GetRequiredService<IAgentCoreOrchestrator>();
-                    bool configSuccess = await orchestrator.RunInitialConfigurationAsync();
+                    var configurator = host.Services.GetRequiredService<AgentConfigurator>();
+                    bool configSuccess = await configurator.RunInitialConfigurationAsync();
                     if (configSuccess)
                     {
                         Log.Information("Configuration completed successfully. Agent will need to be started (as a service) to operate.");
-                        // Consider: should we automatically start the service after successful configuration? (Installer typically handles this)
+                        return 0; // Success
                     }
                     else
                     {
                         Log.Error("Configuration process failed.");
+                        return 1; // Failure
                     }
-                    // Whether successful or failed, configure mode only runs once then exits.
-                    return configSuccess ? 0 : 1;
                 }
 
                 // --- Run Host (Service or Debug Console) ---
@@ -217,38 +217,24 @@ namespace CMSAgent.Service
                 {
                     // --- Register Configuration ---
                     services.Configure<AppSettings>(hostContext.Configuration.GetSection("AppSettings"));
-                    // Ensure AppSettings is loaded and has AgentInstanceGuid before MutexManager is created
-                    // Validate AppSettings, especially AgentInstanceGuid
                     var appSettings = hostContext.Configuration.GetSection("AppSettings").Get<AppSettings>();
                     Log.Information("AppSettings: {AppSettings}", JsonSerializer.Serialize(appSettings));
                     if (appSettings == null || string.IsNullOrWhiteSpace(appSettings.AgentInstanceGuid))
                     {
-                        // Log using temporary logger if ILogger is not ready
                         Log.Warning("AgentInstanceGuid not found or empty in appsettings.json. " +
                                    "Mutex will use a default GUID (less secure) or application may not start properly.");
-                        // Consider throwing exception here if AgentInstanceGuid is mandatory.
-                        // If not thrown, MutexManager will throw when there's no GUID.
-                        // For simplicity, we'll let MutexManager handle it.
                     }
 
                     services.AddSingleton<IRuntimeConfigManager, RuntimeConfigManager>();
 
-                    // --- Register Shared Services ---
-                    services.AddSingleton<IVersionIgnoreManager>(provider =>
-                        new VersionIgnoreManager(
-                            provider.GetRequiredService<IRuntimeConfigManager>().GetAgentProgramDataPath(),
-                            provider.GetRequiredService<ILogger<VersionIgnoreManager>>()
-                        )
-                    );
-
                     // --- Register Security ---
                     services.AddSingleton<IDpapiProtector, DpapiProtector>();
-                    services.AddSingleton<MutexManager>(); // Singleton because it manages global resource
+                    services.AddSingleton<MutexManager>();
 
                     // --- Register Communication ---
-                    services.AddHttpClient(); // Register IHttpClientFactory
-                    services.AddSingleton<IAgentApiClient, AgentApiClient>(); // Change to singleton
-                    services.AddHttpClient<AgentApiClient>() // Add HttpClient configuration
+                    services.AddHttpClient();
+                    services.AddSingleton<IAgentApiClient, AgentApiClient>();
+                    services.AddHttpClient<AgentApiClient>()
                         .AddPolicyHandler((serviceProvider, request) =>
                         {
                             var settings = serviceProvider.GetRequiredService<IOptions<AppSettings>>().Value.HttpRetryPolicy;
@@ -256,46 +242,58 @@ namespace CMSAgent.Service
                             return RetryPolicies.GetHttpRetryPolicy(settings, logger);
                         });
 
-                    services.AddSingleton<IAgentSocketClient, AgentSocketClient>();
+                    // --- Register Configurator ---
+                    services.AddSingleton<AgentConfigurator>();
 
-                    // --- Register Monitoring ---
-                    services.AddTransient<IHardwareCollector, HardwareCollector>(); // Transient because typically used only once when needed
-                    services.AddSingleton<IResourceMonitor, ResourceMonitor>(); // Singleton because runs continuously in background
+                    // Chỉ đăng ký các dịch vụ khác nếu không phải chế độ configure
+                    if (!isConfigureMode)
+                    {
+                        // --- Register Shared Services ---
+                        services.AddSingleton<IVersionIgnoreManager>(provider =>
+                            new VersionIgnoreManager(
+                                provider.GetRequiredService<IRuntimeConfigManager>().GetAgentProgramDataPath(),
+                                provider.GetRequiredService<ILogger<VersionIgnoreManager>>()
+                            )
+                        );
 
-                    // --- Register Commands ---
-                    services.AddSingleton<ICommandHandlerFactory, CommandHandlerFactory>();
-                    services.AddTransient<ConsoleCommandHandler>();
-                    services.AddTransient<SystemActionCommandHandler>();
-                    services.AddTransient<SoftwareInstallCommandHandler>();
-                    services.AddTransient<SoftwareUninstallCommandHandler>();
-                    services.AddTransient<GetLogsCommandHandler>();
-                    // Register other ICommandHandlers here
+                        // --- Register Communication ---
+                        services.AddSingleton<IAgentSocketClient, AgentSocketClient>();
 
-                    services.AddSingleton<CommandQueue>();
+                        // --- Register Monitoring ---
+                        services.AddTransient<IHardwareCollector, HardwareCollector>();
+                        services.AddSingleton<IResourceMonitor, ResourceMonitor>();
 
-                    // --- Register Update ---
-                    // Func<Task> requestServiceShutdown will be created and passed from AgentCoreOrchestrator or AgentWorker
-                    // Currently, we'll let AgentUpdateManager receive IHostApplicationLifetime to request stop itself
-                    services.AddSingleton<IAgentUpdateManager>(provider =>
-                        new AgentUpdateManager(
-                            provider.GetRequiredService<ILogger<AgentUpdateManager>>(),
-                            provider.GetRequiredService<IOptions<AppSettings>>(),
-                            provider.GetRequiredService<IAgentApiClient>(),
-                            provider.GetRequiredService<IVersionIgnoreManager>(),
-                            provider.GetRequiredService<IRuntimeConfigManager>(),
-                            async () => // This is Func<Task> requestServiceShutdown
-                            {
-                                var lifetime = provider.GetRequiredService<IHostApplicationLifetime>();
-                                provider.GetRequiredService<ILogger<AgentUpdateManager>>().LogInformation("Requesting service stop from AgentUpdateManager...");
-                                lifetime.StopApplication(); // Request host stop
-                                await Task.CompletedTask;
-                            }
-                        )
-                    );
+                        // --- Register Commands ---
+                        services.AddSingleton<ICommandHandlerFactory, CommandHandlerFactory>();
+                        services.AddTransient<ConsoleCommandHandler>();
+                        services.AddTransient<SystemActionCommandHandler>();
+                        services.AddTransient<SoftwareInstallCommandHandler>();
+                        services.AddTransient<SoftwareUninstallCommandHandler>();
+                        services.AddTransient<GetLogsCommandHandler>();
+                        services.AddSingleton<CommandQueue>();
 
-                    // --- Register Orchestration & Worker ---
-                    services.AddSingleton<IAgentCoreOrchestrator, AgentCoreOrchestrator>();
-                    services.AddHostedService<AgentWorker>(); // Register main worker
+                        // --- Register Update ---
+                        services.AddSingleton<IAgentUpdateManager>(provider =>
+                            new AgentUpdateManager(
+                                provider.GetRequiredService<ILogger<AgentUpdateManager>>(),
+                                provider.GetRequiredService<IOptions<AppSettings>>(),
+                                provider.GetRequiredService<IAgentApiClient>(),
+                                provider.GetRequiredService<IVersionIgnoreManager>(),
+                                provider.GetRequiredService<IRuntimeConfigManager>(),
+                                async () =>
+                                {
+                                    var lifetime = provider.GetRequiredService<IHostApplicationLifetime>();
+                                    provider.GetRequiredService<ILogger<AgentUpdateManager>>().LogInformation("Requesting service stop from AgentUpdateManager...");
+                                    lifetime.StopApplication();
+                                    await Task.CompletedTask;
+                                }
+                            )
+                        );
+
+                        // --- Register Orchestration & Worker ---
+                        services.AddSingleton<IAgentCoreOrchestrator, AgentCoreOrchestrator>();
+                        services.AddHostedService<AgentWorker>();
+                    }
 
                     Log.Information("All services have been registered.");
                 })
