@@ -4,6 +4,7 @@ using CMSAgent.Service.Configuration.Models;
 using CMSAgent.Service.Security;
 using CMSAgent.Shared.Enums;
 using Microsoft.Extensions.Options;
+using System.IO;
 
 namespace CMSAgent.Service.Configuration
 {
@@ -14,6 +15,8 @@ namespace CMSAgent.Service.Configuration
         private readonly IDpapiProtector _dpapiProtector;
         private readonly IAgentApiClient _apiClient;
         private readonly AppSettings _appSettings;
+        private const string CONFIG_FAILURE_FILE = "C:\\ProgramData\\CMSAgent\\config_failure.flag";
+        private const int MAX_MFA_RETRIES = 3;
 
         public AgentConfigurator(
             ILogger<AgentConfigurator> logger,
@@ -27,6 +30,52 @@ namespace CMSAgent.Service.Configuration
             _dpapiProtector = dpapiProtector ?? throw new ArgumentNullException(nameof(dpapiProtector));
             _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
             _appSettings = appSettingsOptions?.Value ?? throw new ArgumentNullException(nameof(appSettingsOptions));
+        }
+
+        private void CreateConfigFailureFlag()
+        {
+            try
+            {
+                File.WriteAllText(CONFIG_FAILURE_FILE, string.Empty);
+                _logger.LogInformation("Created configuration failure flag file");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create configuration failure flag file");
+            }
+        }
+
+        private async Task<(string status, string? token, string? errorMessage)> HandleMfaVerificationAsync(
+            string agentId, 
+            PositionInfo positionInfo, 
+            CancellationToken cancellationToken)
+        {
+            int mfaRetryCount = 0;
+            while (mfaRetryCount < MAX_MFA_RETRIES)
+            {
+                Console.Write($"Enter MFA code (OTP) (Attempt {mfaRetryCount + 1}/{MAX_MFA_RETRIES}): ");
+                string? mfaCode = Console.ReadLine()?.Trim();
+                if (string.IsNullOrWhiteSpace(mfaCode))
+                {
+                    _logger.LogError("MFA code not entered.");
+                    Console.WriteLine("Error: MFA code cannot be empty.");
+                    mfaRetryCount++;
+                    continue;
+                }
+
+                var (status, token, errorMessage) = await _apiClient.VerifyMfaAsync(agentId, mfaCode, cancellationToken);
+                if (status == "success" && !string.IsNullOrWhiteSpace(token))
+                {
+                    return (status, token, errorMessage);
+                }
+
+                _logger.LogError("MFA verification failed. Status: {Status}, Error: {ErrorMessage}", status, errorMessage);
+                Console.WriteLine($"Error: MFA verification failed. {errorMessage}");
+                mfaRetryCount++;
+            }
+
+            Console.WriteLine("\nMaximum MFA retry attempts reached. Please start configuration again.");
+            return ("mfa_retry", null, "Maximum MFA retry attempts reached");
         }
 
         public async Task<bool> RunInitialConfigurationAsync(CancellationToken cancellationToken = default)
@@ -61,6 +110,7 @@ namespace CMSAgent.Service.Configuration
             {
                 _logger.LogError("Invalid position information.");
                 Console.WriteLine("Error: Invalid position information. Please enter correct format.");
+                CreateConfigFailureFlag();
                 return false;
             }
             var positionInfo = new PositionInfo { RoomName = roomName, PosX = posX, PosY = posY };
@@ -72,17 +122,13 @@ namespace CMSAgent.Service.Configuration
             if (status == "mfa_required")
             {
                 _logger.LogInformation("Server requires MFA.");
-                Console.Write("Enter MFA code (OTP): ");
-                string? mfaCode = Console.ReadLine()?.Trim();
-                if (string.IsNullOrWhiteSpace(mfaCode))
+                (status, receivedToken, errorMessage) = await HandleMfaVerificationAsync(agentId, positionInfo, cancellationToken);
+                
+                if (status == "mfa_retry")
                 {
-                    _logger.LogError("MFA code not entered.");
-                    Console.WriteLine("Error: MFA code cannot be empty.");
-                    return false;
+                    // Retry the entire configuration process
+                    return await RunInitialConfigurationAsync(cancellationToken);
                 }
-
-                // Retry Identify with MFA code
-                (status, receivedToken, errorMessage) = await _apiClient.VerifyMfaAsync(agentId, mfaCode, cancellationToken);
             }
 
             if (status != "success" || string.IsNullOrWhiteSpace(receivedToken))
@@ -91,7 +137,7 @@ namespace CMSAgent.Service.Configuration
                 Console.WriteLine($"Error: Agent identification failed. {errorMessage}");
                 
                 // Check if error is due to server connection failure
-                if (errorMessage.Contains("Network error") || errorMessage.Contains("connection attempt failed"))
+                if (errorMessage?.Contains("Network error") == true || errorMessage?.Contains("connection attempt failed") == true)
                 {
                     Console.WriteLine("\nPlease check the CMSAgent.iss installation file:");
                     Console.WriteLine("1. Ensure the server is running and accessible");
@@ -101,9 +147,19 @@ namespace CMSAgent.Service.Configuration
                     Console.WriteLine("1. Uninstall current CMSAgent");
                     Console.WriteLine("2. Delete C:\\ProgramData\\CMSAgent directory");
                     Console.WriteLine("3. Reinstall CMSAgent");
+                    CreateConfigFailureFlag();
+                    return false;
                 }
-                
-                return false;
+
+                // For other errors, ask user if they want to retry
+                Console.Write("\nDo you want to retry configuration? (y/n): ");
+                string? retryResponse = Console.ReadLine()?.Trim().ToLower();
+                if (retryResponse != "y")
+                {
+                    CreateConfigFailureFlag();
+                    return false;
+                }
+                return await RunInitialConfigurationAsync(cancellationToken);
             }
 
             // 4. Save configuration
@@ -118,6 +174,7 @@ namespace CMSAgent.Service.Configuration
                 {
                     _logger.LogError("Failed to encrypt token.");
                     Console.WriteLine("Error: Failed to encrypt token.");
+                    CreateConfigFailureFlag();
                     return false;
                 }
                 await _runtimeConfigManager.UpdateEncryptedAgentTokenAsync(encryptedToken);
@@ -130,6 +187,7 @@ namespace CMSAgent.Service.Configuration
             {
                 _logger.LogError(ex, "Error saving configuration.");
                 Console.WriteLine($"Error: Failed to save configuration. {ex.Message}");
+                CreateConfigFailureFlag();
                 return false;
             }
         }
