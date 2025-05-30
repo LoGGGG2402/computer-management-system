@@ -34,7 +34,7 @@ namespace CMSUpdater
                     NewAgentVersion = context.ParseResult.GetValueForOption(newVersionOption)!,
                     OldAgentVersion = context.ParseResult.GetValueForOption(oldVersionOption)!,
                     NewAgentExtractedPath = context.ParseResult.GetValueForOption(sourcePathOption)!,
-                    AgentInstallDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), AgentConstants.ServiceName),
+                    AgentInstallDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), AgentConstants.ServiceName),
                     AgentProgramDataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), AgentConstants.AgentProgramDataFolderName),
                     ServiceWaitTimeoutSeconds = context.ParseResult.GetValueForOption(serviceWaitTimeoutOption),
                     NewAgentWatchdogPeriodSeconds = context.ParseResult.GetValueForOption(watchdogPeriodOption)

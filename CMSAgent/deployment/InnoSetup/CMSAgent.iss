@@ -8,7 +8,7 @@
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
-AppId={{A1B2C3D4-E5F6-4A5B-8C7D-9E0F1A2B3C4D}}
+AppId={{LoGGGGG2402}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
@@ -27,9 +27,9 @@ SolidCompression=yes
 WizardStyle=modern
 ; Add uninstall log
 UninstallLogMode=overwrite
-
-[Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
+; Force 64-bit mode
+ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64compatible
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -201,14 +201,27 @@ begin
     // Cleanup installation
     CleanupInstallation();
     
-    // Show completion message
-    MsgBox('CMSAgent has been completely removed from your system.', mbInformation, MB_OK);
+    // Check if cleanup was successful
+    if ResultCode = 0 then
+    begin
+      // Show completion message
+      MsgBox('CMSAgent has been completely removed from your system.', mbInformation, MB_OK);
+    end
+    else
+    begin
+      MsgBox('There was an error during uninstallation. Some files may not have been removed properly.', mbError, MB_OK);
+    end;
   end;
 end;
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
 Type: filesandordirs; Name: "{commonappdata}\CMSAgent" 
+
+
+
+
+
 
 
 

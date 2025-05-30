@@ -67,6 +67,12 @@ namespace CMSUpdater
                     return false;
                 }
 
+                // Update version in registry
+                if (!UpdateVersionInRegistry())
+                {
+                    _logger.LogWarning("Failed to update version in registry, but installation was successful.");
+                }
+
                 await CleanupAsync();
 
                 _logger.LogInformation("===== Agent Update Process Completed Successfully! =====");
@@ -343,6 +349,45 @@ namespace CMSUpdater
             stopwatch.Stop();
             _logger.LogInformation("New Agent Service operated stably during monitoring period.");
             return true;
+        }
+
+        /// <summary>
+        /// Updates the version information in the Windows Registry after successful installation.
+        /// </summary>
+        /// <returns>True if update was successful, false otherwise.</returns>
+        [SupportedOSPlatform("windows")]
+        private bool UpdateVersionInRegistry()
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                _logger.LogWarning("Registry update is only supported on Windows.");
+                return false;
+            }
+
+            try
+            {
+                const string registryKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{LoGGGGG2402}}_is1";
+                using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(registryKey, true);
+                
+                if (key == null)
+                {
+                    _logger.LogError("Registry key not found: {RegistryKey}", registryKey);
+                    return false;
+                }
+
+                // Update version values
+                key.SetValue("DisplayVersion", _config.NewAgentVersion);
+                key.SetValue("VersionMajor", _config.NewAgentVersion.Split('.')[0]);
+                key.SetValue("VersionMinor", _config.NewAgentVersion.Split('.')[1]);
+                
+                _logger.LogInformation("Successfully updated version in registry: {NewVersion}", _config.NewAgentVersion);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating version in registry");
+                return false;
+            }
         }
 
         /// <summary>
