@@ -39,7 +39,7 @@ Write-Host "Updated version in appsettings.json to $version"
 # Update version in CMSAgent.iss
 $issPath = "deployment\InnoSetup\CMSAgent.iss"
 $issContent = Get-Content $issPath -Raw
-$issContent = $issContent -replace 'MyAppVersion="[^"]*"', "MyAppVersion=`"$version`""
+$issContent = $issContent -replace '#define MyAppVersion "[^"]*"', "#define MyAppVersion `"$version`""
 Set-Content -Path $issPath -Value $issContent
 Write-Host "Updated version in CMSAgent.iss to $version"
 

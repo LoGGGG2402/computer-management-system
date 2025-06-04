@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.ServiceProcess;
 using System.Runtime.Versioning; 
+using System.Reflection;
 using CMSAgent.Shared; 
 using CMSAgent.Shared.Utils; 
 using CMSAgent.Shared.Constants; 
@@ -65,12 +66,17 @@ namespace CMSUpdater
                     _logger.LogError("New Agent is unstable. Performing Rollback...");
                     await PerformRollbackAsync(markVersionAsIgnored: true);
                     return false;
-                }
-
-                // Update version in registry
-                if (!UpdateVersionInRegistry())
+                }                // Update version in registry (Windows only)
+                if (OperatingSystem.IsWindows())
                 {
-                    _logger.LogWarning("Failed to update version in registry, but installation was successful.");
+                    if (!UpdateVersionInRegistry())
+                    {
+                        _logger.LogWarning("Failed to update version in registry, but installation was successful.");
+                    }
+                }
+                else
+                {
+                    _logger.LogInformation("Registry update is not supported on this platform.");
                 }
 
                 await CleanupAsync();
@@ -349,8 +355,8 @@ namespace CMSUpdater
             stopwatch.Stop();
             _logger.LogInformation("New Agent Service operated stably during monitoring period.");
             return true;
-        }
-
+        }        
+        
         /// <summary>
         /// Updates the version information in the Windows Registry after successful installation.
         /// </summary>
@@ -377,10 +383,11 @@ namespace CMSUpdater
 
                 // Update version values
                 key.SetValue("DisplayVersion", _config.NewAgentVersion);
+                key.SetValue("DisplayName", $"CMS Agent v{_config.NewAgentVersion}");
                 key.SetValue("VersionMajor", _config.NewAgentVersion.Split('.')[0]);
                 key.SetValue("VersionMinor", _config.NewAgentVersion.Split('.')[1]);
                 
-                _logger.LogInformation("Successfully updated version in registry: {NewVersion}", _config.NewAgentVersion);
+                _logger.LogInformation("Successfully updated version and display name in registry: {NewVersion}", _config.NewAgentVersion);
                 return true;
             }
             catch (Exception ex)
@@ -396,6 +403,8 @@ namespace CMSUpdater
         private async Task CleanupAsync()
         {
             _logger.LogInformation("Cleaning up temporary files and backup directories...");
+            
+            // Clean up backup directory
             try
             {
                 if (Directory.Exists(_config.BackupDirectoryForOldVersion))
@@ -409,18 +418,41 @@ namespace CMSUpdater
                 _logger.LogWarning(ex, "Error while deleting backup directory: {BackupDir}", _config.BackupDirectoryForOldVersion);
             }
 
+            // Clean up extracted update files, but exclude updater directory to avoid self-deletion issues
             try
             {
                 if (Directory.Exists(_config.NewAgentExtractedPath))
                 {
-                    await Task.Run(() => Directory.Delete(_config.NewAgentExtractedPath, true));
-                    _logger.LogInformation("Deleted source extraction directory: {SourcePath}", _config.NewAgentExtractedPath);
+                    var extractedDir = new DirectoryInfo(_config.NewAgentExtractedPath);
+                    foreach (var item in extractedDir.GetFileSystemInfos())
+                    {
+                        // Skip Updater directory to avoid deleting ourselves while running
+                        if (item.Name.Equals("Updater", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _logger.LogInformation("Skipping Updater directory during cleanup to avoid self-deletion: {UpdaterPath}", item.FullName);
+                            continue;
+                        }
+
+                        if (item is DirectoryInfo dir)
+                        {
+                            dir.Delete(true);
+                        }
+                        else
+                        {
+                            item.Delete();
+                        }
+                    }
+                    _logger.LogInformation("Cleaned extracted files (excluding Updater directory): {SourcePath}", _config.NewAgentExtractedPath);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error while deleting source extraction directory: {SourcePath}", _config.NewAgentExtractedPath);
+                _logger.LogWarning(ex, "Error while cleaning extracted files: {SourcePath}", _config.NewAgentExtractedPath);
             }
+
+            // Schedule self-deletion after process exit
+            ScheduleSelfDeletion();
+            
             _logger.LogInformation("Cleanup completed.");
         }
 
@@ -640,14 +672,64 @@ namespace CMSUpdater
             {
                 _logger.LogWarning(ex, "InvalidOperationException while stopping service {ServiceName} (service may not exist or has been uninstalled).", serviceName);
                 return true;
-            }
-            catch (Exception ex)
+            }            catch (Exception ex)
             {
                 _logger.LogError(ex, "Error while stopping service {ServiceName}.", serviceName);
                 return false;
             }
         }
         #endregion
+
+        /// <summary>
+        /// Schedules the updater to delete itself after the process exits.
+        /// </summary>
+        private void ScheduleSelfDeletion()
+        {            try
+            {
+                string currentExecutable = Environment.ProcessPath ?? AppContext.BaseDirectory;
+                string updaterDirectory = Path.GetDirectoryName(currentExecutable) ?? string.Empty;
+                
+                if (string.IsNullOrEmpty(currentExecutable) || string.IsNullOrEmpty(updaterDirectory))
+                {
+                    _logger.LogWarning("Cannot determine updater path for self-deletion");
+                    return;
+                }
+
+                // Create a batch file to delete the updater after a delay
+                string batchFile = Path.Combine(Path.GetTempPath(), $"cleanup_updater_{Guid.NewGuid():N}.bat");
+                string batchContent = $@"@echo off
+echo Starting updater cleanup...
+timeout /t 5 /nobreak >nul
+if exist ""{currentExecutable}"" (
+    del /q ""{currentExecutable}""
+    echo Updater executable deleted: {Path.GetFileName(currentExecutable)}
+)
+if exist ""{updaterDirectory}"" (
+    rmdir /s /q ""{updaterDirectory}""
+    echo Updater directory deleted: {Path.GetFileName(updaterDirectory)}
+)
+echo Updater cleanup completed.
+del /q ""%~f0""
+";
+
+                File.WriteAllText(batchFile, batchContent);
+                
+                // Execute the batch file without waiting
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = batchFile,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                });
+
+                _logger.LogInformation("Scheduled self-deletion via batch script: {BatchFile}", batchFile);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to schedule self-deletion");
+            }
+        }
 
         // Add UpdateManifest class if not exists
         private class UpdateManifest
