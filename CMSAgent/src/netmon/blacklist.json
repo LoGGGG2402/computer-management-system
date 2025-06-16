@@ -1,0 +1,14 @@
+{
+  "blockedDomains": [
+    "malicious-site.com",
+    "ad-tracker.net",
+    "spyware-domain.org",
+    "facebook.com",
+    "instagram.com",
+    "tiktok.com",
+    "twitter.com",
+    "youtube.com",
+    "netflix.com",
+    "metruyencv.com"
+  ]
+}
