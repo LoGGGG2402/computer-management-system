@@ -1,9 +1,10 @@
+using System.Net.NetworkInformation;
+
 namespace netmon
-{
-    class Program
+{    class Program
     {
-        private static NetworkMonitor? _monitor;
-        private static NetworkBlock? _blocker;
+        private static NetworkManager? _monitor;
+        private static NetworkBlocker? _blocker;
         private static CancellationTokenSource? _cancellationTokenSource;
 
         static async Task Main(string[] args)
@@ -22,12 +23,9 @@ namespace netmon
             };
 
             try
-            {
-                // Initialize components
-                _monitor = new NetworkMonitor();
-                _blocker = new NetworkBlock();
-
-                // Load configuration
+            {                // Initialize components
+                _monitor = new NetworkManager();
+                _blocker = new NetworkBlocker();                // Load configuration
                 BlocklistManager.Load("blacklist.json");
 
                 // Show current blocklist
@@ -37,19 +35,20 @@ namespace netmon
                 {
                     Console.WriteLine($"  - {domain}");
                 }
-                Console.WriteLine();
-
-                // Subscribe to blocking events
+                Console.WriteLine();                // Subscribe to blocking events
                 _blocker.DomainBlocked += OnDomainBlocked;
                 _blocker.BlockingError += OnBlockingError;
-
-                // Start background tasks
+                
+                // Subscribe to DNS blocking events
+                _monitor.DnsQueryBlocked += OnDnsQueryBlocked;
+                _monitor.DnsQueryAllowed += OnDnsQueryAllowed;
+                _monitor.BlockedDomainDetected += OnBlockedDomainDetected;// Start background tasks
                 var monitorTask = _monitor.StartMonitoringAsync();
-                var displayTask = _monitor.DisplayRealTimeConnections(_cancellationTokenSource.Token);
-                var blockingTask = _blocker.StartActiveBlockingAsync(_monitor);
-                var consoleTask = StartConsoleInterfaceAsync(_cancellationTokenSource.Token);
-
-                Console.WriteLine("Agent running with ACTIVE BLOCKING. Type 'help' for commands or Ctrl+C to exit.");
+                var displayTask = DisplayRealTimeConnections(_cancellationTokenSource.Token);
+                var blockingTask = _blocker.StartActiveBlockingAsync(_monitor);                Console.WriteLine("Agent running with ACTIVE BLOCKING & DNS-LEVEL BLOCKING. Press Ctrl+C to exit.");
+                Console.WriteLine("� DNS queries for blocked domains will be redirected or dropped in real-time.");
+                Console.WriteLine("✨ No hosts file modification required - works with standard user privileges.");
+                Console.WriteLine();
 
                 // Wait for cancellation
                 await Task.Delay(-1, _cancellationTokenSource.Token);
@@ -79,26 +78,64 @@ namespace netmon
         private static void OnBlockingError(string error)
         {
             Console.WriteLine($"[ERROR] {error}");
+        }        private static void OnDnsQueryBlocked(string domain)
+        {
+            Console.WriteLine($"[DNS-BLOCK] � DNS query blocked for domain: {domain}");
         }
 
-        // ===== CONSOLE INTERFACE =====
-        private static async Task StartConsoleInterfaceAsync(CancellationToken cancellationToken)
+        private static void OnDnsQueryAllowed(string domain)
         {
-            await Task.Run(async () =>
+            Console.WriteLine($"[DNS-ALLOW] ✅ DNS query allowed for domain: {domain}");
+        }
+
+        private static void OnBlockedDomainDetected(string domain)
+        {
+            Console.WriteLine($"[DNS-DETECT] ⚠️  Blocked domain access attempt: {domain} -> redirected to localhost");
+        }// ===== DISPLAY FUNCTIONALITY =====
+        private static Task DisplayRealTimeConnections(CancellationToken cancellationToken = default)
+        {
+            return Task.Run(async () =>
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     try
                     {
-                        await Task.Delay(100, cancellationToken);
-                        if (Console.KeyAvailable)
+                        Console.Clear();
+                        Console.WriteLine("Domain Firewall Agent - Realtime Monitor");
+                        Console.WriteLine($"Last Updated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                        Console.WriteLine("{0,-7} {1,-22} {2,-22} {3,-12} {4,-8} {5,-15} {6}",
+                            "Proto", "Local Address", "Remote Address", "State", "PID", "Process", "Domain");
+                        Console.WriteLine(new string('-', 120));
+
+                        var connections = NetworkUtils.GetTcpConnections();
+                        int connectionCount = 0;
+
+                        foreach (var conn in connections)
                         {
-                            var input = Console.ReadLine();
-                            if (!string.IsNullOrEmpty(input))
-                            {
-                                ProcessCommand(input.Trim());
-                            }
-                        }
+                            if (conn.State != TcpState.Established) continue;
+                            if (NetworkUtils.IsLoopbackOrPrivate(conn.RemoteAddress)) continue;
+
+                            string domain = _monitor?.GetDomainForIP(conn.RemoteAddress) ?? "(unknown)";
+                            string processName = NetworkUtils.GetProcessName(conn.ProcessId);
+                            string localAddr = $"{conn.LocalAddress}:{conn.LocalPort}";
+                            string remoteAddr = $"{conn.RemoteAddress}:{conn.RemotePort}";
+
+                            Console.WriteLine("{0,-7} {1,-22} {2,-22} {3,-12} {4,-8} {5,-15} {6}",
+                                "TCP",
+                                localAddr,
+                                remoteAddr,
+                                conn.State,
+                                conn.ProcessId,
+                                processName,
+                                domain);
+
+                            connectionCount++;
+                        }                        Console.WriteLine(new string('-', 120));
+                        Console.WriteLine($"Total active external connections: {connectionCount}");
+                        Console.WriteLine($"Tracked domains: {_monitor?.GetTrackedDomainCount() ?? 0}");
+                        Console.WriteLine("Press Ctrl+C to exit");
+
+                        await Task.Delay(3000, cancellationToken);
                     }
                     catch (OperationCanceledException)
                     {
@@ -106,239 +143,10 @@ namespace netmon
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[CONSOLE] Error: {ex.Message}");
-                    }
-                }
+                        Console.WriteLine($"[MONITOR] Display error: {ex.Message}");
+                        await Task.Delay(1000, cancellationToken);
+                    }                }
             }, cancellationToken);
-        }
-
-        private static void ProcessCommand(string command)
-        {
-            var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0) return;
-
-            var cmd = parts[0].ToLower();
-
-            switch (cmd)
-            {
-                case "help":
-                case "h":
-                    ShowHelp();
-                    break;
-
-                case "add":
-                case "block":
-                    if (parts.Length > 1)
-                    {
-                        var domain = parts[1];
-                        AddToBlocklist(domain);
-                    }
-                    else
-                    {
-                        Console.WriteLine("[CMD] Usage: add <domain>");
-                    }
-                    break;
-
-                case "remove":
-                case "unblock":
-                    if (parts.Length > 1)
-                    {
-                        var domain = parts[1];
-                        RemoveFromBlocklist(domain);
-                    }
-                    else
-                    {
-                        Console.WriteLine("[CMD] Usage: remove <domain>");
-                    }
-                    break;
-
-                case "list":
-                case "show":
-                    ShowBlocklist();
-                    break;
-
-                case "clear":
-                    if (parts.Length > 1 && parts[1] == "firewall")
-                    {
-                        _blocker?.ClearFirewallRules();
-                    }
-                    else
-                    {
-                        Console.WriteLine("[CMD] Usage: clear firewall");
-                    }
-                    break;
-
-                case "status":
-                    ShowStatus();
-                    break;
-                case "test":
-                    if (parts.Length > 1)
-                    {
-                        var domain = parts[1];
-                        TestDomain(domain);
-                    }
-                    else
-                    {
-                        Console.WriteLine("[CMD] Usage: test <domain>");
-                    }
-                    break;
-
-                case "testsub":
-                    if (parts.Length > 1)
-                    {
-                        var baseDomain = parts[1];
-                        TestSubdomains(baseDomain);
-                    }
-                    else
-                    {
-                        Console.WriteLine("[CMD] Usage: testsub <domain>");
-                    }
-                    break;
-
-                case "hosts":
-                    if (parts.Length > 1)
-                    {
-                        switch (parts[1].ToLower())
-                        {
-                            case "status":
-                                _blocker?.ShowHostsFileStatus();
-                                break;
-                            case "restore":
-                                _blocker?.RestoreHostsFile();
-                                break;
-                            case "block":
-                                if (parts.Length > 2)
-                                {
-                                    _blocker?.BlockDomainWithHosts(parts[2]);
-                                }
-                                else
-                                {
-                                    Console.WriteLine("[CMD] Usage: hosts block <domain>");
-                                }
-                                break;
-                            case "unblock":
-                                if (parts.Length > 2)
-                                {
-                                    _blocker?.UnblockDomainFromHosts(parts[2]);
-                                }
-                                else
-                                {
-                                    Console.WriteLine("[CMD] Usage: hosts unblock <domain>");
-                                }
-                                break;
-                            default:
-                                Console.WriteLine("[CMD] Usage: hosts [status|restore|block <domain>|unblock <domain>]");
-                                break;
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine("[CMD] Usage: hosts [status|restore|block <domain>|unblock <domain>]");
-                    }
-                    break;
-
-                default:
-                    Console.WriteLine($"[CMD] Unknown command: {cmd}. Type 'help' for available commands.");
-                    break;
-            }
-        }
-        private static void ShowHelp()
-        {
-            Console.WriteLine("[HELP] Available commands:");
-            Console.WriteLine("  add <domain>              - Add domain to blocklist");
-            Console.WriteLine("  remove <domain>           - Remove domain from blocklist");
-            Console.WriteLine("  list                      - Show current blocklist");
-            Console.WriteLine("  status                    - Show firewall status");
-            Console.WriteLine("  test <domain>             - Test if domain is blocked");
-            Console.WriteLine("  testsub <domain>          - Test subdomain blocking for domain");
-            Console.WriteLine("  clear firewall            - Clear all firewall rules");
-            Console.WriteLine("  hosts status              - Show hosts file status");
-            Console.WriteLine("  hosts restore             - Restore hosts file from backup");
-            Console.WriteLine("  hosts block <domain>      - Block domain via hosts file");
-            Console.WriteLine("  hosts unblock <domain>    - Unblock domain from hosts file");
-            Console.WriteLine("  help                      - Show this help");
-            Console.WriteLine("  Ctrl+C                    - Exit application");
-            Console.WriteLine();
-            Console.WriteLine("[HELP] Subdomain blocking notes:");
-            Console.WriteLine("  - Domains are automatically blocked with all subdomains");
-            Console.WriteLine("  - Use *.domain.com format to explicitly block all subdomains");
-            Console.WriteLine("  - Example: facebook.com blocks www.facebook.com, m.facebook.com, etc.");
-        }
-
-        private static void AddToBlocklist(string domain)
-        {
-            BlocklistManager.AddDomain(domain);
-            BlocklistManager.Save("blacklist.json");
-            Console.WriteLine($"[BLOCKLIST] Added {domain} to blocklist");
-        }
-
-        private static void RemoveFromBlocklist(string domain)
-        {
-            BlocklistManager.RemoveDomain(domain);
-            BlocklistManager.Save("blacklist.json");
-            Console.WriteLine($"[BLOCKLIST] Removed {domain} from blocklist");
-        }
-
-        private static void ShowBlocklist()
-        {
-            var domains = BlocklistManager.GetBlockedDomains();
-            Console.WriteLine($"[BLOCKLIST] Currently blocking {domains.Count} domains:");
-            foreach (var domain in domains)
-            {
-                Console.WriteLine($"  - {domain}");
-            }
-        }
-
-        private static void ShowStatus()
-        {
-            var domains = BlocklistManager.GetBlockedDomains();
-            var trackedIPs = _monitor?.GetTrackedDomainCount() ?? 0;
-            Console.WriteLine($"[STATUS] Firewall Status:");
-            Console.WriteLine($"  Blocked domains: {domains.Count}");
-            Console.WriteLine($"  Tracked IP mappings: {trackedIPs}");
-            Console.WriteLine($"  Blocking mode: ACTIVE");
-            Console.WriteLine($"  Monitor running: {_monitor != null}");
-            Console.WriteLine($"  Blocker running: {_blocker != null}");
-        }
-        private static void TestDomain(string domain)
-        {
-            bool isBlocked = BlocklistManager.IsBlocked(domain);
-            Console.WriteLine($"[TEST] Domain '{domain}' is {(isBlocked ? "BLOCKED" : "ALLOWED")}");
-        }
-
-        private static void TestSubdomains(string baseDomain)
-        {
-            Console.WriteLine($"[TEST] Testing subdomain blocking for '{baseDomain}':");
-
-            // Test the base domain
-            bool baseBlocked = BlocklistManager.IsBlocked(baseDomain);
-            Console.WriteLine($"  {baseDomain} -> {(baseBlocked ? "BLOCKED" : "ALLOWED")}");
-
-            // Test common subdomains
-            var testSubdomains = new[]
-            {
-            $"www.{baseDomain}",
-            $"mail.{baseDomain}",
-            $"ftp.{baseDomain}",
-            $"blog.{baseDomain}",
-            $"shop.{baseDomain}",
-            $"api.{baseDomain}",
-            $"cdn.{baseDomain}",
-            $"app.{baseDomain}",
-            $"mobile.{baseDomain}",
-            $"m.{baseDomain}",
-            $"admin.{baseDomain}",
-            $"test.{baseDomain}",
-            $"dev.{baseDomain}",
-            $"staging.{baseDomain}"
-        };
-
-            foreach (var subdomain in testSubdomains)
-            {
-                bool isBlocked = BlocklistManager.IsBlocked(subdomain);
-                Console.WriteLine($"  {subdomain} -> {(isBlocked ? "BLOCKED" : "ALLOWED")}");
-            }
-            Console.WriteLine($"[TEST] Completed subdomain test for '{baseDomain}'");
         }
     }
 }

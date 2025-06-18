@@ -1,0 +1,17 @@
+{
+  "mode": "blacklist",
+  "blacklist": [
+    "msedge.exe",
+    "discord.exe",
+    "spotify.exe",
+    "chrome.exe",
+    "firefox.exe"
+  ],
+  "whitelist": [
+    "notepad.exe",
+    "calc.exe",
+    "Code.exe",
+    "cmd.exe",
+    "powershell.exe"
+  ]
+}

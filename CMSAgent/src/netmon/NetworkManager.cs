@@ -1,8 +1,6 @@
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
-using System.Collections.Concurrent;
-using System.Text.Json;
 using System.Diagnostics;
 
 namespace netmon
@@ -16,20 +14,34 @@ namespace netmon
         public ushort RemotePort { get; set; }
         public TcpState State { get; set; }
         public int ProcessId { get; set; }
-    }
-
-    // ===== NETWORK MONITORING =====
-    public class NetworkMonitor
+    }    // ===== NETWORK MANAGEMENT =====
+    public class NetworkManager
     {
         private readonly DnsTracker _dnsTracker;
         private readonly CancellationTokenSource _cancellationTokenSource;
-        private bool _isRunning = false; public event Action<TcpConnection, string>? ConnectionDetected;
+        private bool _isRunning = false;
 
-        public NetworkMonitor()
+        public event Action<TcpConnection, string>? ConnectionDetected;
+        
+        // Expose DNS events
+        public event Action<string>? DnsQueryBlocked;
+        public event Action<string>? DnsQueryAllowed;
+        public event Action<string>? BlockedDomainDetected;
+
+        public NetworkManager()
         {
             _dnsTracker = new DnsTracker();
             _cancellationTokenSource = new CancellationTokenSource();
+            
+            // Subscribe to DNS tracker events
+            _dnsTracker.DnsQueryBlocked += OnDnsQueryBlocked;
+            _dnsTracker.DnsQueryAllowed += OnDnsQueryAllowed;
+            _dnsTracker.BlockedDomainDetected += OnBlockedDomainDetected;
         }
+
+        private void OnDnsQueryBlocked(string domain) => DnsQueryBlocked?.Invoke(domain);
+        private void OnDnsQueryAllowed(string domain) => DnsQueryAllowed?.Invoke(domain);
+        private void OnBlockedDomainDetected(string domain) => BlockedDomainDetected?.Invoke(domain);
 
         public async Task StartMonitoringAsync()
         {
@@ -102,66 +114,6 @@ namespace netmon
                     catch (Exception ex)
                     {
                         Console.WriteLine($"[MONITOR] Error in connection monitoring: {ex.Message}");
-                        await Task.Delay(1000, cancellationToken);
-                    }
-                }
-            }, cancellationToken);
-        }
-
-        public Task DisplayRealTimeConnections(CancellationToken cancellationToken = default)
-        {
-            return Task.Run(async () =>
-            {
-                while (!cancellationToken.IsCancellationRequested)
-                {
-                    try
-                    {
-                        Console.Clear();
-                        Console.WriteLine("Domain Firewall Agent - Realtime Monitor");
-                        Console.WriteLine($"Last Updated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-                        Console.WriteLine("{0,-7} {1,-22} {2,-22} {3,-12} {4,-8} {5,-15} {6}",
-                            "Proto", "Local Address", "Remote Address", "State", "PID", "Process", "Domain");
-                        Console.WriteLine(new string('-', 120));
-
-                        var connections = NetworkUtils.GetTcpConnections();
-                        int connectionCount = 0;
-
-                        foreach (var conn in connections)
-                        {
-                            if (conn.State != TcpState.Established) continue;
-                            if (NetworkUtils.IsLoopbackOrPrivate(conn.RemoteAddress)) continue;
-
-                            string domain = _dnsTracker.GetMostRecentDomainForIP(conn.RemoteAddress) ?? "(unknown)";
-                            string processName = NetworkUtils.GetProcessName(conn.ProcessId);
-                            string localAddr = $"{conn.LocalAddress}:{conn.LocalPort}";
-                            string remoteAddr = $"{conn.RemoteAddress}:{conn.RemotePort}";
-
-                            Console.WriteLine("{0,-7} {1,-22} {2,-22} {3,-12} {4,-8} {5,-15} {6}",
-                                "TCP",
-                                localAddr,
-                                remoteAddr,
-                                conn.State,
-                                conn.ProcessId,
-                                processName,
-                                domain);
-
-                            connectionCount++;
-                        }
-
-                        Console.WriteLine(new string('-', 120));
-                        Console.WriteLine($"Total active external connections: {connectionCount}");
-                        Console.WriteLine($"Tracked domains: {_dnsTracker.IpToDomain.Count}");
-                        Console.WriteLine("Press Ctrl+C to exit");
-
-                        await Task.Delay(3000, cancellationToken);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        break;
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[MONITOR] Display error: {ex.Message}");
                         await Task.Delay(1000, cancellationToken);
                     }
                 }

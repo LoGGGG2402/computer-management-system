@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -39,6 +40,7 @@ namespace netmon
                 }
             }
         }
+
         public static bool IsBlocked(string domain)
         {
             lock (_lockObject)
@@ -81,9 +83,7 @@ namespace netmon
             }
 
             return domain.Trim().ToLowerInvariant();
-        }
-
-        private static bool IsSubdomainMatch(string domain, string blockedDomain)
+        }        private static bool IsSubdomainMatch(string domain, string blockedDomain)
         {
             blockedDomain = blockedDomain.ToLowerInvariant();
             domain = domain.ToLowerInvariant();
@@ -107,29 +107,6 @@ namespace netmon
             return false;
         }
 
-        public static void AddDomain(string domain)
-        {
-            lock (_lockObject)
-            {
-                if (!string.IsNullOrEmpty(domain))
-                {
-                    _blocked.Add(domain);
-                    Console.WriteLine($"[BLOCKLIST] Added domain: {domain}");
-                }
-            }
-        }
-
-        public static void RemoveDomain(string domain)
-        {
-            lock (_lockObject)
-            {
-                if (_blocked.Remove(domain))
-                {
-                    Console.WriteLine($"[BLOCKLIST] Removed domain: {domain}");
-                }
-            }
-        }
-
         public static List<string> GetBlockedDomains()
         {
             lock (_lockObject)
@@ -138,49 +115,23 @@ namespace netmon
             }
         }
 
-        public static void Save(string path)
-        {
-            lock (_lockObject)
-            {
-                try
-                {
-                    var config = new BlockConfig { blockedDomains = new List<string>(_blocked) };
-                    var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
-                    File.WriteAllText(path, json);
-                    Console.WriteLine($"[BLOCKLIST] Saved {_blocked.Count} domains to {path}");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[BLOCKLIST] Failed to save blocklist: {ex.Message}");
-                }
-            }
-        }
-
         private class BlockConfig
         {
             public List<string> blockedDomains { get; set; } = new();
         }
-    }
-
-    // ===== NETWORK BLOCKING ENGINE =====
-    public class NetworkBlock
+    }    // ===== NETWORK BLOCKING ENGINE =====
+    public class NetworkBlocker
     {
-        private static readonly string HostsFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"drivers\etc\hosts");
-        private static readonly string HostsBackupPath = HostsFilePath + ".backup";
-        private static readonly string BlockMarker = "# CMS Domain Firewall";
-
         private readonly CancellationTokenSource _cancellationTokenSource;
         private bool _isActive = false;
 
         public event Action<string, IPAddress, string>? DomainBlocked;
         public event Action<string>? BlockingError;
 
-        public NetworkBlock()
+        public NetworkBlocker()
         {
             _cancellationTokenSource = new CancellationTokenSource();
-        }
-
-        public async Task StartActiveBlockingAsync(NetworkMonitor monitor)
+        }        public async Task StartActiveBlockingAsync(NetworkManager monitor)
         {
             if (_isActive) return;
 
@@ -226,7 +177,7 @@ namespace netmon
             _isActive = false;
         }
 
-        private void CheckAndBlockConnections(NetworkMonitor monitor)
+        private void CheckAndBlockConnections(NetworkManager monitor)
         {
             try
             {
@@ -299,200 +250,7 @@ namespace netmon
             catch (Exception ex)
             {
                 Console.WriteLine($"[FIREWALL] Error adding firewall rule: {ex.Message}");
-            }
-        }
-
-        public void ClearFirewallRules()
-        {
-            try
-            {
-                var processInfo = new ProcessStartInfo
-                {
-                    FileName = "netsh",
-                    Arguments = "advfirewall firewall delete rule name=all dir=out",
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    Verb = "runas"
-                };
-
-                using (var process = Process.Start(processInfo))
-                {
-                    process?.WaitForExit(5000);
-                    Console.WriteLine("[FIREWALL] Cleared firewall rules");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[FIREWALL] Error clearing rules: {ex.Message}");
-            }
-        }        // ===== HOSTS FILE BLOCKING METHODS =====
-        public void BlockDomainWithHosts(string domain)
-        {
-            try
-            {
-                if (!File.Exists(HostsBackupPath))
-                {
-                    File.Copy(HostsFilePath, HostsBackupPath);
-                    Console.WriteLine($"[HOSTS] Created backup of hosts file");
-                }
-
-                var lines = new List<string>();
-                if (File.Exists(HostsFilePath))
-                {
-                    lines.AddRange(File.ReadAllLines(HostsFilePath));
-                }
-
-                bool alreadyBlocked = lines.Any(line =>
-                    line.Contains(domain) && line.StartsWith("127.0.0.1"));
-
-                if (!alreadyBlocked)
-                {
-                    lines.Add($"{BlockMarker} - {domain} and subdomains");
-
-                    // Block main domain
-                    lines.Add($"127.0.0.1 {domain}");
-                    lines.Add($"::1 {domain}");
-
-                    // Block www subdomain
-                    lines.Add($"127.0.0.1 www.{domain}");
-                    lines.Add($"::1 www.{domain}");
-
-                    // Block common subdomains
-                    var commonSubdomains = new[] { "mail", "ftp", "blog", "shop", "api", "cdn", "app", "mobile", "m", "admin" };
-                    foreach (var subdomain in commonSubdomains)
-                    {
-                        lines.Add($"127.0.0.1 {subdomain}.{domain}");
-                        lines.Add($"::1 {subdomain}.{domain}");
-                    }
-
-                    // Add wildcard entry (works for some applications)
-                    lines.Add($"127.0.0.1 *.{domain}");
-                    lines.Add($"::1 *.{domain}");
-
-                    File.WriteAllLines(HostsFilePath, lines);
-                    FlushDnsCache();
-
-                    Console.WriteLine($"[HOSTS] Blocked {domain} and subdomains via hosts file");
-                }
-                else
-                {
-                    Console.WriteLine($"[HOSTS] {domain} already blocked in hosts file");
-                }
-            }
-            catch (UnauthorizedAccessException)
-            {
-                Console.WriteLine($"[HOSTS] Access denied. Run as Administrator to modify hosts file");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[HOSTS] Error blocking {domain}: {ex.Message}");
-            }
-        }
-
-        public void UnblockDomainFromHosts(string domain)
-        {
-            try
-            {
-                if (!File.Exists(HostsFilePath)) return;
-
-                var lines = File.ReadAllLines(HostsFilePath).ToList();
-                var originalCount = lines.Count;
-
-                lines.RemoveAll(line =>
-                    line.Contains(domain) &&
-                    (line.StartsWith("127.0.0.1") || line.StartsWith("::1") || line.Contains(BlockMarker)));
-
-                if (lines.Count < originalCount)
-                {
-                    File.WriteAllLines(HostsFilePath, lines);
-                    FlushDnsCache();
-                    Console.WriteLine($"[HOSTS] Unblocked {domain} from hosts file");
-                }
-                else
-                {
-                    Console.WriteLine($"[HOSTS] {domain} was not found in hosts file");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[HOSTS] Error unblocking {domain}: {ex.Message}");
-            }
-        }
-
-        public void RestoreHostsFile()
-        {
-            try
-            {
-                if (File.Exists(HostsBackupPath))
-                {
-                    File.Copy(HostsBackupPath, HostsFilePath, true);
-                    FlushDnsCache();
-                    Console.WriteLine("[HOSTS] Restored hosts file from backup");
-                }
-                else
-                {
-                    if (File.Exists(HostsFilePath))
-                    {
-                        var lines = File.ReadAllLines(HostsFilePath).ToList();
-                        var originalCount = lines.Count;
-
-                        lines.RemoveAll(line => line.Contains(BlockMarker) ||
-                            (line.StartsWith("127.0.0.1") && BlocklistManager.GetBlockedDomains().Any(domain => line.Contains(domain))) ||
-                            (line.StartsWith("::1") && BlocklistManager.GetBlockedDomains().Any(domain => line.Contains(domain))));
-
-                        if (lines.Count < originalCount)
-                        {
-                            File.WriteAllLines(HostsFilePath, lines);
-                            FlushDnsCache();
-                            Console.WriteLine("[HOSTS] Removed all blocking entries from hosts file");
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[HOSTS] Error restoring hosts file: {ex.Message}");
-            }
-        }
-
-        public void ShowHostsFileStatus()
-        {
-            try
-            {
-                if (!File.Exists(HostsFilePath))
-                {
-                    Console.WriteLine("[HOSTS] Hosts file not found");
-                    return;
-                }
-
-                var lines = File.ReadAllLines(HostsFilePath);
-                var blockedEntries = lines.Where(line =>
-                    line.Contains(BlockMarker) ||
-                    (line.StartsWith("127.0.0.1") && !line.Contains("localhost"))).ToList();
-
-                Console.WriteLine($"[HOSTS] Hosts file status:");
-                Console.WriteLine($"  Total lines: {lines.Length}");
-                Console.WriteLine($"  Blocked entries: {blockedEntries.Count}");
-                Console.WriteLine($"  Backup exists: {File.Exists(HostsBackupPath)}");
-
-                if (blockedEntries.Any())
-                {
-                    Console.WriteLine("  Current blocked domains:");
-                    foreach (var entry in blockedEntries.Take(10))
-                    {
-                        Console.WriteLine($"    {entry}");
-                    }
-                    if (blockedEntries.Count > 10)
-                    {
-                        Console.WriteLine($"    ... and {blockedEntries.Count - 10} more");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[HOSTS] Error reading hosts file: {ex.Message}");
-            }
-        }
+            }        }
 
         // ===== PROCESS TERMINATION METHODS =====
         private bool ShouldTerminateProcess(int processId)
