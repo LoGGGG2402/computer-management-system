@@ -1,0 +1,43 @@
+{
+  "networkBlocking": {
+    "enabled": true,
+    "mode": "blacklist",
+    "domains": [
+      "malicious-site.com",
+      "ad-tracker.net",
+      "spyware-domain.org",
+      "facebook.com",
+      "instagram.com",
+      "tiktok.com",
+      "twitter.com",
+      "youtube.com",
+      "netflix.com",
+      "metruyencv.com"
+    ]
+  },
+  "processBlocking": {
+    "enabled": true,
+    "mode": "blacklist",
+    "blacklist": [
+      "msedge.exe",
+      "discord.exe",
+      "spotify.exe",
+      "chrome.exe",
+      "firefox.exe"
+    ],
+    "whitelist": [
+      "notepad.exe",
+      "calc.exe",
+      "Code.exe",
+      "cmd.exe",
+      "powershell.exe"
+    ]
+  },
+  "general": {
+    "enableFirewallIntegration": true,
+    "enableRealTimeMonitoring": true,
+    "scanIntervalSeconds": 3,
+    "cleanupIntervalMinutes": 5,
+    "logLevel": "info"
+  }
+}
